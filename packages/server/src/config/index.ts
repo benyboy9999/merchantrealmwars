@@ -7,15 +7,17 @@ const ConfigSchema = z.object({
 
   DATABASE_URL: z.string().url(),
 
-  JWT_SECRET: z.string().min(16),
+  JWT_SECRET: z.string().min(8).default('dev-secret-not-for-production'),
   JWT_EXPIRES_IN: z.string().default('15m'),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('7d'),
 
-  TICK_INTERVAL_SECONDS: z.coerce.number().int().positive().default(30),
+  ADMIN_TOKEN: z.string().default('artemis-admin-dev'),
+
+  TICK_INTERVAL_SECONDS: z.coerce.number().int().positive().default(10),
   ENABLE_DEBUG_ENDPOINTS: z
     .string()
     .transform((v) => v === 'true')
-    .default('false'),
+    .default('true'),
 });
 
 const parsed = ConfigSchema.safeParse(process.env);

@@ -1,57 +1,57 @@
-import type { ResourceType, BuildingType, WorkerTier } from '@artemis/shared';
+import type { ResourceType } from '@artemis/shared';
+import { RECIPE_BY_KEY } from './recipes.js';
 
-export interface FacilityState {
-  buildingType: BuildingType;
-  tier: number;
-  workerCount: number;
-  workerTier: WorkerTier;
-  isActive: boolean;
-  isDormant: boolean;
-}
+export { ALL_RECIPES, RECIPES_BY_BUILDING, RECIPE_BY_KEY } from './recipes.js';
+export type { Recipe, RecipeInput } from './recipes.js';
 
-export interface ProductionInput {
-  resourceType: ResourceType;
-  quantityRequired: number;
+export interface ResourceAvailable {
+  resource: ResourceType;
   available: number;
 }
 
-export interface ProductionOutput {
-  resourceType: ResourceType;
-  quantity: number;
-}
-
 export interface ProductionResult {
-  outputs: ProductionOutput[];
-  inputsConsumed: ProductionOutput[];
-  efficiencyFactor: number; // 0–1, affected by worker penalties
-}
-
-export interface ProductionConfig {
-  regionBonus: number; // multiplier e.g. 1.5 for bonus region
-  workerPenaltyFactor: number; // 0–1 from consumption system
-  workerBonusFactor: number; // >=1 from optional consumption
+  produced: { resource: ResourceType; quantity: number } | null;
+  consumed: Array<{ resource: ResourceType; quantity: number }>;
+  blocked: boolean; // true if inputs were missing
 }
 
 /**
- * Compute the production output for a single facility in one tick.
- * Pure function — no DB calls, no side effects.
+ * Attempt to run one tick of a recipe on a single building.
+ * Returns what was produced and consumed, or blocked=true if inputs insufficient.
+ *
+ * level:            building level (multiplies all inputs and outputs)
+ * workerFactor:     0–1, from worker staffing (1 = fully staffed)
+ * adminBypass:      skip input availability check (admin mode)
  */
-export function computeProduction(
-  facility: FacilityState,
-  _inputs: ProductionInput[],
-  config: ProductionConfig,
+export function computeProductionTick(
+  recipeKey: string,
+  available: ResourceAvailable[],
+  level: number,
+  workerFactor: number,
+  adminBypass: boolean,
 ): ProductionResult {
-  if (!facility.isActive || facility.isDormant || facility.workerCount === 0) {
-    return { outputs: [], inputsConsumed: [], efficiencyFactor: 0 };
+  const recipe = RECIPE_BY_KEY[recipeKey];
+  if (!recipe) return { produced: null, consumed: [], blocked: true };
+
+  const avMap = new Map(available.map((a) => [a.resource, a.available]));
+  const scaledInputs = recipe.inputs.map((inp) => ({
+    resource: inp.resource,
+    quantity: inp.quantity * level,
+  }));
+
+  if (!adminBypass) {
+    for (const inp of scaledInputs) {
+      if ((avMap.get(inp.resource) ?? 0) < inp.quantity) {
+        return { produced: null, consumed: [], blocked: true };
+      }
+    }
   }
 
-  const efficiency = config.workerPenaltyFactor * config.workerBonusFactor * config.regionBonus;
+  const outputQty = recipe.outputQty * level * Math.min(1, workerFactor);
 
-  // Recipe resolution is a stub until the resource graph is finalised.
-  // Real implementation: look up recipe by buildingType + tier, multiply by workers * efficiency.
   return {
-    outputs: [],
-    inputsConsumed: [],
-    efficiencyFactor: Math.min(1, efficiency),
+    produced: { resource: recipe.output, quantity: outputQty },
+    consumed: scaledInputs,
+    blocked: false,
   };
 }

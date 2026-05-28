@@ -1,4 +1,6 @@
 export * from './production/index.js';
+export { ALL_RECIPES, RECIPES_BY_BUILDING, RECIPE_BY_KEY } from './production/recipes.js';
+export type { Recipe, RecipeInput } from './production/recipes.js';
 export * from './consumption/index.js';
 export * from './upkeep/index.js';
 export * from './economy/index.js';
