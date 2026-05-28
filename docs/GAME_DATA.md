@@ -4,6 +4,66 @@
 
 ---
 
+## Building Slots
+
+Each Keep has a fixed number of Building Slots (expandable via upgrades). **Any slot can hold any building** — there are no slot type restrictions. The building placed in a slot determines what that slot does.
+
+| Building category | What it does |
+|---|---|
+| Production buildings | Run recipes to produce resources |
+| Housing buildings | House Workers of a given tier |
+| Warehouse | Increases Keep resource storage capacity (weight-based) |
+
+---
+
+## Building Levels
+
+Every building has its own level. **Buildings in the same Keep can be at different levels.** Level multiplies both inputs, outputs, and worker requirements by the level number.
+
+| Level | Inputs | Outputs | Workers required |
+|---|---|---|---|
+| 1 | 1× | 1× | 1× base |
+| 2 | 2× | 2× | 2× base |
+| 3 | 3× | 3× | 3× base |
+
+**Because worker requirements scale with level, Housing must also be leveled up** to provide enough workers. A Level 2 Smith needs twice the workers — those workers need to be housed.
+
+- Level multiplies Housing capacity by the same factor
+- A player who levels a production building without leveling their housing will find they don't have enough workers to staff it
+
+---
+
+## Production Queue
+
+Each **building type per Keep** has a single shared queue. All buildings of that type work from the same queue simultaneously.
+
+**Order types:**
+- **Infinite** — runs continuously while resources are available. Never removed from queue.
+- **Numerical** — runs until the target quantity is produced, then removed from queue.
+
+**Scheduling rules:**
+1. **Numerical orders execute first**, regardless of queue position
+2. Once all numerical orders are complete, infinite orders run
+3. When multiple infinite orders are active, production time is divided **equally** across all of them (round-robin)
+
+**Example — Ranch queue:** Numerical: 50 Cows → Infinite: Hide, Fertilizer
+→ All Ranch buildings produce Cows until 50 are made, then split equally between Hide and Fertilizer indefinitely.
+
+**Order splitting:**
+All buildings of the same type in a Keep work on the same active recipe simultaneously. Three Smiths all produce Iron Bars at the same time, then all three switch together.
+
+---
+
+## Storage
+
+Each Keep has a base resource storage capacity. **Warehouse buildings** add capacity. Storage is **weight-based** — each resource has a weight value, and the Keep's total stored weight cannot exceed its capacity.
+
+- Keep storage capacity = base capacity + (sum of all Warehouse levels × base warehouse capacity)
+- Current weight used = sum of (resource quantity × resource weight) across all resources in the Keep
+- When a Keep is at capacity, production stops for that Keep until resources are moved or sold
+
+---
+
 ## Modifiers
 
 | Modifier | Applied To | Effect |

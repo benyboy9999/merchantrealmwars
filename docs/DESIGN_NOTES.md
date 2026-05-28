@@ -40,7 +40,33 @@ T1 Labourers require Tools every tick. This creates the strongest economic sink 
 
 ---
 
+## Production System (decided)
+
+**Any building slot can hold any building.** No slot type restrictions. The building itself determines what the slot does. Simpler than a typed-slot system.
+
+**Level is per individual building, not per building type.** Two Smiths in the same Keep can be at different levels. Each building is upgraded independently.
+
+**Level multiplies inputs, outputs, AND worker requirements.** Level 2 Smith = 2× coal in, 2× bars out, 2× workers needed. Housing must be leveled too to staff leveled buildings — creates a natural progression gate.
+
+**Queue is per building type per keep.** All Smiths in a Keep share one queue. Building more copies of the same type scales throughput without adding queue management overhead.
+
+**Queue priority: numerical first, then infinite.** Specific orders are always completed before open-ended production runs. Within each group, round-robin for multiples.
+
+**Equal time-share for multiple infinite orders.** A Ranch running infinite Cows + Hide + Fertilizer divides its cycle evenly. System self-balances.
+
+**Storage is weight-based.** Each resource has a weight. Warehouse buildings add weight capacity. Heavy resources (Iron Bars, Stone) are more expensive to stockpile than light ones (Parchment, Cloth). Creates strategic differentiation between resource types beyond just gold value.
+
+---
+
 ## Open Questions
+
+**~~Workers + levels~~** ✓ Workers scale with level. Level 2 building requires 2× workers. Housing must be leveled to match.
+
+**~~Individual vs type-wide levels~~** ✓ Individual. Each building has its own level.
+
+**~~Queue priority~~** ✓ Numerical first, then infinite.
+
+**~~Storage unit~~** ✓ Weight-based. Each resource has a weight value.
 
 **Charcoal/Coal mechanic — how does the engine handle it?**
 Two options:
