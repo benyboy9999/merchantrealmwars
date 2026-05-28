@@ -358,29 +358,78 @@ All buildings have a one-time resource cost to construct. Specific costs TBD per
 
 ---
 
-## Building Decay & Repair
+## Building Construction & Decay
 
-All buildings decay over time. The decay rate is slow but persistent.
+### Construction Cost
+All buildings require resources to construct. T1 buildings use T1 construction materials (Bricks, Mortar, Timber Frame, Scaffolding — ratios differ per building type). T2 buildings will use T2 construction materials. Specific costs TBD per building type during balancing.
 
-### Production Buildings
-| Decay State | Effect |
-|---|---|
-| Healthy | Full efficiency |
-| Worn | Efficiency begins to reduce |
-| Damaged | Significant efficiency penalty |
-| Ruined | Building ceases to function |
+**Level scaling:** A Level N building costs N× the base construction materials to build.
 
-Players must periodically spend repair materials to maintain production buildings. Specific repair costs TBD per building type.
+### Decay Model
+Each building has a **health value** equal to its total construction cost (conceptually treated as 100%). Health decays slowly over time.
 
-### Housing & Warehouse Buildings
-Decay **silently** — no efficiency penalty while operating. However, decay affects **demolition recovery**: when a decayed building is demolished, fewer construction materials are returned to the player's Keep. A well-maintained building returns a higher percentage of its construction cost on demolition.
+| Health | State | Effect |
+|---|---|---|
+| 100% → 90% | Healthy | Full efficiency. Repair not yet available. |
+| 90% | Repair threshold | Player can now repair the building |
+| 90% → 80% | Worn | Full efficiency. Repair available but not urgent. |
+| 80% → 50% | Degrading | Efficiency penalty begins and increases as health drops |
+| 50% | Floor | Decay stops here. Production capped at floor efficiency. |
+
+*Floor efficiency value (what % output at 50% health): TBD during balancing.*
 
 ### Repair
-- Repair requires resources (construction materials and/or tier-appropriate inputs — TBD per building type)
-- Repair restores the building to full health
-- Players can choose to repair proactively or let buildings decay until efficiency drops
+- Repair materials are the **same materials used to construct the building** — T1 buildings repaired with T1 construction materials, T2 with T2 materials
+- Repair cost restores the building to 100% health
+- Partial repair is possible (spend less, gain proportional health back)
+- **Level scaling:** Repair cost scales with building level (Level 2 building costs 2× to repair)
 
-*Decay rate, efficiency penalty curve, and repair costs: TBD during balancing.*
+### Housing & Warehouse Decay
+Decay **silently** — no efficiency or capacity penalty while operating. Decay only affects **demolition recovery**: a well-maintained building returns a higher percentage of its construction materials on demolition. A building at the 50% floor returns significantly less.
+
+---
+
+## Caravans
+
+### What a Caravan Is
+A Caravan is a persistent entity that players own and manage. Players configure it before each trip:
+- Set the **animal type and count** (one animal type only per Caravan)
+- Add or remove **storage attachments**
+- Load **cargo** (the resources being transported)
+- Load **Feed** (fuel for the animals)
+
+### Departure Rule
+**Feed cannot run out mid-journey.** If insufficient Feed is loaded for the planned route, the Caravan cannot depart. Players must load enough Feed before departure. The UI should show the required Feed for the selected route and animal count before confirming dispatch.
+
+### Composition
+
+**Animals** — one type per Caravan, multiple individuals allowed:
+
+| Animal | Tier | Speed | Carry Weight | Notes |
+|---|---|---|---|---|
+| Mule | T1 | Medium | Medium | Default T1 animal |
+| Horse | T2 | Fast | Light | Speed specialist |
+| Ox | TBD | Slow | Heavy | Capacity specialist. Revisit later. |
+
+Each additional animal added to a Caravan:
+- Increases total cargo capacity
+- Increases Feed consumed per trip
+- May affect speed (more animals pulling = TBD)
+
+**Storage Attachments** — added on top of animals:
+
+| Attachment | Effect | Notes |
+|---|---|---|
+| Storage Pack | Small capacity increase | Light, minimal speed impact |
+| Wagon | Large capacity increase | Significant speed reduction, high Feed cost |
+| *Others TBD* | | |
+
+Each attachment increases capacity, increases Feed consumption, reduces speed.
+
+### Feed Calculation
+Total Feed required per trip = (base Feed per animal × number of animals × distance) + (attachment Feed modifier × distance)
+
+*Specific values TBD during balancing.*
 
 ---
 

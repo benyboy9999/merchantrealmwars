@@ -143,34 +143,37 @@ Workshop ──► Tools → T1 Labourer (necessary) + building upkeep
 
 ## Caravan System (decided)
 
-**Caravans are composed, not fixed.** A Caravan is a combination of animals + attachments. Players add animals (Mule, Horse, Ox) and storage attachments (Storage Pack, Wagon) to a single Caravan. Each addition affects the three-way trade-off: speed, capacity, Feed consumption.
+**Caravans are persistent player-owned entities.** Configured before each trip: animal type + count, storage attachments, cargo, Feed. Not a one-shot dispatch — the same Caravan entity is reused, refuelled, and reconfigured.
 
-**Feed = Vegetables + Water (Pasture recipe).** Separates caravan fuel from livestock food. Pasture now serves two purposes: raising animals and producing Feed. This creates interesting resource allocation — a heavily used Pasture might struggle to do both.
+**Feed must be loaded before departure.** Cannot run out mid-journey. If the route requires more Feed than is loaded, departure is blocked. Simple and clean — no mid-journey edge cases.
 
-**Mixed animal types may be allowed** in one Caravan. Not yet confirmed. Worth deciding — mixing Horses and Oxen would create weird speed averaging. Probably cleaner to restrict to one animal type per Caravan.
+**Single animal type per Caravan.** No mixing Horses and Mules. Avoids speed-averaging complexity. Players choose their strategy (speed vs capacity) when configuring the Caravan.
 
-**Building decay is a persistent sink.** All buildings decay slowly. Production buildings lose efficiency when too decayed; Housing and Warehouses decay silently (only affects demolition recovery). This means construction materials (Bricks, Mortar, Timber Frame, Scaffolding) have permanent ongoing demand — not just a one-time build cost. Strong economic sink.
+**Oxen deferred.** Will revisit in a later design session.
 
-**Demolition recovery** creates a secondary reason to maintain buildings — well-maintained buildings return more on demolition, giving players flexibility to reconfigure Keeps without losing all their investment.
+**Building decay uses a health percentage model.**
+- 100%→90%: healthy, repair not yet available
+- 90%: repair becomes available
+- 80%: efficiency penalty begins
+- 50%: floor — decay stops, production capped
+
+This gives players a clear warning window (90–80%) before penalties kick in. The floor at 50% means neglected buildings remain usable (at reduced output) rather than becoming dead weight.
+
+**Repair materials = construction materials.** A building is repaired with exactly what it was built with. T1 buildings repaired with T1 construction materials. T2 with T2. No special repair-only resources to track. Level scales both build and repair costs equally.
+
+**Demolition recovery is health-dependent.** Well-maintained buildings return more of their construction materials. A building at the 50% floor returns significantly less. Creates ongoing incentive to maintain even buildings you might demolish later.
 
 ---
 
 ## Open Questions — Caravans & Buildings
 
-**Oxen — tier and source building?**
-Mentioned as a Caravan animal alongside Horses and Mules. Is it T1 or T2+? Raised at the Pasture or a different building (Cattle building? Ranch already exists)?
+**Floor efficiency value.** At 50% health, production is capped — but at what output %? e.g. 50% efficiency, 60%, 70%? TBD balancing.
 
-**Mixed animal types per Caravan?**
-Can a single Caravan have 2 Mules + 1 Horse? Or restricted to one animal type per Caravan? Mixed types would need a speed-averaging rule. Probably simpler to restrict.
+**Demolition recovery curve.** What % of construction materials are returned at each health level? e.g. 100% health → 95% returned, 50% health → 30% returned? TBD balancing.
 
-**What happens when Feed runs out mid-journey?**
-If a Caravan dispatched and runs out of Feed before arriving — does it stop mid-route? Return to origin? Arrive but at reduced speed? This affects how players plan supply.
+**Multiple animals and speed.** Adding more animals to a Caravan increases capacity and Feed cost. Does it also increase speed (more pulling power), decrease it (more weight), or have no effect on speed? 
 
-**Repair materials — universal or per building type?**
-Do all buildings use the same repair materials (e.g., always Bricks + Mortar + Scaffolding), or does each building type require specific repair inputs (a Smith might need Iron Bars in addition to construction materials)?
-
-**Can a building be demolished at any decay level?**
-Or must it be repaired to a minimum state before demolition? And what's the recovery percentage curve (e.g., 100% health → 90% recovery, 50% health → 50% recovery, 0% → 10%)?
+**Partial repair.** The system allows partial repair (spend less, gain proportional health back). Does the player manually choose how much to repair, or does repair always restore to 100%?
 
 ## Things That Will Come Later
 
