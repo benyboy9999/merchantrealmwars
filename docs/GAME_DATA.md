@@ -117,8 +117,10 @@ Each Keep has a base resource storage capacity. **Warehouse buildings** add capa
 #### Pasture
 | Output | Inputs | Notes |
 |---|---|---|
-| Mules | Grain + Water | T1 Caravan vehicle |
-| Horses | Grain + Water | T2 Caravan vehicle. May require Research unlock. |
+| Mules | Grain + Water | T1 Caravan animal |
+| Horses | Grain + Water | T2 Caravan animal. May require Research unlock. |
+| Oxen | TBD | Caravan animal — slow, high carry weight. Tier and inputs TBD. |
+| Feed | Vegetables + Water | Caravan fuel. Consumed per animal per trip. |
 
 #### Ranch
 | Output | Inputs | Notes |
@@ -320,21 +322,65 @@ Each Keep has a base resource storage capacity. **Warehouse buildings** add capa
 
 ## Caravans
 
-### Mule (T1)
-| Property | Value |
-|---|---|
-| Vehicle resource | Mules |
-| Speed | Slow |
-| Capacity | Light |
-| Fuel | TBD — Grain directly, or processed Feed? |
-| Durability repair | TBD |
-| Upgrades | Leather may increase cargo capacity |
+### Composition
 
-### T2 Caravan
-| Property | Value |
+A Caravan is assembled from a combination of **animals** and **attachments**. Multiple animals can be added to a single Caravan. Each animal and attachment affects speed, capacity, and fuel consumption.
+
+**Fuel:** Feed (Vegetables + Water, produced at Pasture). Each animal in the Caravan consumes Feed per trip. More animals = more Feed consumed.
+
+### Animals
+
+| Animal | Tier | Speed | Carry Weight | Notes |
+|---|---|---|---|---|
+| Mule | T1 | Medium | Medium | Baseline caravan animal |
+| Horse | T2 | Fast | Light | Faster but lower capacity |
+| Ox | TBD | Slow | Heavy | Highest carry weight |
+
+*Multiple animals of the same or mixed types can be added to one Caravan.*
+*Each additional animal adds capacity but increases Feed consumption and may affect speed.*
+
+### Attachments
+
+Storage attachments can be added to a Caravan to increase cargo capacity. Each attachment:
+- Increases storage capacity
+- Increases Feed consumption
+- Reduces travel speed
+
+| Attachment | Notes |
 |---|---|
-| Vehicle resource | Horses |
-| Details | TBD |
+| Storage Pack | Light attachment, small capacity increase |
+| Wagon | Larger capacity, significant speed reduction |
+| *Others TBD* | |
+
+### Building Costs (construction)
+
+All buildings have a one-time resource cost to construct. Specific costs TBD per building type during balancing. Construction materials will include some combination of Bricks, Mortar, Timber Frame, Scaffolding, and tier-appropriate materials.
+
+---
+
+## Building Decay & Repair
+
+All buildings decay over time. The decay rate is slow but persistent.
+
+### Production Buildings
+| Decay State | Effect |
+|---|---|
+| Healthy | Full efficiency |
+| Worn | Efficiency begins to reduce |
+| Damaged | Significant efficiency penalty |
+| Ruined | Building ceases to function |
+
+Players must periodically spend repair materials to maintain production buildings. Specific repair costs TBD per building type.
+
+### Housing & Warehouse Buildings
+Decay **silently** — no efficiency penalty while operating. However, decay affects **demolition recovery**: when a decayed building is demolished, fewer construction materials are returned to the player's Keep. A well-maintained building returns a higher percentage of its construction cost on demolition.
+
+### Repair
+- Repair requires resources (construction materials and/or tier-appropriate inputs — TBD per building type)
+- Repair restores the building to full health
+- Players can choose to repair proactively or let buildings decay until efficiency drops
+
+*Decay rate, efficiency penalty curve, and repair costs: TBD during balancing.*
 
 ---
 

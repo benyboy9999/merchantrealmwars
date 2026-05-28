@@ -68,19 +68,9 @@ T1 Labourers require Tools every tick. This creates the strongest economic sink 
 
 **~~Storage unit~~** ✓ Weight-based. Each resource has a weight value.
 
-**Charcoal/Coal mechanic — how does the engine handle it?**
-Two options:
-- Option A: Two separate recipe rows per metal (e.g. Iron Bars w/ Coal, Iron Bars w/ Charcoal). Player chooses which recipe the building runs.
-- Option B: Recipes have a "fuel" slot that accepts either Coal or Charcoal, with a Coal bonus modifier.
-Option A is simpler to implement. Option B is more elegant but requires engine support for substitutable inputs.
-*→ Decision needed before implementing Smith.*
+**~~Charcoal/Coal mechanic~~** ✓ Two separate recipe rows. Smith has e.g. "Iron Bars (Iron Ore + Coal)" and "Iron Bars (Iron Ore + Charcoal)" as distinct recipes. Player chooses which one to queue.
 
-**Mule caravan fuel — Grain or processed Feed?**
-Mule caravans need something to run on. Options:
-- Grain directly (simpler — Pasture and caravans compete for the same Grain supply)
-- Grain → Feed (processed, separate resource) — adds a step but separates caravan fuel from livestock food
-The current codebase has "FEED" as a placeholder resource. 
-*→ Decision needed before implementing Caravans.*
+**~~Mule caravan fuel~~** ✓ Feed (Vegetables + Water), produced at the Pasture. Each animal in the Caravan consumes Feed per trip.
 
 **Scaffolding — per tick or per event?**
 - Per tick: buildings constantly consume Scaffolding to stay maintained. Creates ongoing demand. Higher upkeep pressure.
@@ -150,6 +140,37 @@ Workshop ──► Tools → T1 Labourer (necessary) + building upkeep
 ```
 
 ---
+
+## Caravan System (decided)
+
+**Caravans are composed, not fixed.** A Caravan is a combination of animals + attachments. Players add animals (Mule, Horse, Ox) and storage attachments (Storage Pack, Wagon) to a single Caravan. Each addition affects the three-way trade-off: speed, capacity, Feed consumption.
+
+**Feed = Vegetables + Water (Pasture recipe).** Separates caravan fuel from livestock food. Pasture now serves two purposes: raising animals and producing Feed. This creates interesting resource allocation — a heavily used Pasture might struggle to do both.
+
+**Mixed animal types may be allowed** in one Caravan. Not yet confirmed. Worth deciding — mixing Horses and Oxen would create weird speed averaging. Probably cleaner to restrict to one animal type per Caravan.
+
+**Building decay is a persistent sink.** All buildings decay slowly. Production buildings lose efficiency when too decayed; Housing and Warehouses decay silently (only affects demolition recovery). This means construction materials (Bricks, Mortar, Timber Frame, Scaffolding) have permanent ongoing demand — not just a one-time build cost. Strong economic sink.
+
+**Demolition recovery** creates a secondary reason to maintain buildings — well-maintained buildings return more on demolition, giving players flexibility to reconfigure Keeps without losing all their investment.
+
+---
+
+## Open Questions — Caravans & Buildings
+
+**Oxen — tier and source building?**
+Mentioned as a Caravan animal alongside Horses and Mules. Is it T1 or T2+? Raised at the Pasture or a different building (Cattle building? Ranch already exists)?
+
+**Mixed animal types per Caravan?**
+Can a single Caravan have 2 Mules + 1 Horse? Or restricted to one animal type per Caravan? Mixed types would need a speed-averaging rule. Probably simpler to restrict.
+
+**What happens when Feed runs out mid-journey?**
+If a Caravan dispatched and runs out of Feed before arriving — does it stop mid-route? Return to origin? Arrive but at reduced speed? This affects how players plan supply.
+
+**Repair materials — universal or per building type?**
+Do all buildings use the same repair materials (e.g., always Bricks + Mortar + Scaffolding), or does each building type require specific repair inputs (a Smith might need Iron Bars in addition to construction materials)?
+
+**Can a building be demolished at any decay level?**
+Or must it be repaired to a minimum state before demolition? And what's the recovery percentage curve (e.g., 100% health → 90% recovery, 50% health → 50% recovery, 0% → 10%)?
 
 ## Things That Will Come Later
 
