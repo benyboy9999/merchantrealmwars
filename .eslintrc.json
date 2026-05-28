@@ -1,0 +1,59 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "plugins": ["@typescript-eslint", "import"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended-type-checked",
+    "prettier"
+  ],
+  "rules": {
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/consistent-type-imports": ["error", { "prefer": "type-imports" }],
+    "import/no-cycle": "error",
+    "no-console": ["warn", { "allow": ["warn", "error"] }]
+  },
+  "overrides": [
+    {
+      "files": ["packages/client/**/*.{ts,tsx}"],
+      "parserOptions": { "ecmaFeatures": { "jsx": true } },
+      "extends": ["plugin:react/recommended", "plugin:react-hooks/recommended"],
+      "rules": {
+        "react/react-in-jsx-scope": "off"
+      }
+    },
+    {
+      "files": ["packages/engine/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["../server/*", "../../server/*"], "message": "engine must not import from server" },
+              { "group": ["../client/*", "../../client/*"], "message": "engine must not import from client" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/client/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["../engine/*", "../../engine/*"], "message": "client must not import from engine" },
+              { "group": ["../server/*", "../../server/*"], "message": "client must not import from server" }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

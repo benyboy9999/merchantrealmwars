@@ -1,0 +1,466 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ──────────────────────────────────────────────────────────────────
+
+enum RegionId {
+  CENTRAL
+  EXTRACTION
+  FARMING
+  CRAFTING
+}
+
+enum RegionBonusType {
+  NONE
+  EXTRACTION
+  FARMING
+  CRAFTING
+}
+
+enum VehicleType {
+  CART
+  WAGON
+  COURIER
+}
+
+enum CaravanStatus {
+  IN_TRANSIT
+  ARRIVED
+  CANCELLED
+}
+
+enum CaravanLocationType {
+  KEEP
+  EXCHANGE
+}
+
+enum WorkerTier {
+  T1
+  T2
+  T3
+}
+
+enum OrderType {
+  BUY
+  SELL
+}
+
+enum OrderStatus {
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+}
+
+enum GuildRole {
+  LEADER
+  OFFICER
+  MEMBER
+}
+
+enum ChatChannelType {
+  GLOBAL
+  GUILD
+  REGION
+}
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+
+model Player {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  lastActiveAt DateTime @default(now())
+
+  empire        Empire?
+  refreshTokens RefreshToken[]
+  guildMember   GuildMember?
+  chatMessages  ChatMessage[]
+  ledsGuilds    Guild[]        @relation("GuildLeader")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  playerId  String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId])
+}
+
+// ── World (seeded, not player-created) ────────────────────────────────────
+
+model Region {
+  id                String          @id
+  name              String
+  bonusType         RegionBonusType
+  guildControllable Boolean
+
+  plots          Plot[]
+  marketOrders   MarketOrder[]
+  regionControls RegionControl[]
+  taxCollections TaxCollection[]
+}
+
+model Plot {
+  id               String @id @default(cuid())
+  regionId         String
+  name             String
+  bonusDescription String
+  x                Int
+  y                Int
+
+  region Region  @relation(fields: [regionId], references: [id])
+  keeps  Keep[]
+
+  @@index([regionId])
+}
+
+// ── Player economy ─────────────────────────────────────────────────────────
+
+model Empire {
+  id          String   @id @default(cuid())
+  playerId    String   @unique
+  name        String
+  goldBalance Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  player            Player                 @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  keeps             Keep[]
+  vehicles          Vehicle[]
+  caravans          Caravan[]              @relation("EmpireCaravans")
+  marketOrders      MarketOrder[]
+  consumptionLogs   WorkerConsumptionLog[]
+  specialisations   EmpireSpecialisation[]
+}
+
+model Keep {
+  id                String   @id @default(cuid())
+  empireId          String
+  plotId            String
+  name              String
+  buildingSlotCount Int      @default(4)
+  createdAt         DateTime @default(now())
+
+  empire          Empire          @relation(fields: [empireId], references: [id], onDelete: Cascade)
+  plot            Plot            @relation(fields: [plotId], references: [id])
+  buildingSlots   BuildingSlot[]
+  housing         Housing[]
+  workers         Worker[]
+  resourceLedger  ResourceLedger[]
+  upkeepLogs      BuildingUpkeepLog[]
+
+  @@index([empireId])
+}
+
+model BuildingSlot {
+  id         String  @id @default(cuid())
+  keepId     String
+  slotIndex  Int
+  buildingId String? @unique
+
+  keep     Keep      @relation(fields: [keepId], references: [id], onDelete: Cascade)
+  building Building? @relation(fields: [buildingId], references: [id])
+
+  @@unique([keepId, slotIndex])
+}
+
+model Building {
+  id           String  @id @default(cuid())
+  keepId       String
+  buildingType String
+  tier         Int     @default(1)
+  isActive     Boolean @default(true)
+  isDormant    Boolean @default(false)
+
+  keep          Keep               @relation(fields: [keepId], references: [id], onDelete: Cascade)
+  buildingSlot  BuildingSlot?
+  upkeepLogs    BuildingUpkeepLog[]
+  assignedWorkers Worker[]
+
+  @@index([keepId])
+}
+
+model Housing {
+  id          String     @id @default(cuid())
+  keepId      String
+  tier        WorkerTier
+  capacity    Int
+  workerCount Int        @default(0)
+
+  keep    Keep     @relation(fields: [keepId], references: [id], onDelete: Cascade)
+  workers Worker[]
+
+  @@index([keepId])
+}
+
+model Worker {
+  id                 String     @id @default(cuid())
+  keepId             String
+  housingId          String
+  tier               WorkerTier
+  assignedBuildingId String?
+
+  keep              Keep      @relation(fields: [keepId], references: [id], onDelete: Cascade)
+  housing           Housing   @relation(fields: [housingId], references: [id])
+  assignedBuilding  Building? @relation(fields: [assignedBuildingId], references: [id])
+
+  @@index([keepId])
+}
+
+model ResourceLedger {
+  id           String   @id @default(cuid())
+  keepId       String
+  resourceType String
+  quantity     Float    @default(0)
+  updatedAt    DateTime @updatedAt
+
+  keep Keep @relation(fields: [keepId], references: [id], onDelete: Cascade)
+
+  @@unique([keepId, resourceType])
+}
+
+// ── Workers consumption log ────────────────────────────────────────────────
+
+model WorkerConsumptionLog {
+  id           String   @id @default(cuid())
+  empireId     String
+  tickId       String
+  resourceType String
+  required     Float
+  actual       Float
+  penaltyApplied Float
+
+  empire Empire   @relation(fields: [empireId], references: [id], onDelete: Cascade)
+  tick   GameTick @relation(fields: [tickId], references: [id])
+
+  @@index([empireId, tickId])
+}
+
+// ── Transport ──────────────────────────────────────────────────────────────
+
+model Vehicle {
+  id          String      @id @default(cuid())
+  empireId    String
+  vehicleType VehicleType
+  fuelLevel   Float       @default(100)
+  durability  Float       @default(100)
+
+  empire    Empire           @relation(fields: [empireId], references: [id], onDelete: Cascade)
+  upgrades  CaravanUpgrade[]
+  caravans  Caravan[]
+
+  @@index([empireId])
+}
+
+model CaravanUpgrade {
+  id          String   @id @default(cuid())
+  vehicleId   String
+  upgradeType String
+  appliedAt   DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+}
+
+model Caravan {
+  id           String              @id @default(cuid())
+  vehicleId    String
+  empireId     String
+  originType   CaravanLocationType
+  originId     String
+  destType     CaravanLocationType
+  destId       String
+  resourceType String
+  quantity     Float
+  departedAt   DateTime            @default(now())
+  arrivesAt    DateTime
+  status       CaravanStatus       @default(IN_TRANSIT)
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+  empire  Empire  @relation("EmpireCaravans", fields: [empireId], references: [id], onDelete: Cascade)
+
+  @@index([status, arrivesAt])
+  @@index([empireId])
+}
+
+// ── Exchange ───────────────────────────────────────────────────────────────
+
+model MarketOrder {
+  id           String      @id @default(cuid())
+  empireId     String?     // null = NPC order
+  regionId     String
+  orderType    OrderType
+  resourceType String
+  quantity     Float
+  pricePerUnit Float
+  fulfilledQty Float       @default(0)
+  status       OrderStatus @default(OPEN)
+  createdAt    DateTime    @default(now())
+
+  empire      Empire?       @relation(fields: [empireId], references: [id], onDelete: SetNull)
+  region      Region        @relation(fields: [regionId], references: [id])
+  buyTrades   MarketTrade[] @relation("BuyOrder")
+  sellTrades  MarketTrade[] @relation("SellOrder")
+
+  @@index([regionId, resourceType, status])
+  @@index([empireId])
+}
+
+model MarketTrade {
+  id           String   @id @default(cuid())
+  buyOrderId   String
+  sellOrderId  String
+  quantity     Float
+  pricePerUnit Float
+  tradedAt     DateTime @default(now())
+
+  buyOrder  MarketOrder @relation("BuyOrder", fields: [buyOrderId], references: [id])
+  sellOrder MarketOrder @relation("SellOrder", fields: [sellOrderId], references: [id])
+
+  @@index([tradedAt])
+}
+
+// ── Guilds ─────────────────────────────────────────────────────────────────
+
+model Guild {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  leaderId    String
+  level       Int      @default(1)
+  goldBalance Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  leader         Player          @relation("GuildLeader", fields: [leaderId], references: [id])
+  members        GuildMember[]
+  regionControls RegionControl[]
+}
+
+model GuildMember {
+  id       String    @id @default(cuid())
+  guildId  String
+  playerId String    @unique
+  role     GuildRole @default(MEMBER)
+  joinedAt DateTime  @default(now())
+
+  guild  Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([guildId])
+}
+
+model RegionControl {
+  id           String   @id @default(cuid())
+  guildId      String
+  regionId     String
+  weekNumber   Int
+  controlStart DateTime
+  controlEnd   DateTime
+
+  guild  Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  region Region @relation(fields: [regionId], references: [id])
+
+  @@unique([regionId, weekNumber])
+  @@index([guildId])
+}
+
+// ── Specialisation ─────────────────────────────────────────────────────────
+
+model SpecialisationTree {
+  id          String @id @default(cuid())
+  name        String @unique
+  description String
+
+  nodes SpecialisationNode[]
+}
+
+model SpecialisationNode {
+  id               String @id @default(cuid())
+  treeId           String
+  level            Int
+  bonusDescription String
+  recipeUnlocks    Json   @default("[]")
+  cost             Json   // { resourceType: quantity, ... }
+
+  tree            SpecialisationTree     @relation(fields: [treeId], references: [id])
+  empireAcquisitions EmpireSpecialisation[]
+
+  @@unique([treeId, level])
+}
+
+model EmpireSpecialisation {
+  id         String   @id @default(cuid())
+  empireId   String
+  nodeId     String
+  acquiredAt DateTime @default(now())
+
+  empire Empire             @relation(fields: [empireId], references: [id], onDelete: Cascade)
+  node   SpecialisationNode @relation(fields: [nodeId], references: [id])
+
+  @@unique([empireId, nodeId])
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+
+model ChatMessage {
+  id          String          @id @default(cuid())
+  senderId    String
+  channelType ChatChannelType
+  channelId   String?         // guildId or regionId; null for GLOBAL
+  content     String          @db.VarChar(500)
+  sentAt      DateTime        @default(now())
+
+  sender Player @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([channelType, channelId, sentAt])
+}
+
+// ── System ─────────────────────────────────────────────────────────────────
+
+model GameTick {
+  id          String   @id @default(cuid())
+  tickNumber  Int      @unique
+  processedAt DateTime
+  durationMs  Int
+
+  consumptionLogs WorkerConsumptionLog[]
+  taxCollections  TaxCollection[]
+}
+
+model TaxCollection {
+  id           String   @id @default(cuid())
+  regionId     String
+  tickId       String
+  totalAmount  Float
+  guildShare   Float
+  treasuryShare Float
+  collectedAt  DateTime @default(now())
+
+  region Region   @relation(fields: [regionId], references: [id])
+  tick   GameTick @relation(fields: [tickId], references: [id])
+}
+
+model BuildingUpkeepLog {
+  id         String   @id @default(cuid())
+  buildingId String
+  keepId     String
+  tickId     String
+  required   Json     // { resourceType: quantity }
+  actual     Json     // { resourceType: quantity }
+  isDormant  Boolean
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  keep     Keep     @relation(fields: [keepId], references: [id], onDelete: Cascade)
+
+  @@index([buildingId])
+}
