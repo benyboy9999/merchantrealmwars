@@ -11,5 +11,6 @@ export default {
       },
     },
   },
+  // Note: standard tailwind zinc colors are available (zinc-950=#09090b, zinc-900=#18181b, zinc-800=#27272a, etc.)
   plugins: [],
 } satisfies Config;

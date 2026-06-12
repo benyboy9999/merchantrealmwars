@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { CreateEmpireSchema } from '@artemis/shared';
+import { CreateEmpireSchema } from '@merchant-realms/shared';
 import { db } from '../../db/client.js';
 import { requireAuth } from '../../middleware/auth.js';
 

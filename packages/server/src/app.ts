@@ -46,11 +46,11 @@ app.use(errorHandler);
 const httpServer = createServer(app);
 const io = createSocketServer(httpServer);
 
-startTickJob(io);
+void startTickJob(io);
 startControlJob();
 
 httpServer.listen(config.PORT, config.HOST, () => {
-  console.warn(`🚀 Artemis server on ${config.HOST}:${config.PORT} [${config.NODE_ENV}]`);
+  console.warn(`🚀 Merchant Realms server on ${config.HOST}:${config.PORT} [${config.NODE_ENV}]`);
 });
 
 export { app, io };

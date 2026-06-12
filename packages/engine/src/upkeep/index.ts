@@ -1,4 +1,4 @@
-import type { ResourceType, BuildingType } from '@artemis/shared';
+import type { ResourceType, BuildingType } from '@merchant-realms/shared';
 
 export interface UpkeepRequirement {
   resourceType: ResourceType;

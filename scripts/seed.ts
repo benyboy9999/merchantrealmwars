@@ -33,8 +33,8 @@ async function main() {
   // ── Admin player + empire ─────────────────────────────────────────────────
   const adminHash = await bcrypt.hash('admin', 12);
   const admin = await db.player.upsert({
-    where: { email: 'admin@artemis.dev' },
-    create: { username: 'Admin', email: 'admin@artemis.dev', passwordHash: adminHash },
+    where: { email: 'admin@merchantrealms.dev' },
+    create: { username: 'Admin', email: 'admin@merchantrealms.dev', passwordHash: adminHash },
     update: {},
   });
 
@@ -64,7 +64,7 @@ async function main() {
   console.log(`  ✓ ${npcOrders.length} NPC sell orders seeded (all T1 resources @ 1 gold)`);
 
   console.log('\n✅ Seed complete.');
-  console.log('   Admin: admin@artemis.dev');
+  console.log('   Admin: admin@merchantrealms.dev');
 }
 
 main()

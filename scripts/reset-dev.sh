@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🔄 Resetting Artemis dev environment..."
+echo "🔄 Resetting Merchant Realms dev environment..."
 
 # Stop and remove containers + volumes
 docker-compose down -v
@@ -11,18 +11,18 @@ docker-compose up -d postgres
 
 # Wait for postgres to be ready
 echo "⏳ Waiting for postgres..."
-until docker-compose exec -T postgres pg_isready -U artemis; do
+until docker-compose exec -T postgres pg_isready -U merchant_realms; do
   sleep 1
 done
 
 # Re-run migrations
 echo "🗄  Running migrations..."
 cd packages/server
-pnpm db:migrate
+/Users/kieran/Library/pnpm/bin/pnpm db:migrate
 
 # Seed
 echo "🌱 Seeding database..."
-pnpm db:seed
+/Users/kieran/Library/pnpm/bin/pnpm db:seed
 
 cd ../..
 echo "✅ Dev environment reset complete."

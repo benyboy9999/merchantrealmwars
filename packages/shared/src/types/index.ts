@@ -1,10 +1,4 @@
-import type { RegionId } from '../constants/regions.js';
-import type { ResourceType } from '../constants/resources.js';
-import type { BuildingType, BuildingTier } from '../constants/buildings.js';
-import type { VehicleType, CaravanStatus, CaravanLocationType } from '../constants/vehicles.js';
-import type { WorkerTier } from '../constants/workers.js';
-
-export type { RegionId, ResourceType, BuildingType, BuildingTier, VehicleType, CaravanStatus, CaravanLocationType, WorkerTier };
+import type { RegionId, ResourceType, BuildingType, VehicleType, CaravanStatus, CaravanLocationType, WorkerTier } from '../gamedata.js';
 
 // ── Core entities ──────────────────────────────────────────────────────────
 
@@ -31,11 +25,24 @@ export interface Region {
   guildControllable: boolean;
 }
 
-export interface Plot {
+export interface District {
   id: string;
   regionId: RegionId;
   name: string;
   bonusDescription: string;
+  tier: number;
+  q: number;
+  r: number;
+  x: number;
+  y: number;
+}
+
+export interface Plot {
+  id: string;
+  districtId: string;
+  name: string;
+  bonusDescription: string;
+  tier: number;
   x: number;
   y: number;
 }
@@ -61,7 +68,7 @@ export interface Building {
   keepId: string;
   slotId: string;
   buildingType: BuildingType;
-  tier: BuildingTier;
+  level: number;
   isActive: boolean;
   isDormant: boolean;
 }

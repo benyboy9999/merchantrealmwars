@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { SendChatMessageSchema, PaginationSchema } from '@artemis/shared';
+import { SendChatMessageSchema, PaginationSchema } from '@merchant-realms/shared';
 import { db } from '../../db/client.js';
 import { requireAuth } from '../../middleware/auth.js';
 

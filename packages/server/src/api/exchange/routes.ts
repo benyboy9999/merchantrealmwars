@@ -2,8 +2,100 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../../db/client.js';
 
+const NPC_BUY_PRICE = 1; // gold per unit — NPC auto-purchases at this price for pilot
+
+async function getAdminEmpire() {
+  const player = await db.player.findUnique({ where: { email: 'admin@merchantrealms.dev' } });
+  if (!player) throw new Error('Admin player not found');
+  const empire = await db.empire.findUnique({ where: { playerId: player.id } });
+  if (!empire) throw new Error('Admin empire not found');
+  return empire;
+}
+
 export const exchangeRouter = Router();
 
+// ── Exchange storage ─────────────────────────────────────────────────────────
+exchangeRouter.get('/storage', async (req, res, next) => {
+  try {
+    const regionId = (req.query['regionId'] as string) ?? 'CENTRAL';
+    const empire = await getAdminEmpire();
+    const [storage] = await Promise.all([
+      db.exchangeStorage.findMany({ where: { empireId: empire.id, regionId }, orderBy: { resourceType: 'asc' } }),
+    ]);
+    res.json({ storage, goldBalance: empire.goldBalance });
+  } catch (err) { next(err); }
+});
+
+// Sell resources from exchange storage to NPC (auto-buy at 1g/unit)
+exchangeRouter.post('/sell', async (req, res, next) => {
+  try {
+    const { regionId, resourceType, quantity } = z.object({
+      regionId:     z.string(),
+      resourceType: z.string(),
+      quantity:     z.number().positive(),
+    }).parse(req.body);
+
+    const empire = await getAdminEmpire();
+
+    const entry = await db.exchangeStorage.findUnique({
+      where: { empireId_regionId_resourceType: { empireId: empire.id, regionId, resourceType } },
+    });
+    if (!entry || entry.quantity < quantity) {
+      res.status(400).json({ error: 'Not enough in exchange storage' });
+      return;
+    }
+
+    const gold = quantity * NPC_BUY_PRICE;
+
+    if (entry.quantity - quantity < 0.001) {
+      await db.exchangeStorage.delete({
+        where: { empireId_regionId_resourceType: { empireId: empire.id, regionId, resourceType } },
+      });
+    } else {
+      await db.exchangeStorage.update({
+        where: { empireId_regionId_resourceType: { empireId: empire.id, regionId, resourceType } },
+        data: { quantity: { decrement: quantity } },
+      });
+    }
+
+    await db.empire.update({
+      where: { id: empire.id },
+      data: { goldBalance: { increment: gold } },
+    });
+
+    res.json({ ok: true, sold: quantity, gold, resourceType });
+  } catch (err) { next(err); }
+});
+
+// Buy from NPC → deposited to exchange storage
+exchangeRouter.post('/buy', async (req, res, next) => {
+  try {
+    const { regionId, resourceType, quantity } = z.object({
+      regionId:     z.string(),
+      resourceType: z.string(),
+      quantity:     z.number().positive(),
+    }).parse(req.body);
+
+    const empire = await getAdminEmpire();
+    const cost = quantity * NPC_BUY_PRICE;
+
+    if (empire.goldBalance < cost) {
+      res.status(400).json({ error: `Not enough gold — need ${cost}g, have ${empire.goldBalance.toFixed(0)}g` });
+      return;
+    }
+
+    await db.empire.update({ where: { id: empire.id }, data: { goldBalance: { decrement: cost } } });
+    await db.exchangeStorage.upsert({
+      where:  { empireId_regionId_resourceType: { empireId: empire.id, regionId, resourceType } },
+      create: { empireId: empire.id, regionId, resourceType, quantity },
+      update: { quantity: { increment: quantity } },
+    });
+
+    res.json({ ok: true, bought: quantity, cost, resourceType });
+  } catch (err) { next(err); }
+});
+
+// ── Market orders ────────────────────────────────────────────────────────────
 // List open orders (no auth for concept)
 exchangeRouter.get('/orders', async (req, res, next) => {
   try {
@@ -35,7 +127,7 @@ exchangeRouter.post('/orders/:id/fill', async (req, res, next) => {
     const filled = Math.min(quantity, available);
 
     // Add resource to admin empire's first keep
-    const adminPlayer = await db.player.findUnique({ where: { email: 'admin@artemis.dev' } });
+    const adminPlayer = await db.player.findUnique({ where: { email: 'admin@merchantrealms.dev' } });
     const empire = adminPlayer ? await db.empire.findUnique({ where: { playerId: adminPlayer.id } }) : null;
     const keep = empire ? await db.keep.findFirst({ where: { empireId: empire.id } }) : null;
 

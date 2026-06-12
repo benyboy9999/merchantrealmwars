@@ -10,76 +10,86 @@ export default function MapPage() {
   const [selectedPlot, setSelectedPlot] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['plots'],
-    queryFn: () => api.plots('CENTRAL'),
+    queryKey: ['districts'],
+    queryFn: () => api.districts('CENTRAL'),
     refetchInterval: 10000,
   });
 
   const createKeep = useMutation({
     mutationFn: ({ plotId, name }: { plotId: string; name: string }) => api.createKeep(plotId, name),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['plots'] }); setSelectedPlot(null); setNewKeepName(''); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['districts'] }); setSelectedPlot(null); setNewKeepName(''); },
   });
 
-  if (isLoading) return <div className="p-8 text-parchment-200">Loading region...</div>;
+  if (isLoading) return <div className="p-8 text-stone-400 text-sm">Loading...</div>;
 
-  const plots = data?.plots ?? [];
+  const plots = (data?.districts ?? []).flatMap((d) => d.plots);
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-gold-400 mb-2">Central Region</h1>
-      <p className="text-parchment-200 text-sm mb-6">5 plots available — concept testbed</p>
+    <div className="p-8 max-w-3xl">
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold text-parchment-100">Central Region</h1>
+        <p className="text-stone-500 text-sm mt-1">{data?.districts?.length ?? 0} districts · {plots.length} plots · 1 exchange</p>
+      </div>
 
-      <div className="grid grid-cols-3 gap-4 max-w-2xl">
+      <div className="grid grid-cols-3 gap-3">
+        {/* Plots */}
         {plots.map((plot) => {
           const keep = plot.keeps?.[0];
+          const isSelected = selectedPlot === plot.id;
           return (
-            <div
-              key={plot.id}
-              className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                keep
-                  ? 'border-gold-500 bg-stone-800 hover:bg-stone-700'
-                  : 'border-stone-600 bg-stone-900 hover:border-stone-500'
-              }`}
-              onClick={() => keep ? navigate(`/keeps/${keep.id}`) : setSelectedPlot(plot.id)}
-            >
-              <div className="font-semibold text-parchment-100">{plot.name}</div>
-              <div className="text-xs text-stone-400 mt-1">({plot.x}, {plot.y})</div>
-              {keep ? (
-                <div className="mt-2 text-sm text-gold-400">{keep.name}</div>
-              ) : (
-                <div className="mt-2 text-xs text-stone-500">Empty plot</div>
+            <div key={plot.id} className="flex flex-col">
+              <div
+                className={`border rounded p-4 cursor-pointer transition-colors ${
+                  keep
+                    ? 'border-stone-600 bg-stone-800 hover:bg-stone-700'
+                    : isSelected
+                      ? 'border-stone-500 bg-stone-800'
+                      : 'border-stone-700 bg-stone-800/50 hover:border-stone-600'
+                }`}
+                onClick={() => keep ? navigate(`/keeps/${keep.id}`) : setSelectedPlot(isSelected ? null : plot.id)}
+              >
+                <div className="text-sm font-medium text-parchment-200">{plot.name}</div>
+                <div className="text-xs text-stone-500 mt-0.5">({plot.x}, {plot.y})</div>
+                {keep ? (
+                  <div className="mt-2 text-xs text-gold-400">{keep.name}</div>
+                ) : (
+                  <div className="mt-2 text-xs text-stone-600">Empty</div>
+                )}
+              </div>
+
+              {isSelected && !keep && (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    autoFocus
+                    className="flex-1 bg-stone-800 border border-stone-600 rounded px-3 py-1.5 text-parchment-100 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-500"
+                    placeholder="Keep name..."
+                    value={newKeepName}
+                    onChange={(e) => setNewKeepName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && newKeepName && createKeep.mutate({ plotId: plot.id, name: newKeepName })}
+                  />
+                  <button
+                    className="bg-gold-600 hover:bg-gold-500 text-stone-900 font-semibold px-3 py-1.5 rounded text-sm disabled:opacity-40"
+                    disabled={!newKeepName}
+                    onClick={() => newKeepName && createKeep.mutate({ plotId: plot.id, name: newKeepName })}
+                  >
+                    Build
+                  </button>
+                </div>
               )}
             </div>
           );
         })}
-      </div>
 
-      {selectedPlot && (
-        <div className="mt-6 max-w-sm">
-          <div className="text-parchment-200 mb-2 font-medium">Name your Keep:</div>
-          <div className="flex gap-2">
-            <input
-              className="flex-1 bg-stone-800 border border-stone-600 rounded px-3 py-2 text-parchment-100 text-sm"
-              placeholder="Keep name..."
-              value={newKeepName}
-              onChange={(e) => setNewKeepName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && newKeepName && createKeep.mutate({ plotId: selectedPlot, name: newKeepName })}
-            />
-            <button
-              className="bg-gold-600 hover:bg-gold-500 text-stone-900 font-semibold px-4 py-2 rounded text-sm"
-              onClick={() => newKeepName && createKeep.mutate({ plotId: selectedPlot, name: newKeepName })}
-            >
-              Build
-            </button>
-            <button
-              className="text-stone-400 hover:text-stone-200 px-3 py-2 text-sm"
-              onClick={() => setSelectedPlot(null)}
-            >
-              Cancel
-            </button>
-          </div>
+        {/* Exchange tile */}
+        <div
+          className="border border-gold-600/30 bg-stone-800/50 hover:bg-stone-800 rounded p-4 cursor-pointer transition-colors"
+          onClick={() => navigate('/exchange')}
+        >
+          <div className="text-sm font-medium text-gold-400">Exchange</div>
+          <div className="text-xs text-stone-500 mt-0.5">Central Region</div>
+          <div className="mt-2 text-xs text-stone-500">Market · Warehouse</div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

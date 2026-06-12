@@ -1,4 +1,4 @@
-# Artemis — Claude Code Operating Manual
+# Merchant Realms — Claude Code Operating Manual
 
 This file is the source of truth for how to work on this codebase. Read it before making any changes.
 

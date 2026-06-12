@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { RegisterSchema, LoginSchema } from '@artemis/shared';
+import { RegisterSchema, LoginSchema } from '@merchant-realms/shared';
 import { db } from '../../db/client.js';
 import { config } from '../../config/index.js';
 

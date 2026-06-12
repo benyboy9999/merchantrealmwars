@@ -5,22 +5,26 @@ export const regionRouter = Router();
 
 regionRouter.get('/', async (_req, res, next) => {
   try {
-    const regions = await db.region.findMany({ include: { plots: true } });
+    const regions = await db.region.findMany({ include: { districts: true } });
     res.json({ regions });
   } catch (err) { next(err); }
 });
 
-regionRouter.get('/:regionId/plots', async (req, res, next) => {
+regionRouter.get('/:regionId/districts', async (req, res, next) => {
   try {
-    const plots = await db.plot.findMany({
+    const districts = await db.district.findMany({
       where: { regionId: req.params['regionId'] },
       include: {
-        keeps: {
-          select: { id: true, name: true, empireId: true,
-            empire: { select: { name: true } } },
+        plots: {
+          include: {
+            keeps: {
+              select: { id: true, name: true, empireId: true,
+                empire: { select: { name: true } } },
+            },
+          },
         },
       },
     });
-    res.json({ plots });
+    res.json({ districts });
   } catch (err) { next(err); }
 });

@@ -1,7 +1,5 @@
 import { z } from 'zod';
-import { RegionId } from '../constants/regions.js';
-import { ResourceType } from '../constants/resources.js';
-import { VehicleType, CaravanLocationType } from '../constants/vehicles.js';
+import { RegionId, ResourceType, VehicleType, CaravanLocationType } from '../gamedata.js';
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 

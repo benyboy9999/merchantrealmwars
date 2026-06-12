@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { matchOrders } from '../economy/index.js';
 import type { OrderState } from '../economy/index.js';
-import { ResourceType } from '@artemis/shared';
+import { ResourceType } from '@merchant-realms/shared';
 
 const makeOrder = (
   overrides: Partial<OrderState> & Pick<OrderState, 'id' | 'orderType' | 'pricePerUnit' | 'quantity'>,
 ): OrderState => ({
   empireId: 'empire-1',
-  resourceType: ResourceType.PLACEHOLDER_RAW,
+  resourceType: ResourceType.IRON_ORE,
   fulfilledQty: 0,
   status: 'OPEN',
   ...overrides,

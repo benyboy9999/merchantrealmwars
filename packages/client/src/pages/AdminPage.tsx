@@ -25,6 +25,11 @@ export default function AdminPage() {
     onSuccess: () => qc.invalidateQueries(),
   });
 
+  const completeProduction = useMutation({
+    mutationFn: () => api.adminCompleteProduction(),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+
   const last = status?.lastTick;
 
   return (
@@ -62,6 +67,20 @@ export default function AdminPage() {
         {tick.data && (
           <div className="text-xs text-stone-400 text-center">
             Tick {tick.data.tickNumber} — {tick.data.durationMs}ms · produced: {tick.data.produced} · delivered: {tick.data.delivered}
+          </div>
+        )}
+
+        <button
+          className="w-full bg-stone-700 hover:bg-stone-600 text-parchment-200 font-medium py-3 rounded-lg text-sm"
+          onClick={() => completeProduction.mutate()}
+          disabled={completeProduction.isPending}
+        >
+          ⚒ Complete All Production Queues
+        </button>
+
+        {completeProduction.data && (
+          <div className="text-xs text-stone-400 text-center">
+            {completeProduction.data.completed} batch{completeProduction.data.completed !== 1 ? 'es' : ''} completed
           </div>
         )}
 

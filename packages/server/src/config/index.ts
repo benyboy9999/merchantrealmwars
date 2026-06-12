@@ -11,7 +11,7 @@ const ConfigSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('15m'),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('7d'),
 
-  ADMIN_TOKEN: z.string().default('artemis-admin-dev'),
+  ADMIN_TOKEN: z.string().default('merchantrealms-admin-dev'),
 
   TICK_INTERVAL_SECONDS: z.coerce.number().int().positive().default(10),
   ENABLE_DEBUG_ENDPOINTS: z

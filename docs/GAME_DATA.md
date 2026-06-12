@@ -1,4 +1,4 @@
-# Artemis — Game Data
+# Merchant Realms — Game Data
 *Source of truth for all game mechanics. Update this before implementing any new system.*
 *Quantities marked (TBD) are structural decisions — values to be set during balancing.*
 

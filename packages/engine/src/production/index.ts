@@ -1,4 +1,4 @@
-import type { ResourceType } from '@artemis/shared';
+import type { ResourceType, RecipeInput } from '@merchant-realms/shared';
 import { RECIPE_BY_KEY } from './recipes.js';
 
 export { ALL_RECIPES, RECIPES_BY_BUILDING, RECIPE_BY_KEY } from './recipes.js';
@@ -34,7 +34,7 @@ export function computeProductionTick(
   if (!recipe) return { produced: null, consumed: [], blocked: true };
 
   const avMap = new Map(available.map((a) => [a.resource, a.available]));
-  const scaledInputs = recipe.inputs.map((inp) => ({
+  const scaledInputs = recipe.inputs.map((inp: RecipeInput) => ({
     resource: inp.resource,
     quantity: inp.quantity * level,
   }));

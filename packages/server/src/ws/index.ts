@@ -1,7 +1,7 @@
 import type { Server as HttpServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { WsEvent, SendChatMessageSchema } from '@artemis/shared';
+import { WsEvent, SendChatMessageSchema } from '@merchant-realms/shared';
 import { config } from '../config/index.js';
 import { db } from '../db/client.js';
 

@@ -1,0 +1,1216 @@
+{
+  "_comment": "Merchant Realms game data \u2014 single source of truth. Edit here, all constants derive from this file automatically.",
+  "resources": {
+    "IRON_ORE": {
+      "name": "Iron Ore",
+      "weightKg": 1.0
+    },
+    "COPPER_ORE": {
+      "name": "Copper Ore",
+      "weightKg": 1.0
+    },
+    "TIN_ORE": {
+      "name": "Tin Ore",
+      "weightKg": 1.0
+    },
+    "COAL": {
+      "name": "Coal",
+      "weightKg": 0.8
+    },
+    "LIMESTONE": {
+      "name": "Limestone",
+      "weightKg": 1.0
+    },
+    "SAND": {
+      "name": "Sand",
+      "weightKg": 0.8
+    },
+    "WOOD": {
+      "name": "Wood",
+      "weightKg": 0.6
+    },
+    "WATER": {
+      "name": "Water",
+      "weightKg": 0.5
+    },
+    "GRAIN": {
+      "name": "Grain",
+      "weightKg": 0.1
+    },
+    "VEGETABLES": {
+      "name": "Vegetables",
+      "weightKg": 0.2
+    },
+    "COTTON": {
+      "name": "Cotton",
+      "weightKg": 0.2
+    },
+    "COWS": {
+      "name": "Cows",
+      "weightKg": 3.0
+    },
+    "HIDE": {
+      "name": "Hide",
+      "weightKg": 0.3
+    },
+    "FERTILIZER": {
+      "name": "Fertilizer",
+      "weightKg": 0.3
+    },
+    "MULES": {
+      "name": "Mules",
+      "weightKg": 4.0
+    },
+    "HORSES": {
+      "name": "Horses",
+      "weightKg": 5.0
+    },
+    "FEED": {
+      "name": "Feed",
+      "weightKg": 0.2
+    },
+    "IRON_BARS": {
+      "name": "Iron Bars",
+      "weightKg": 1.5
+    },
+    "COPPER_BARS": {
+      "name": "Copper Bars",
+      "weightKg": 1.5
+    },
+    "BRONZE_BARS": {
+      "name": "Bronze Bars",
+      "weightKg": 1.8
+    },
+    "CHARCOAL": {
+      "name": "Charcoal",
+      "weightKg": 0.4
+    },
+    "BRICKS": {
+      "name": "Bricks",
+      "weightKg": 1.2
+    },
+    "MORTAR": {
+      "name": "Mortar",
+      "weightKg": 0.8
+    },
+    "TIMBER_FRAME": {
+      "name": "Timber Frame",
+      "weightKg": 1.0
+    },
+    "SCAFFOLDING": {
+      "name": "Scaffolding",
+      "weightKg": 1.5
+    },
+    "PLANKS": {
+      "name": "Planks",
+      "weightKg": 0.5
+    },
+    "NAILS": {
+      "name": "Nails",
+      "weightKg": 0.3
+    },
+    "RATIONS": {
+      "name": "Rations",
+      "weightKg": 0.1
+    },
+    "DRINKING_WATER": {
+      "name": "Drinking Water",
+      "weightKg": 0.1
+    },
+    "ALE": {
+      "name": "Ale",
+      "weightKg": 0.15
+    },
+    "LEATHER": {
+      "name": "Leather",
+      "weightKg": 0.3
+    },
+    "CLOTH": {
+      "name": "Cloth",
+      "weightKg": 0.1
+    },
+    "PARCHMENT": {
+      "name": "Parchment",
+      "weightKg": 0.05
+    },
+    "OVERALLS": {
+      "name": "Overalls",
+      "weightKg": 0.1
+    },
+    "TOOLS": {
+      "name": "Tools",
+      "weightKg": 0.1
+    },
+    "WHEELS": {
+      "name": "Wheels",
+      "weightKg": 0.8
+    },
+    "BASIC_RESEARCH": {
+      "name": "Basic Research",
+      "weightKg": 0.01
+    }
+  },
+  "buildings": {
+    "MINING_CAMP": {
+      "name": "Mining Camp",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "QUARRY": {
+      "name": "Quarry",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "LOGGING_CAMP": {
+      "name": "Logging Camp",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "WELL": {
+      "name": "Well",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "FARM": {
+      "name": "Farm",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "PASTURE": {
+      "name": "Pasture",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "RANCH": {
+      "name": "Ranch",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "SMITH": {
+      "name": "Smith",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "BUILDERS_YARD": {
+      "name": "Builder's Yard",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "PERMIT_OFFICE": {
+      "name": "Permit Office",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "KITCHEN": {
+      "name": "Kitchen",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "PUB": {
+      "name": "Pub",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "TEXTILE_MILL": {
+      "name": "Textile Mill",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "WORKSHOP": {
+      "name": "Workshop",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "STUDY": {
+      "name": "Study",
+      "tier": 1,
+      "workerCostPerLevel": 5,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "WAREHOUSE": {
+      "name": "Warehouse",
+      "tier": 1,
+      "workerCostPerLevel": 0,
+      "storageCapacityPerLevel": 500,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    },
+    "HOUSING": {
+      "name": "Housing",
+      "tier": 1,
+      "workerCostPerLevel": 0,
+      "housingCapacityPerLevel": 10,
+      "constructionCost": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 5
+        }
+      ]
+    }
+  },
+  "recipes": [
+    {
+      "key": "IRON_ORE",
+      "category": "EXTRACTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "MINING_CAMP",
+      "output": "IRON_ORE",
+      "outputQty": 10,
+      "inputs": []
+    },
+    {
+      "key": "COPPER_ORE",
+      "category": "EXTRACTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "MINING_CAMP",
+      "output": "COPPER_ORE",
+      "outputQty": 10,
+      "inputs": []
+    },
+    {
+      "key": "TIN_ORE",
+      "category": "EXTRACTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "MINING_CAMP",
+      "output": "TIN_ORE",
+      "outputQty": 8,
+      "inputs": []
+    },
+    {
+      "key": "COAL",
+      "category": "EXTRACTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "MINING_CAMP",
+      "output": "COAL",
+      "outputQty": 10,
+      "inputs": []
+    },
+    {
+      "key": "LIMESTONE",
+      "category": "EXTRACTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "QUARRY",
+      "output": "LIMESTONE",
+      "outputQty": 10,
+      "inputs": []
+    },
+    {
+      "key": "SAND",
+      "category": "EXTRACTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "QUARRY",
+      "output": "SAND",
+      "outputQty": 10,
+      "inputs": []
+    },
+    {
+      "key": "WOOD",
+      "category": "EXTRACTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "LOGGING_CAMP",
+      "output": "WOOD",
+      "outputQty": 12,
+      "inputs": []
+    },
+    {
+      "key": "WATER",
+      "category": "EXTRACTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "WELL",
+      "output": "WATER",
+      "outputQty": 15,
+      "inputs": []
+    },
+    {
+      "key": "GRAIN",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "FARM",
+      "output": "GRAIN",
+      "outputQty": 8,
+      "inputs": [
+        {
+          "resource": "WATER",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "key": "VEGETABLES",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "FARM",
+      "output": "VEGETABLES",
+      "outputQty": 6,
+      "inputs": [
+        {
+          "resource": "WATER",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "COTTON",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "FARM",
+      "output": "COTTON",
+      "outputQty": 5,
+      "inputs": [
+        {
+          "resource": "WATER",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "GRAIN_FERT",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 1,
+      "buildingType": "FARM",
+      "output": "GRAIN",
+      "outputQty": 14,
+      "inputs": [
+        {
+          "resource": "WATER",
+          "quantity": 3
+        },
+        {
+          "resource": "FERTILIZER",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "key": "VEGETABLES_FERT",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 1,
+      "buildingType": "FARM",
+      "output": "VEGETABLES",
+      "outputQty": 10,
+      "inputs": [
+        {
+          "resource": "WATER",
+          "quantity": 2
+        },
+        {
+          "resource": "FERTILIZER",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "key": "COTTON_FERT",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 1,
+      "buildingType": "FARM",
+      "output": "COTTON",
+      "outputQty": 8,
+      "inputs": [
+        {
+          "resource": "WATER",
+          "quantity": 2
+        },
+        {
+          "resource": "FERTILIZER",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "key": "MULES",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "PASTURE",
+      "output": "MULES",
+      "outputQty": 1,
+      "inputs": [
+        {
+          "resource": "GRAIN",
+          "quantity": 3
+        },
+        {
+          "resource": "WATER",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "HORSES",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "PASTURE",
+      "output": "HORSES",
+      "outputQty": 1,
+      "inputs": [
+        {
+          "resource": "GRAIN",
+          "quantity": 4
+        },
+        {
+          "resource": "WATER",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "FEED",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "PASTURE",
+      "output": "FEED",
+      "outputQty": 5,
+      "inputs": [
+        {
+          "resource": "VEGETABLES",
+          "quantity": 2
+        },
+        {
+          "resource": "WATER",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "COWS",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "RANCH",
+      "output": "COWS",
+      "outputQty": 1,
+      "inputs": [
+        {
+          "resource": "WATER",
+          "quantity": 2
+        },
+        {
+          "resource": "GRAIN",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "key": "HIDE",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "RANCH",
+      "output": "HIDE",
+      "outputQty": 2,
+      "inputs": [
+        {
+          "resource": "COWS",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "key": "FERTILIZER",
+      "category": "FARMING",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "RANCH",
+      "output": "FERTILIZER",
+      "outputQty": 3,
+      "inputs": [
+        {
+          "resource": "COWS",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "key": "IRON_BARS_COAL",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "SMITH",
+      "output": "IRON_BARS",
+      "outputQty": 4,
+      "inputs": [
+        {
+          "resource": "IRON_ORE",
+          "quantity": 5
+        },
+        {
+          "resource": "COAL",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "key": "IRON_BARS_CHAR",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "SMITH",
+      "output": "IRON_BARS",
+      "outputQty": 3,
+      "inputs": [
+        {
+          "resource": "IRON_ORE",
+          "quantity": 5
+        },
+        {
+          "resource": "CHARCOAL",
+          "quantity": 5
+        }
+      ]
+    },
+    {
+      "key": "COPPER_BARS_COAL",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "SMITH",
+      "output": "COPPER_BARS",
+      "outputQty": 4,
+      "inputs": [
+        {
+          "resource": "COPPER_ORE",
+          "quantity": 5
+        },
+        {
+          "resource": "COAL",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "key": "COPPER_BARS_CHAR",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "SMITH",
+      "output": "COPPER_BARS",
+      "outputQty": 3,
+      "inputs": [
+        {
+          "resource": "COPPER_ORE",
+          "quantity": 5
+        },
+        {
+          "resource": "CHARCOAL",
+          "quantity": 5
+        }
+      ]
+    },
+    {
+      "key": "BRONZE_BARS_COAL",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "SMITH",
+      "output": "BRONZE_BARS",
+      "outputQty": 3,
+      "inputs": [
+        {
+          "resource": "COPPER_ORE",
+          "quantity": 4
+        },
+        {
+          "resource": "TIN_ORE",
+          "quantity": 4
+        },
+        {
+          "resource": "COAL",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "key": "BRONZE_BARS_CHAR",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "SMITH",
+      "output": "BRONZE_BARS",
+      "outputQty": 2,
+      "inputs": [
+        {
+          "resource": "COPPER_ORE",
+          "quantity": 4
+        },
+        {
+          "resource": "TIN_ORE",
+          "quantity": 4
+        },
+        {
+          "resource": "CHARCOAL",
+          "quantity": 5
+        }
+      ]
+    },
+    {
+      "key": "CHARCOAL",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "SMITH",
+      "output": "CHARCOAL",
+      "outputQty": 4,
+      "inputs": [
+        {
+          "resource": "WOOD",
+          "quantity": 5
+        }
+      ]
+    },
+    {
+      "key": "PLANKS",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "WORKSHOP",
+      "output": "PLANKS",
+      "outputQty": 6,
+      "inputs": [
+        {
+          "resource": "WOOD",
+          "quantity": 4
+        }
+      ]
+    },
+    {
+      "key": "NAILS",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "WORKSHOP",
+      "output": "NAILS",
+      "outputQty": 8,
+      "inputs": [
+        {
+          "resource": "IRON_BARS",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "TOOLS",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "WORKSHOP",
+      "output": "TOOLS",
+      "outputQty": 4,
+      "inputs": [
+        {
+          "resource": "IRON_BARS",
+          "quantity": 3
+        },
+        {
+          "resource": "PLANKS",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "WHEELS",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "WORKSHOP",
+      "output": "WHEELS",
+      "outputQty": 2,
+      "inputs": [
+        {
+          "resource": "IRON_BARS",
+          "quantity": 2
+        },
+        {
+          "resource": "PLANKS",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "key": "BRICKS",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "BUILDERS_YARD",
+      "output": "BRICKS",
+      "outputQty": 6,
+      "inputs": [
+        {
+          "resource": "LIMESTONE",
+          "quantity": 4
+        },
+        {
+          "resource": "WATER",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "MORTAR",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "BUILDERS_YARD",
+      "output": "MORTAR",
+      "outputQty": 4,
+      "inputs": [
+        {
+          "resource": "SAND",
+          "quantity": 3
+        },
+        {
+          "resource": "LIMESTONE",
+          "quantity": 2
+        },
+        {
+          "resource": "WATER",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "TIMBER_FRAME",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "BUILDERS_YARD",
+      "output": "TIMBER_FRAME",
+      "outputQty": 2,
+      "inputs": [
+        {
+          "resource": "PLANKS",
+          "quantity": 4
+        },
+        {
+          "resource": "NAILS",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "key": "SCAFFOLDING",
+      "category": "PRODUCTION",
+      "timeMinutes": 105,
+      "reqTech": 0,
+      "buildingType": "BUILDERS_YARD",
+      "output": "SCAFFOLDING",
+      "outputQty": 1,
+      "inputs": [
+        {
+          "resource": "IRON_BARS",
+          "quantity": 2
+        },
+        {
+          "resource": "NAILS",
+          "quantity": 4
+        },
+        {
+          "resource": "PLANKS",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "key": "RATIONS",
+      "category": "PRODUCTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "KITCHEN",
+      "output": "RATIONS",
+      "outputQty": 5,
+      "inputs": [
+        {
+          "resource": "GRAIN",
+          "quantity": 4
+        },
+        {
+          "resource": "VEGETABLES",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "key": "DRINKING_WATER",
+      "category": "PRODUCTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "PUB",
+      "output": "DRINKING_WATER",
+      "outputQty": 4,
+      "inputs": [
+        {
+          "resource": "WATER",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "ALE",
+      "category": "PRODUCTION",
+      "timeMinutes": 90,
+      "reqTech": 0,
+      "buildingType": "PUB",
+      "output": "ALE",
+      "outputQty": 3,
+      "inputs": [
+        {
+          "resource": "WATER",
+          "quantity": 2
+        },
+        {
+          "resource": "GRAIN",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "LEATHER",
+      "category": "PRODUCTION",
+      "timeMinutes": 120,
+      "reqTech": 0,
+      "buildingType": "TEXTILE_MILL",
+      "output": "LEATHER",
+      "outputQty": 3,
+      "inputs": [
+        {
+          "resource": "HIDE",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "CLOTH",
+      "category": "PRODUCTION",
+      "timeMinutes": 120,
+      "reqTech": 0,
+      "buildingType": "TEXTILE_MILL",
+      "output": "CLOTH",
+      "outputQty": 4,
+      "inputs": [
+        {
+          "resource": "COTTON",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "key": "PARCHMENT",
+      "category": "PRODUCTION",
+      "timeMinutes": 120,
+      "reqTech": 0,
+      "buildingType": "TEXTILE_MILL",
+      "output": "PARCHMENT",
+      "outputQty": 3,
+      "inputs": [
+        {
+          "resource": "LEATHER",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "OVERALLS",
+      "category": "PRODUCTION",
+      "timeMinutes": 120,
+      "reqTech": 0,
+      "buildingType": "TEXTILE_MILL",
+      "output": "OVERALLS",
+      "outputQty": 2,
+      "inputs": [
+        {
+          "resource": "LEATHER",
+          "quantity": 2
+        },
+        {
+          "resource": "CLOTH",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "key": "BASIC_RESEARCH",
+      "category": "PRODUCTION",
+      "timeMinutes": 150,
+      "reqTech": 0,
+      "buildingType": "STUDY",
+      "output": "BASIC_RESEARCH",
+      "outputQty": 2,
+      "inputs": [
+        {
+          "resource": "PARCHMENT",
+          "quantity": 3
+        }
+      ]
+    }
+  ],
+  "animals": {
+    "MULE": {
+      "name": "Mule",
+      "capacityKg": 100
+    },
+    "HORSE": {
+      "name": "Horse",
+      "capacityKg": 150
+    }
+  },
+  "workerTiers": {
+    "T1": {
+      "name": "Labourer",
+      "needs": [
+        {
+          "resource": "RATIONS",
+          "quantityPerCycle": 1,
+          "necessary": true
+        },
+        {
+          "resource": "DRINKING_WATER",
+          "quantityPerCycle": 1,
+          "necessary": true
+        },
+        {
+          "resource": "TOOLS",
+          "quantityPerCycle": 0.5,
+          "necessary": true
+        },
+        {
+          "resource": "ALE",
+          "quantityPerCycle": 1,
+          "necessary": false
+        },
+        {
+          "resource": "OVERALLS",
+          "quantityPerCycle": 0.25,
+          "necessary": false
+        }
+      ]
+    },
+    "T2": {
+      "name": "Tradesman",
+      "needs": []
+    },
+    "T3": {
+      "name": "Technician",
+      "needs": []
+    }
+  },
+  "regions": {
+    "CENTRAL": {
+      "name": "Central Region",
+      "bonusType": "NONE",
+      "guildControllable": false
+    },
+    "EXTRACTION": {
+      "name": "Extraction Region",
+      "bonusType": "EXTRACTION",
+      "guildControllable": true
+    },
+    "FARMING": {
+      "name": "Farming Region",
+      "bonusType": "FARMING",
+      "guildControllable": true
+    },
+    "CRAFTING": {
+      "name": "Crafting Region",
+      "bonusType": "CRAFTING",
+      "guildControllable": true
+    }
+  },
+  "constants": {
+    "keepBaseStorageKg": 200,
+    "warehouseStoragePerLevel": 500,
+    "housingWorkersPerLevel": 10,
+    "defaultWorkersPerLevel": 5,
+    "muleCapacityKg": 100,
+    "keepFoundingCost": [
+      {
+        "resource": "WOOD",
+        "quantity": 5
+      },
+      {
+        "resource": "LIMESTONE",
+        "quantity": 5
+      }
+    ],
+    "consumptionCycleMinutes": 105,
+    "maxBuildingSlots": 20,
+    "defaultBuildingSlots": 7,
+    "slotUnlockResource": "SCAFFOLDING"
+  }
+}

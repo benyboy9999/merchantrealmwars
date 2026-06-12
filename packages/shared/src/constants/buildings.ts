@@ -66,8 +66,38 @@ export const BUILDING_BASE_WORKERS: Record<BuildingType, number> = {
 // Base housing capacity at level 1 (Housing buildings only, multiplied by level)
 export const HOUSING_BASE_CAPACITY = 10;
 
+// Workers consumed per building level (all production buildings, flat rate)
+export const WORKERS_PER_LEVEL = 5;
+
 // Base warehouse weight capacity at level 1 (multiplied by level)
 export const WAREHOUSE_BASE_CAPACITY = 500;
 
 // Base Keep storage capacity (before any warehouses)
 export const KEEP_BASE_STORAGE = 200;
+
+// Resources required in caravan cargo to found a new keep at a plot
+export const KEEP_FOUNDING_COST: Array<{ resource: string; quantity: number }> = [
+  { resource: 'WOOD',      quantity: 5 },
+  { resource: 'LIMESTONE', quantity: 5 },
+];
+
+// Construction costs (WOOD + LIMESTONE) for each building type — flat rate for pilot
+export const BUILDING_CONSTRUCTION_COSTS: Record<BuildingType, Array<{ resource: string; quantity: number }>> = {
+  MINING_CAMP:   [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  QUARRY:        [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  LOGGING_CAMP:  [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  WELL:          [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  FARM:          [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  PASTURE:       [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  RANCH:         [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  SMITH:         [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  BUILDERS_YARD: [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  PERMIT_OFFICE: [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  KITCHEN:       [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  PUB:           [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  TEXTILE_MILL:  [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  WORKSHOP:      [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  STUDY:         [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  WAREHOUSE:     [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+  HOUSING:       [{ resource: 'WOOD', quantity: 5 }, { resource: 'LIMESTONE', quantity: 5 }],
+};

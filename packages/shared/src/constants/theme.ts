@@ -10,6 +10,7 @@ export const ENTITY_NAMES = {
   region: 'Region',
   exchange: 'Exchange',
   keep: 'Keep',
+  district: 'District',
   plot: 'Plot',
   buildingSlot: 'Building Slot',
   building: 'Building',

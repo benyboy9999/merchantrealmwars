@@ -21,7 +21,7 @@ services:
     build:
       context: .
       dockerfile: packages/server/Dockerfile
-    container_name: artemis-server
+    container_name: merchant-realms-server
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}

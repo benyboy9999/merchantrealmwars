@@ -9,29 +9,15 @@ datasource db {
 
 // ── Enums ──────────────────────────────────────────────────────────────────
 
-enum RegionId {
-  CENTRAL
-  EXTRACTION
-  FARMING
-  CRAFTING
-}
-
-enum RegionBonusType {
-  NONE
-  EXTRACTION
-  FARMING
-  CRAFTING
-}
-
 enum CaravanStatus {
+  IDLE
   IN_TRANSIT
-  ARRIVED
-  CANCELLED
 }
 
 enum CaravanLocationType {
   KEEP
   EXCHANGE
+  PLOT
 }
 
 enum WorkerTier {
@@ -101,29 +87,79 @@ model RefreshToken {
 // ── World ──────────────────────────────────────────────────────────────────
 
 model Region {
-  id                String          @id
+  id                String  @id
   name              String
-  bonusType         RegionBonusType
   guildControllable Boolean
 
-  plots          Plot[]
+  districts      District[]
+  bonuses        RegionBonus[]
   marketOrders   MarketOrder[]
-  regionControls RegionControl[]
   taxCollections TaxCollection[]
 }
 
-model Plot {
-  id               String @id @default(cuid())
+// Blanket production bonus a region applies to a resource category.
+// category is a string key (e.g. "IRON_EXTRACTION") — enum deferred until item chains finalised.
+model RegionBonus {
+  id        String @id @default(cuid())
+  regionId  String
+  category  String // resource category this bonus applies to
+  magnitude Float  // additive multiplier, e.g. 0.15 = +15%
+
+  region Region @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  @@unique([regionId, category])
+  @@index([regionId])
+}
+
+// A named hex tile on the visual map. Contains 4–6 Plots.
+model District {
+  id               String @id
   regionId         String
   name             String
   bonusDescription String
-  x                Int
-  y                Int
+  tier             Int    @default(1) // 1–3; multiplies plot trait values within this district
+  q                Int    // hex axial q coordinate
+  r                Int    // hex axial r coordinate
+  x                Float  // absolute map x (1000x1000 grid, center = 500,500)
+  y                Float  // absolute map y
 
-  region Region  @relation(fields: [regionId], references: [id])
-  keeps  Keep[]
+  region           Region           @relation(fields: [regionId], references: [id])
+  plots            Plot[]
+  districtControls DistrictControl[]
 
+  @@unique([q, r])
   @@index([regionId])
+}
+
+// An individual buildable location within a District where a Keep can be founded.
+model Plot {
+  id               String @id
+  districtId       String
+  name             String
+  bonusDescription String
+  tier             Int    @default(1) // 1–4; determines resource quality ceiling and permit build cost
+  x                Float  // absolute map x coordinate
+  y                Float  // absolute map y coordinate
+
+  district District   @relation(fields: [districtId], references: [id])
+  keeps    Keep[]
+  traits   PlotTrait[]
+
+  @@index([districtId])
+}
+
+// A single trait on a plot (e.g. iron abundance, construction speed bonus).
+// traitType is a string key — enum deferred until item chains finalised.
+model PlotTrait {
+  id        String @id @default(cuid())
+  plotId    String
+  traitType String // e.g. "IRON_ABUNDANCE", "FERTILITY", "CONSTRUCTION_SPEED"
+  baseValue Float  // raw value before district tier multiplier is applied
+
+  plot Plot @relation(fields: [plotId], references: [id], onDelete: Cascade)
+
+  @@unique([plotId, traitType])
+  @@index([plotId])
 }
 
 // ── Player Economy ─────────────────────────────────────────────────────────
@@ -138,6 +174,7 @@ model Empire {
   player            Player                 @relation(fields: [playerId], references: [id], onDelete: Cascade)
   keeps             Keep[]
   caravans          Caravan[]
+  exchangeStorages  ExchangeStorage[]
   marketOrders      MarketOrder[]
   consumptionLogs   WorkerConsumptionLog[]
   specialisations   EmpireSpecialisation[]
@@ -148,7 +185,7 @@ model Keep {
   empireId          String
   plotId            String
   name              String
-  buildingSlotCount Int      @default(6)
+  buildingSlotCount Int      @default(7)
   createdAt         DateTime @default(now())
 
   empire         Empire           @relation(fields: [empireId], references: [id], onDelete: Cascade)
@@ -167,10 +204,11 @@ model Building {
   buildingType     String  // BuildingType enum value
   level            Int     @default(1)
   slotIndex        Int
-  isActive         Boolean @default(true)
-  isDormant        Boolean @default(false)
-  health           Float   @default(100)
-  workersAssigned  Int     @default(0)
+  isActive            Boolean @default(true)
+  isDormant           Boolean @default(false)
+  health              Float   @default(100)
+  workersAssigned     Int     @default(0)
+  productionProgress  Float   @default(0)
 
   keep       Keep                @relation(fields: [keepId], references: [id], onDelete: Cascade)
   upkeepLogs BuildingUpkeepLog[]
@@ -228,26 +266,57 @@ model WorkerConsumptionLog {
 
 // ── Transport ──────────────────────────────────────────────────────────────
 
+// A persistent caravan vehicle owned by an empire. It lives at a location,
+// carries cargo, and travels between keeps, the exchange, and empty plots.
 model Caravan {
-  id           String              @id @default(cuid())
+  id           String               @id @default(cuid())
   empireId     String
-  name         String              @default("Caravan")
-  originType   CaravanLocationType
-  originId     String
-  destType     CaravanLocationType
-  destId       String
+  name         String               @default("Caravan")
+  animalType   String               @default("MULE")
+  animalCount  Int                  @default(1)
+
+  // Current location (when IDLE) or departure point (when IN_TRANSIT)
+  locationType CaravanLocationType
+  locationId   String
+
+  // Travel state (null when IDLE)
+  status       CaravanStatus        @default(IDLE)
+  destType     CaravanLocationType?
+  destId       String?
+  departedAt   DateTime?
+  arrivesAt    DateTime?
+
+  cargo  CaravanCargo[]
+  empire Empire @relation(fields: [empireId], references: [id], onDelete: Cascade)
+
+  @@index([empireId])
+  @@index([status, arrivesAt])
+}
+
+// Items currently loaded onto a caravan
+model CaravanCargo {
+  id           String @id @default(cuid())
+  caravanId    String
   resourceType String
   quantity     Float
-  animalType   String              // MULE | HORSE
-  animalCount  Int                 @default(1)
-  feedLoaded   Float               @default(0)
-  departedAt   DateTime            @default(now())
-  arrivesAt    DateTime
-  status       CaravanStatus       @default(IN_TRANSIT)
+
+  caravan Caravan @relation(fields: [caravanId], references: [id], onDelete: Cascade)
+
+  @@unique([caravanId, resourceType])
+  @@index([caravanId])
+}
+
+// Player's inventory held at an exchange (deposited by caravan, listed for sale)
+model ExchangeStorage {
+  id           String @id @default(cuid())
+  empireId     String
+  regionId     String
+  resourceType String
+  quantity     Float  @default(0)
 
   empire Empire @relation(fields: [empireId], references: [id], onDelete: Cascade)
 
-  @@index([status, arrivesAt])
+  @@unique([empireId, regionId, resourceType])
   @@index([empireId])
 }
 
@@ -298,9 +367,9 @@ model Guild {
   goldBalance Float    @default(0)
   createdAt   DateTime @default(now())
 
-  leader         Player          @relation("GuildLeader", fields: [leaderId], references: [id])
-  members        GuildMember[]
-  regionControls RegionControl[]
+  leader           Player            @relation("GuildLeader", fields: [leaderId], references: [id])
+  members          GuildMember[]
+  districtControls DistrictControl[]
 }
 
 model GuildMember {
@@ -316,18 +385,21 @@ model GuildMember {
   @@index([guildId])
 }
 
-model RegionControl {
+// Guild control of an individual contestable district.
+// Winning guild gets the abundance tier bonus for that district's zone (Inner +1, Outer +2).
+// Tax share is computed per-tick from how many districts a guild controls in each region.
+model DistrictControl {
   id           String   @id @default(cuid())
   guildId      String
-  regionId     String
+  districtId   String
   weekNumber   Int
   controlStart DateTime
   controlEnd   DateTime
 
-  guild  Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  region Region @relation(fields: [regionId], references: [id])
+  guild    Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  district District @relation(fields: [districtId], references: [id])
 
-  @@unique([regionId, weekNumber])
+  @@unique([districtId, weekNumber])
   @@index([guildId])
 }
 

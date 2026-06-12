@@ -1,4 +1,4 @@
-import type { VehicleType, ResourceType } from '@artemis/shared';
+import type { VehicleType, ResourceType } from '@merchant-realms/shared';
 
 export interface VehicleStats {
   speedUnitsPerSecond: number;

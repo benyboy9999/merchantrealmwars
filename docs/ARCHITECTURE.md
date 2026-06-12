@@ -28,7 +28,7 @@ node-cron
 ```
 Client → POST /api/exchange/orders
   └─ Express route handler
-      └─ Validate (Zod schema from @artemis/shared)
+      └─ Validate (Zod schema from @merchant-realms/shared)
       └─ Service layer (business logic)
       └─ Prisma → PostgreSQL
       └─ JSON response
@@ -50,4 +50,4 @@ Client → POST /api/exchange/orders
 | staging | push to `staging` branch | staging DB (VPS) | 5min |
 | prod | push to `main` branch | prod DB (VPS) | 5min |
 
-Staging and prod run on the same VPS as separate Docker Compose projects (`artemis` vs `artemis-staging`).
+Staging and prod run on the same VPS as separate Docker Compose projects (`merchant-realms` vs `merchant-realms-staging`).

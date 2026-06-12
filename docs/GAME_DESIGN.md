@@ -1,8 +1,8 @@
-# Project Scaffolding: Artemis (Medieval Fantasy Economy Game)
+# Project Scaffolding: Merchant Realms (Medieval Fantasy Economy Game)
 
 ## Context
 
-A browser-based persistent multiplayer economy game with a medieval/fantasy theme. Greenfield project in `/Users/kieran/artemis`. Claude Code does most development. The scaffolding must maximise Claude's ability to work safely long-term, and enforce strict dev/staging/prod separation so testing never impacts live players.
+A browser-based persistent multiplayer economy game with a medieval/fantasy theme. Greenfield project in `/Users/kieran/merchant-realms`. Claude Code does most development. The scaffolding must maximise Claude's ability to work safely long-term, and enforce strict dev/staging/prod separation so testing never impacts live players.
 
 This plan covers:
 1. **The Game Design Document (GDD)** — all locked design decisions, to be written to `docs/GAME_DESIGN.md`
@@ -287,7 +287,7 @@ Enforced in CLAUDE.md and linted via eslint-import-resolver. Violations fail CI.
 ## Directory Tree
 
 ```
-artemis/
+merchant-realms/
 ├── packages/
 │   ├── client/
 │   │   ├── src/
@@ -490,7 +490,7 @@ Separate scheduled jobs:
 | Logging | Verbose | Structured JSON to files |
 | SSL | No | Yes (Nginx terminates) |
 
-Staging = prod config + `.env.staging` + separate DB, deployed as `artemis-staging` Docker Compose project on same VPS.
+Staging = prod config + `.env.staging` + separate DB, deployed as `merchant-realms-staging` Docker Compose project on same VPS.
 
 ---
 
@@ -507,7 +507,7 @@ Staging = prod config + `.env.staging` + separate DB, deployed as `artemis-stagi
 2. `git pull origin main`
 3. `pnpm --filter client build`
 4. `docker-compose -f docker-compose.prod.yml up --build -d`
-5. `docker exec artemis-server npx prisma migrate deploy`
+5. `docker exec merchant-realms-server npx prisma migrate deploy`
 
 ---
 

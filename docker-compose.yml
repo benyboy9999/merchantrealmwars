@@ -2,16 +2,16 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: artemis
-      POSTGRES_PASSWORD: artemis
-      POSTGRES_DB: artemis_dev
+      POSTGRES_USER: merchant_realms
+      POSTGRES_PASSWORD: merchant_realms
+      POSTGRES_DB: merchant_realms_dev
     ports:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U artemis']
+      test: ['CMD-SHELL', 'pg_isready -U merchant_realms']
       interval: 5s
       timeout: 5s
       retries: 5

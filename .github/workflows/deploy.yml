@@ -33,12 +33,12 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd ~/artemis
+            cd ~/merchant-realms
             git pull origin main
             export PNPM_HOME="/root/.local/share/pnpm"
             export PATH="$PNPM_HOME:$PATH"
             pnpm install --frozen-lockfile
             pnpm --filter client build
             docker-compose -f docker-compose.prod.yml up --build -d
-            docker exec artemis-server npx prisma migrate deploy
+            docker exec merchant-realms-server npx prisma migrate deploy
             echo "✅ Deploy complete"

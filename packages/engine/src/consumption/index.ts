@@ -1,4 +1,4 @@
-import type { ResourceType, WorkerTier } from '@artemis/shared';
+import type { ResourceType, WorkerTier } from '@merchant-realms/shared';
 
 export interface ConsumptionNeed {
   resourceType: ResourceType;

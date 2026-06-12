@@ -1,5 +1,5 @@
-import type { ResourceType } from '@artemis/shared';
-import type { OrderType, OrderStatus } from '@artemis/shared';
+import type { ResourceType } from '@merchant-realms/shared';
+import type { OrderType, OrderStatus } from '@merchant-realms/shared';
 
 export interface OrderState {
   id: string;

@@ -1,5 +1,5 @@
 {
-  "name": "@artemis/client",
+  "name": "@merchant-realms/client",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
-    "@artemis/shared": "workspace:*",
+    "@merchant-realms/shared": "workspace:*",
     "@tanstack/react-query": "^5.62.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

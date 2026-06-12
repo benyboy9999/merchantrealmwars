@@ -1,5 +1,5 @@
 const BASE = '';
-const ADMIN_TOKEN = 'artemis-admin-dev';
+const ADMIN_TOKEN = 'merchantrealms-admin-dev';
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -25,22 +25,24 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 const get  = <T>(path: string)                => req<T>(path);
-const post = <T>(path: string, body?: unknown) => req<T>(path, { method: 'POST',  body: body ? JSON.stringify(body) : undefined });
+const post = <T>(path: string, body?: unknown) => req<T>(path, { method: 'POST',  body: body ? JSON.stringify(body) : null });
 const del  = <T>(path: string)                => req<T>(path, { method: 'DELETE' });
 const patch = <T>(path: string, body: unknown) => req<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
 
 export const api = {
   // Regions
-  regions: () => get<{ regions: Region[] }>('/api/regions'),
-  plots:   (regionId: string) => get<{ plots: Plot[] }>(`/api/regions/${regionId}/plots`),
+  regions:   () => get<{ regions: Region[] }>('/api/regions'),
+  districts: (regionId: string) => get<{ districts: District[] }>(`/api/regions/${regionId}/districts`),
 
   // Keeps
   keeps:        () => get<{ keeps: Keep[] }>('/api/keeps'),
-  keep:         (id: string) => get<{ keep: Keep; storage: Storage }>(`/api/keeps/${id}`),
+  keep:         (id: string) => get<{ keep: Keep; storage: Storage; goldBalance: number }>(`/api/keeps/${id}`),
   createKeep:   (plotId: string, name: string) => post<{ keep: Keep }>('/api/keeps', { plotId, name }),
+  renameKeep:   (id: string, name: string) => patch<{ keep: Keep }>(`/api/keeps/${id}`, { name }),
   buildBuilding:(keepId: string, buildingType: string, slotIndex: number) =>
     post<{ building: Building }>(`/api/keeps/${keepId}/buildings`, { buildingType, slotIndex }),
   demolish:     (keepId: string, buildingId: string) => del(`/api/keeps/${keepId}/buildings/${buildingId}`),
+  unlockSlot:   (keepId: string) => post<{ keep: Keep; cost: number; resource: string }>(`/api/keeps/${keepId}/unlock-slot`),
   setWorkers:   (keepId: string, buildingId: string, count: number) =>
     patch<{ building: Building }>(`/api/keeps/${keepId}/buildings/${buildingId}/workers`, { count }),
 
@@ -52,40 +54,63 @@ export const api = {
   removeOrder: (keepId: string, orderId: string) => del(`/api/keeps/${keepId}/queue/${orderId}`),
 
   // Exchange
-  orders:     (regionId = 'CENTRAL') => get<{ orders: MarketOrder[] }>(`/api/exchange/orders?regionId=${regionId}`),
-  fillOrder:  (orderId: string, quantity: number) =>
+  orders:          (regionId = 'CENTRAL') => get<{ orders: MarketOrder[] }>(`/api/exchange/orders?regionId=${regionId}`),
+  fillOrder:       (orderId: string, quantity: number) =>
     post<{ ok: boolean }>(`/api/exchange/orders/${orderId}/fill`, { quantity }),
+  exchangeStorage: (regionId = 'CENTRAL') => get<{ storage: ExchangeStorageEntry[]; goldBalance: number }>(`/api/exchange/storage?regionId=${regionId}`),
+  exchangeSell:    (regionId: string, resourceType: string, quantity: number) =>
+    post<{ ok: boolean; sold: number; gold: number }>('/api/exchange/sell', { regionId, resourceType, quantity }),
+  exchangeBuy:     (regionId: string, resourceType: string, quantity: number) =>
+    post<{ ok: boolean; bought: number; cost: number }>('/api/exchange/buy', { regionId, resourceType, quantity }),
 
   // Caravans
-  caravans:      () => get<{ caravans: Caravan[] }>('/api/caravans'),
-  dispatch:      (body: DispatchBody) => post<{ caravan: Caravan }>('/api/caravans/dispatch', body),
-  cancelCaravan: (id: string) => post(`/api/caravans/${id}/cancel`),
+  caravans:        () => get<{ caravans: CaravanWithCargo[] }>('/api/caravans'),
+  caravan:         (id: string) => get<{ caravan: CaravanWithCargo; capacity: CaravanCapacity }>(`/api/caravans/${id}`),
+  caravanLoad:     (id: string, resourceType: string, quantity: number) =>
+    post<{ caravan: CaravanWithCargo }>(`/api/caravans/${id}/load`, { resourceType, quantity }),
+  caravanUnload:   (id: string, resourceType: string, quantity: number) =>
+    post<{ caravan: CaravanWithCargo }>(`/api/caravans/${id}/unload`, { resourceType, quantity }),
+  caravanDispatch: (id: string, destType: string, destId: string) =>
+    post<{ caravan: CaravanWithCargo }>(`/api/caravans/${id}/dispatch`, { destType, destId }),
+  foundKeep:       (plotId: string, keepName: string) =>
+    post<{ keep: Keep }>('/api/caravans/found', { plotId, keepName }),
 
   // Admin
   adminStatus:          () => get<AdminStatus>('/admin/status'),
   adminTick:            () => post<TickResult>('/admin/tick'),
   adminBypass:          (enabled: boolean) => post('/admin/bypass', { enabled }),
-  adminCompleteCaravans:() => post<{ completed: number }>('/admin/complete-caravans'),
+  adminCompleteCaravans:   () => post<{ completed: number }>('/admin/complete-caravans'),
+  adminCompleteProduction: () => post<{ completed: number }>('/admin/complete-production'),
 };
 
 export { ApiError };
 
-// ── Types (lightweight — full types live in @artemis/shared) ───────────────
+// ── Types (lightweight — full types live in @merchant-realms/shared) ───────────────
 
-export interface Region { id: string; name: string; bonusType: string; guildControllable: boolean; plots: Plot[] }
-export interface Plot   { id: string; name: string; x: number; y: number; bonusDescription: string; keeps: Keep[] }
+export interface Region   { id: string; name: string; bonusType: string; guildControllable: boolean; districts: District[] }
+export interface District { id: string; regionId: string; name: string; bonusDescription: string; q: number; r: number; x: number; y: number; plots: Plot[] }
+export interface Plot     { id: string; districtId: string; name: string; tier: number; x: number; y: number; bonusDescription: string; keeps: Keep[]; district?: District }
 export interface Keep   {
   id: string; name: string; empireId: string; plotId: string; buildingSlotCount: number; createdAt: string;
   buildings: Building[]; resourceLedger: LedgerEntry[]; productionOrders: ProductionOrder[];
   plot?: Plot;
 }
-export interface Building { id: string; keepId: string; buildingType: string; level: number; slotIndex: number; isActive: boolean; isDormant: boolean; health: number; workersAssigned: number }
+export interface CaravanCargo { id: string; caravanId: string; resourceType: string; quantity: number }
+export interface CaravanWithCargo {
+  id: string; empireId: string; name: string; animalType: string; animalCount: number;
+  locationType: 'KEEP' | 'EXCHANGE' | 'PLOT'; locationId: string;
+  status: 'IDLE' | 'IN_TRANSIT';
+  destType: 'KEEP' | 'EXCHANGE' | 'PLOT' | null; destId: string | null;
+  departedAt: string | null; arrivesAt: string | null;
+  cargo: CaravanCargo[];
+}
+export interface CaravanCapacity { usedWeight: number; maxWeight: number }
+export interface ExchangeStorageEntry { id: string; empireId: string; regionId: string; resourceType: string; quantity: number }
+export interface Building { id: string; keepId: string; buildingType: string; level: number; slotIndex: number; isActive: boolean; isDormant: boolean; health: number; workersAssigned: number; productionProgress: number }
 export interface LedgerEntry { id: string; keepId: string; resourceType: string; quantity: number }
 export interface Storage { usedWeight: number; maxWeight: number }
 export interface ProductionOrder { id: string; keepId: string; buildingType: string; recipeKey: string; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity: number | null; producedQuantity: number; position: number }
 export interface MarketOrder { id: string; empireId: string | null; regionId: string; orderType: 'BUY' | 'SELL'; resourceType: string; quantity: number; pricePerUnit: number; fulfilledQty: number; status: string }
-export interface Caravan { id: string; empireId: string; resourceType: string; quantity: number; animalType: string; animalCount: number; originId: string; destId: string; departedAt: string; arrivesAt: string; status: string }
-export interface AdminStatus { bypassEnabled: boolean; lastTick: { tickNumber: number; processedAt: string; durationMs: number } | null }
+export interface AdminStatus { bypassEnabled: boolean; lastTick: { tickNumber: number; processedAt: string; durationMs: number } | null; goldBalance: number; tickIntervalSeconds: number }
 export interface TickResult { tickNumber: number; durationMs: number; produced: number; delivered: number }
 export interface AddOrderBody { recipeKey: string; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity?: number }
-export interface DispatchBody { fromKeepId: string; toKeepId: string; resourceType: string; quantity: number; animalType: string; animalCount: number; feedLoaded: number }

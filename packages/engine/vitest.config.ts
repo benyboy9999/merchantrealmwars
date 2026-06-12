@@ -5,7 +5,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // Resolve workspace packages from source during tests (no build step needed)
-      '@artemis/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+      '@merchant-realms/shared': path.resolve(__dirname, '../shared/src/index.ts'),
     },
   },
   test: {

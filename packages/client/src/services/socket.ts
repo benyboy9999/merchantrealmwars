@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { WsEvent } from '@artemis/shared';
+import { WsEvent } from '@merchant-realms/shared';
 
 let socket: Socket | null = null;
 

@@ -1,5 +1,5 @@
 {
-  "name": "artemis",
+  "name": "merchant-realms",
   "private": true,
   "version": "0.0.1",
   "engines": {
@@ -7,13 +7,14 @@
     "pnpm": ">=9"
   },
   "scripts": {
-    "dev": "docker-compose up -d postgres && concurrently \"pnpm --filter server dev\" \"pnpm --filter client dev\"",
-    "build": "pnpm --filter shared build && pnpm --filter engine build && pnpm --filter server build && pnpm --filter client build",
+    "deps:build": "pnpm --filter @merchant-realms/shared build && pnpm --filter @merchant-realms/engine build",
+    "dev": "pnpm deps:build && concurrently \"pnpm --filter server dev\" \"pnpm --filter client dev\"",
+    "build": "pnpm deps:build && pnpm --filter server build && pnpm --filter client build",
     "test": "pnpm --filter engine test && pnpm --filter server test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "db:migrate": "pnpm --filter server db:migrate",
-    "db:seed": "pnpm --filter server db:seed",
+    "db:seed": "pnpm deps:build && pnpm --filter server db:seed",
     "db:studio": "pnpm --filter server db:studio",
     "format": "prettier --write \"packages/**/*.{ts,tsx,json}\""
   },
