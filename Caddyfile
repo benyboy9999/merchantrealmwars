@@ -1,0 +1,27 @@
+# Merchant Realms — Caddy web server config
+# Place this at /etc/caddy/Caddyfile on the production server.
+# Caddy auto-obtains and renews HTTPS certificates from Let's Encrypt.
+
+merchantrealmwars.com, www.merchantrealmwars.com {
+    encode gzip
+
+    # Express handles all API, admin, and WebSocket traffic
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3000
+    }
+
+    handle /admin/* {
+        reverse_proxy 127.0.0.1:3000
+    }
+
+    handle /socket.io/* {
+        reverse_proxy 127.0.0.1:3000
+    }
+
+    # Everything else is the Vite-built React app (SPA)
+    handle {
+        root * /var/www/merchant-realms/packages/client/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
