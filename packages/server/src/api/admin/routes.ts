@@ -48,12 +48,22 @@ adminRouter.post('/tick', async (_req, res) => {
 });
 
 adminRouter.post('/complete-caravans', async (_req, res) => {
-  // Instantly arrive all in-transit caravans by setting arrivesAt to now — tick job handles the rest
-  const updated = await db.caravan.updateMany({
-    where: { status: 'IN_TRANSIT' },
-    data:  { arrivesAt: new Date() },
-  });
-  res.json({ completed: updated.count });
+  const caravans = await db.caravan.findMany({ where: { status: 'IN_TRANSIT' } });
+  for (const c of caravans) {
+    await db.caravan.update({
+      where: { id: c.id },
+      data: {
+        status:       'IDLE',
+        locationType: c.destType!,
+        locationId:   c.destId!,
+        destType:     null,
+        destId:       null,
+        departedAt:   null,
+        arrivesAt:    null,
+      },
+    });
+  }
+  res.json({ completed: caravans.length });
 });
 
 adminRouter.post('/complete-production', async (_req, res) => {

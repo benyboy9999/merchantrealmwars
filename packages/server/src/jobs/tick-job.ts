@@ -1,13 +1,28 @@
 import cron from 'node-cron';
 import type { Server as SocketServer } from 'socket.io';
-import { WsEvent, HOUSING_BASE_CAPACITY, WORKERS_PER_LEVEL, RECIPE_BY_KEY, T1_WORKER_NEEDS, BASE_CYCLE_SECONDS } from '@merchant-realms/shared';
-import type { ResourceType } from '@merchant-realms/shared';
-import { calculateConsumption } from '@merchant-realms/engine';
+import { Prisma } from '@prisma/client';
+import {
+  WsEvent,
+  HOUSING_CAPACITY_PER_LEVEL,
+  BUILDING_TIER,
+  BUILDING_WORKER_COST,
+  WORKER_NEEDS,
+  OVERHEAD_CONSTANTS,
+  OVERHEAD_TIER_WEIGHTS,
+  RECIPE_BY_KEY,
+  BASE_CYCLE_SECONDS,
+  DURABILITY_CONSTANTS,
+  getStarterSpeedMultiplier,
+} from '@merchant-realms/shared';
+import type { ResourceType, WorkerTier, BuildingType } from '@merchant-realms/shared';
+import { calculateConsumption, calculateOverheadFactor, calculateDurabilityFactor } from '@merchant-realms/engine';
+import type { WorkerGroupState } from '@merchant-realms/engine';
 import { config } from '../config/index.js';
 import { db } from '../db/client.js';
 import { adminState } from '../admin-bypass.js';
 
-let tickNumber = 0; // initialised from DB in startTickJob
+let tickNumber = 0;
+let tickRunning = false; // guard: skip if previous tick hasn't finished
 
 export interface TickResult {
   tickNumber: number;
@@ -17,52 +32,136 @@ export interface TickResult {
 }
 
 export async function runTick(io?: SocketServer): Promise<TickResult> {
+  if (tickRunning) {
+    console.warn(`[tick] Skipping tick ${tickNumber + 1} — previous still running`);
+    return { tickNumber, durationMs: 0, produced: 0, delivered: 0 };
+  }
+  tickRunning = true;
+  try {
+    return await doTick(io);
+  } finally {
+    tickRunning = false;
+  }
+}
+
+async function doTick(io?: SocketServer): Promise<TickResult> {
   const start = Date.now();
   tickNumber++;
   let totalProduced = 0;
   let totalDelivered = 0;
 
-  // ── Phase 1: Production ──────────────────────────────────────────────────
-  const keeps = await db.keep.findMany({
-    include: {
-      buildings: true,
-      resourceLedger: true,
-      productionOrders: { orderBy: [{ orderType: 'asc' }, { position: 'asc' }] },
-    },
-  });
+  // ── Read all data upfront in parallel ───────────────────────────────────────
+  const [keeps, arrivedCaravans] = await Promise.all([
+    db.keep.findMany({
+      include: {
+        empire:           { select: { createdAt: true } },
+        buildings:        true,
+        resourceLedger:   true,
+        productionOrders: { orderBy: [{ orderType: 'asc' }, { position: 'asc' }] },
+      },
+    }),
+    db.caravan.findMany({
+      where: { status: 'IN_TRANSIT', arrivesAt: { lte: new Date() } },
+    }),
+  ]);
 
+  // Collect all DB writes — flushed as one transaction at the end.
+  // This means one DB round-trip instead of N sequential ones, and prevents
+  // lock contention between concurrent ticks if the guard is somehow bypassed.
+  const writes: Prisma.PrismaPromise<unknown>[] = [];
+
+  const decayThisTick = DURABILITY_CONSTANTS.decayPerCycle * (config.TICK_INTERVAL_SECONDS / BASE_CYCLE_SECONDS);
+
+  // ── Pre-pass: empire-wide weighted workforce for overhead ────────────────────
+  const empireWeightedWorkforce = new Map<string, number>();
+  for (const keep of keeps) {
+    let keepWeighted = 0;
+    for (const b of keep.buildings) {
+      if (!b.isActive || b.isDormant) continue;
+      const housingCap = HOUSING_CAPACITY_PER_LEVEL[b.buildingType as BuildingType];
+      if (housingCap !== undefined) {
+        const tier = (BUILDING_TIER[b.buildingType as BuildingType] ?? 1) as 1 | 2 | 3;
+        keepWeighted += b.level * housingCap * OVERHEAD_TIER_WEIGHTS[`T${tier}` as WorkerTier];
+      }
+    }
+    empireWeightedWorkforce.set(
+      keep.empireId,
+      (empireWeightedWorkforce.get(keep.empireId) ?? 0) + keepWeighted,
+    );
+  }
+
+  // ── Phase 1: Production ──────────────────────────────────────────────────────
   for (const keep of keeps) {
     const ledgerMap = new Map(keep.resourceLedger.map((e) => [e.resourceType, e.quantity]));
 
-    // Pool-based worker factor: housing supplies workers, production buildings consume them
-    const totalWorkers = keep.buildings
-      .filter((b) => b.buildingType === 'HOUSING' && b.isActive && !b.isDormant)
-      .reduce((sum, b) => sum + b.level * HOUSING_BASE_CAPACITY, 0);
-    const requiredWorkers = keep.buildings
-      .filter((b) => b.buildingType !== 'HOUSING' && b.buildingType !== 'WAREHOUSE' && b.isActive && !b.isDormant)
-      .reduce((sum, b) => sum + b.level * WORKERS_PER_LEVEL, 0);
-    const keepWorkerFactor = adminState.bypassEnabled
-      ? 1
-      : requiredWorkers === 0 ? 1 : Math.min(1, totalWorkers / requiredWorkers);
+    const tierHousingCap: Record<WorkerTier, number> = { T1: 0, T2: 0, T3: 0 };
+    for (const b of keep.buildings) {
+      if (!b.isActive || b.isDormant) continue;
+      const housingCap = HOUSING_CAPACITY_PER_LEVEL[b.buildingType as BuildingType];
+      if (housingCap !== undefined) {
+        const tier = (BUILDING_TIER[b.buildingType as BuildingType] ?? 1) as 1 | 2 | 3;
+        tierHousingCap[`T${tier}` as WorkerTier] += b.level * housingCap;
+      }
+    }
 
-    // ── Worker consumption ───────────────────────────────────────────────
+    const tierDemand: Record<WorkerTier, number> = { T1: 0, T2: 0, T3: 0 };
+    for (const b of keep.buildings) {
+      if (!b.isActive || b.isDormant) continue;
+      const workerCost = BUILDING_WORKER_COST[b.buildingType as BuildingType] ?? 0;
+      if (workerCost === 0) continue;
+      const tier = (BUILDING_TIER[b.buildingType as BuildingType] ?? 1) as 1 | 2 | 3;
+      tierDemand[`T${tier}` as WorkerTier] += b.level * workerCost;
+    }
+
+    const tierWorkerFactor: Record<WorkerTier, number> = adminState.bypassEnabled
+      ? { T1: 1, T2: 1, T3: 1 }
+      : {
+          T1: tierDemand.T1 === 0 ? 1 : Math.min(1, tierHousingCap.T1 / tierDemand.T1),
+          T2: tierDemand.T2 === 0 ? 1 : Math.min(1, tierHousingCap.T2 / tierDemand.T2),
+          T3: tierDemand.T3 === 0 ? 1 : Math.min(1, tierHousingCap.T3 / tierDemand.T3),
+        };
+
+    const tierActualWorkers: Record<WorkerTier, number> = {
+      T1: Math.min(tierDemand.T1, tierHousingCap.T1),
+      T2: Math.min(tierDemand.T2, tierHousingCap.T2),
+      T3: Math.min(tierDemand.T3, tierHousingCap.T3),
+    };
+    const totalActualWorkers = tierActualWorkers.T1 + tierActualWorkers.T2 + tierActualWorkers.T3;
+
+    const empireAgeDays     = (Date.now() - keep.empire.createdAt.getTime()) / 86_400_000;
+    const starterMultiplier = getStarterSpeedMultiplier(empireAgeDays);
+
+    const weightedWorkforce   = empireWeightedWorkforce.get(keep.empireId) ?? 0;
+    const overheadMultiplier  = adminState.bypassEnabled
+      ? 1
+      : calculateOverheadFactor(
+          weightedWorkforce,
+          OVERHEAD_CONSTANTS.threshold,
+          OVERHEAD_CONSTANTS.penaltyPerUnit,
+          OVERHEAD_CONSTANTS.maxMultiplier,
+        );
+
     let consumptionPenalty = 1;
     let consumptionBonus   = 1;
-    if (!adminState.bypassEnabled && totalWorkers > 0) {
+    if (!adminState.bypassEnabled && totalActualWorkers > 0) {
       const tickFraction = config.TICK_INTERVAL_SECONDS / BASE_CYCLE_SECONDS;
-      const scaledNeeds = T1_WORKER_NEEDS.map((n) => ({
-        resourceType:      n.resourceType,
-        quantityPerWorker: n.quantityPerCycle * tickFraction,
-        isNecessary:       n.isNecessary,
-      }));
+      const workerGroups: WorkerGroupState[] = (['T1', 'T2', 'T3'] as const)
+        .filter((tier) => tierActualWorkers[tier] > 0)
+        .map((tier) => ({
+          tier,
+          count: tierActualWorkers[tier],
+          needs: WORKER_NEEDS[tier].map((n) => ({
+            resourceType:      n.resourceType,
+            quantityPerWorker: n.quantityPerCycle * tickFraction * overheadMultiplier * starterMultiplier,
+            isNecessary:       n.isNecessary,
+          })),
+        }));
+
       const consumptionAvailable = Array.from(ledgerMap.entries()).map(([rt, qty]) => ({
         resourceType: rt as ResourceType,
         available:    qty,
       }));
-      const cr = calculateConsumption(
-        [{ tier: 'T1' as const, count: totalWorkers, needs: scaledNeeds }],
-        consumptionAvailable,
-      );
+      const cr = calculateConsumption(workerGroups, consumptionAvailable);
       for (const { resourceType, quantity } of cr.resourcesConsumed) {
         ledgerMap.set(resourceType, Math.max(0, (ledgerMap.get(resourceType) ?? 0) - quantity));
       }
@@ -70,10 +169,10 @@ export async function runTick(io?: SocketServer): Promise<TickResult> {
       consumptionBonus   = cr.bonusFactor;
     }
 
-    // Group active production buildings by type
     const byType = new Map<string, typeof keep.buildings>();
     for (const b of keep.buildings) {
-      if (!b.isActive || b.isDormant || b.buildingType === 'WAREHOUSE' || b.buildingType === 'HOUSING') continue;
+      if (!b.isActive || b.isDormant) continue;
+      if ((BUILDING_WORKER_COST[b.buildingType as BuildingType] ?? 0) === 0) continue;
       (byType.get(b.buildingType) ?? byType.set(b.buildingType, []).get(b.buildingType)!).push(b);
     }
 
@@ -101,22 +200,17 @@ export async function runTick(io?: SocketServer): Promise<TickResult> {
       const recipe = RECIPE_BY_KEY[activeRecipeKey];
       if (!recipe) continue;
 
-      // Progress gained this tick: (tickInterval / batchDuration) × workerFactor
-      // Workers affect speed — fewer workers = slower progress
+      const bTier = (BUILDING_TIER[buildingType as BuildingType] ?? 1) as 1 | 2 | 3;
+      const workerFactor    = tierWorkerFactor[`T${bTier}` as WorkerTier];
       const progressPerTick = config.TICK_INTERVAL_SECONDS / (recipe.timeMinutes * 60);
-      const progressGain    = progressPerTick * keepWorkerFactor * consumptionPenalty * consumptionBonus;
+      const baseProgressGain = progressPerTick * workerFactor * consumptionPenalty * consumptionBonus * starterMultiplier;
 
       for (const building of buildings) {
+        const durabilityFactor = calculateDurabilityFactor(building.health, DURABILITY_CONSTANTS.threshold);
+        const progressGain     = baseProgressGain * durabilityFactor;
         const newProgress = building.productionProgress + progressGain;
 
         if (newProgress >= 1.0) {
-          // Batch complete — check inputs and produce
-          const available = Array.from(ledgerMap.entries()).map(([resource, av]) => ({
-            resource: resource as ResourceType,
-            available: av,
-          }));
-
-          // Check inputs (skip check when admin bypass is on)
           const scaledInputs = recipe.inputs.map((inp) => ({
             resource: inp.resource as ResourceType,
             quantity: inp.quantity * building.level,
@@ -127,14 +221,11 @@ export async function runTick(io?: SocketServer): Promise<TickResult> {
           );
 
           if (inputsAvailable) {
-            // Consume inputs
             for (const inp of scaledInputs) {
               if (!adminState.bypassEnabled) {
                 ledgerMap.set(inp.resource, (ledgerMap.get(inp.resource) ?? 0) - inp.quantity);
               }
             }
-
-            // Produce output (full batch, not scaled by workerFactor — workers affect speed only)
             const outputQty = recipe.outputQty * building.level;
             ledgerMap.set(
               recipe.output as ResourceType,
@@ -142,56 +233,54 @@ export async function runTick(io?: SocketServer): Promise<TickResult> {
             );
             totalProduced++;
 
-            // Track NUMERICAL order progress
             if (activeOrderId) {
               const order = numericalOrders.find((o) => o.id === activeOrderId);
               if (order) order.producedQuantity += outputQty;
             }
 
-            // Carry over remainder so fast workers don't waste progress
             building.productionProgress = newProgress - 1.0;
           } else {
-            // Blocked — hold just below 1.0, retry next tick when inputs arrive
             building.productionProgress = Math.min(newProgress, 0.999);
           }
         } else {
           building.productionProgress = newProgress;
         }
 
-        // Save progress
-        await db.building.update({
+        const newHealth = Math.max(DURABILITY_CONSTANTS.floor, building.health - decayThisTick);
+
+        // Queue write — collected for batch transaction below
+        writes.push(db.building.update({
           where: { id: building.id },
-          data:  { productionProgress: building.productionProgress },
-        });
+          data:  { productionProgress: building.productionProgress, health: newHealth },
+        }));
       }
 
-      // Flush numerical order completion to DB
+      // Queue production order completions/updates
       for (const order of numericalOrders) {
         if ((order.targetQuantity ?? 0) <= order.producedQuantity) {
-          await db.productionOrder.delete({ where: { id: order.id } });
+          writes.push(db.productionOrder.delete({ where: { id: order.id } }));
         } else {
-          await db.productionOrder.update({ where: { id: order.id }, data: { producedQuantity: order.producedQuantity } });
+          writes.push(db.productionOrder.update({
+            where: { id: order.id },
+            data:  { producedQuantity: order.producedQuantity },
+          }));
         }
       }
     }
 
-    // Flush resource ledger
+    // Queue ledger flush
     for (const [resourceType, quantity] of ledgerMap) {
-      await db.resourceLedger.upsert({
+      writes.push(db.resourceLedger.upsert({
         where:  { keepId_resourceType: { keepId: keep.id, resourceType } },
         create: { keepId: keep.id, resourceType, quantity: Math.max(0, quantity) },
         update: { quantity: Math.max(0, quantity) },
-      });
+      }));
     }
   }
 
-  // ── Phase 2: Arrive caravans ─────────────────────────────────────────────
-  const arrivedCaravans = await db.caravan.findMany({
-    where: { status: 'IN_TRANSIT', arrivesAt: { lte: new Date() } },
-  });
-
+  // ── Phase 2: Arrive caravans ─────────────────────────────────────────────────
   for (const caravan of arrivedCaravans) {
-    await db.caravan.update({
+    writes.push(db.caravan.update({
       where: { id: caravan.id },
       data: {
         status:       'IDLE',
@@ -202,11 +291,16 @@ export async function runTick(io?: SocketServer): Promise<TickResult> {
         departedAt:   null,
         arrivesAt:    null,
       },
-    });
+    }));
     totalDelivered++;
   }
 
-  // ── Record tick ──────────────────────────────────────────────────────────
+  // ── Flush all writes in one transaction ──────────────────────────────────────
+  if (writes.length > 0) {
+    await db.$transaction(writes);
+  }
+
+  // ── Record tick (after writes so duration includes transaction time) ──────────
   const durationMs = Date.now() - start;
   await db.gameTick.create({ data: { tickNumber, processedAt: new Date(), durationMs } });
 
@@ -222,12 +316,14 @@ export async function startTickJob(io: SocketServer): Promise<void> {
   tickNumber = last?.tickNumber ?? 0;
 
   const interval = config.TICK_INTERVAL_SECONDS;
+  const onError = (err: unknown) => console.error('[tick] unhandled error:', err);
+
   if (interval < 60) {
-    setInterval(() => void runTick(io), interval * 1000);
+    setInterval(() => runTick(io).catch(onError), interval * 1000);
     console.warn(`⏱  Tick job: every ${interval}s (resuming from tick ${tickNumber})`);
   } else {
     const mins = Math.floor(interval / 60);
-    cron.schedule(`*/${mins} * * * *`, () => void runTick(io));
+    cron.schedule(`*/${mins} * * * *`, () => runTick(io).catch(onError));
     console.warn(`⏱  Tick job: every ${mins}min (resuming from tick ${tickNumber})`);
   }
 }

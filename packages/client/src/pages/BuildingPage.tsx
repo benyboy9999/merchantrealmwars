@@ -15,7 +15,7 @@ export default function BuildingPage() {
 
   const demolish = useMutation({
     mutationFn: () => api.demolish(keepId!, buildingId!),
-    onSuccess: () => navigate(`/keeps/${keepId}`),
+    onSuccess: () => navigate(`/kingdom/${keepId}/buildings`),
   });
 
   const building = keepData?.keep.buildings.find((b) => b.id === buildingId);
@@ -27,7 +27,7 @@ export default function BuildingPage() {
 
   return (
     <div className="p-8 max-w-lg">
-      <button onClick={() => navigate(`/keeps/${keepId}`)} className="text-stone-500 hover:text-stone-300 text-xs mb-5">← Keep</button>
+      <button onClick={() => navigate(`/kingdom/${keepId}/buildings`)} className="text-stone-500 hover:text-stone-300 text-xs mb-5">← Buildings</button>
 
       <div className="flex items-start justify-between mb-6">
         <div>

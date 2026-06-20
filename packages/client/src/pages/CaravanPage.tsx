@@ -32,7 +32,7 @@ export default function CaravanPage() {
   const [unloadQty, setUnloadQty] = useState<Record<string, string>>({});
   const [foundName, setFoundName] = useState('');
 
-  const { data: caravanData } = useQuery({ queryKey: ['caravans'], queryFn: api.caravans, refetchInterval: 3000 });
+  const { data: caravanData } = useQuery({ queryKey: ['caravans'], queryFn: api.caravans, refetchInterval: 15_000 });
   const { data: keepData }    = useQuery({ queryKey: ['keeps'],    queryFn: api.keeps });
   const { data: districtData } = useQuery({ queryKey: ['districts'], queryFn: () => api.districts(REGION_ID) });
 
@@ -47,13 +47,11 @@ export default function CaravanPage() {
     queryKey: ['keep', caravan?.locationId],
     queryFn:  () => api.keep(caravan!.locationId),
     enabled:  !!caravan && caravan.locationType === 'KEEP' && caravan.status === 'IDLE',
-    refetchInterval: 3000,
   });
   const exchangeInventory = useQuery({
     queryKey: ['exchange-storage', caravan?.locationId],
     queryFn:  () => api.exchangeStorage(caravan!.locationId),
     enabled:  !!caravan && caravan.locationType === 'EXCHANGE' && caravan.status === 'IDLE',
-    refetchInterval: 3000,
   });
 
   const load = useMutation({

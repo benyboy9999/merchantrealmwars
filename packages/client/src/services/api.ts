@@ -31,8 +31,9 @@ const patch = <T>(path: string, body: unknown) => req<T>(path, { method: 'PATCH'
 
 export const api = {
   // Regions
-  regions:   () => get<{ regions: Region[] }>('/api/regions'),
-  districts: (regionId: string) => get<{ districts: District[] }>(`/api/regions/${regionId}/districts`),
+  regions:      () => get<{ regions: Region[] }>('/api/regions'),
+  allDistricts: () => get<{ districts: MapDistrict[] }>('/api/regions/districts'),
+  districts:    (regionId: string) => get<{ districts: District[] }>(`/api/regions/${regionId}/districts`),
 
   // Keeps
   keeps:        () => get<{ keeps: Keep[] }>('/api/keeps'),
@@ -54,14 +55,17 @@ export const api = {
   removeOrder: (keepId: string, orderId: string) => del(`/api/keeps/${keepId}/queue/${orderId}`),
 
   // Exchange
-  orders:          (regionId = 'CENTRAL') => get<{ orders: MarketOrder[] }>(`/api/exchange/orders?regionId=${regionId}`),
-  fillOrder:       (orderId: string, quantity: number) =>
-    post<{ ok: boolean }>(`/api/exchange/orders/${orderId}/fill`, { quantity }),
-  exchangeStorage: (regionId = 'CENTRAL') => get<{ storage: ExchangeStorageEntry[]; goldBalance: number }>(`/api/exchange/storage?regionId=${regionId}`),
+  exchangeStorage: (regionId: string) => get<{ storage: ExchangeStorageEntry[]; goldBalance: number }>(`/api/exchange/storage?regionId=${regionId}`),
   exchangeSell:    (regionId: string, resourceType: string, quantity: number) =>
     post<{ ok: boolean; sold: number; gold: number }>('/api/exchange/sell', { regionId, resourceType, quantity }),
-  exchangeBuy:     (regionId: string, resourceType: string, quantity: number) =>
-    post<{ ok: boolean; bought: number; cost: number }>('/api/exchange/buy', { regionId, resourceType, quantity }),
+  listings:        (regionId: string, resourceType?: string) =>
+    get<{ listings: ExchangeListing[] }>(`/api/exchange/${regionId}/listings${resourceType ? `?resourceType=${resourceType}` : ''}`),
+  createListing:   (regionId: string, resourceType: string, quantity: number, pricePerUnit: number) =>
+    post<{ listing: ExchangeListing }>(`/api/exchange/${regionId}/listings`, { resourceType, quantity, pricePerUnit }),
+  buyListing:      (id: string, quantity: number) =>
+    post<{ ok: boolean; quantity: number; resourceType: string; totalGold: number }>(`/api/exchange/listings/${id}/buy`, { quantity }),
+  cancelListing:   (id: string) =>
+    del<{ ok: boolean; returned: number; resourceType: string }>(`/api/exchange/listings/${id}`),
 
   // Caravans
   caravans:        () => get<{ caravans: CaravanWithCargo[] }>('/api/caravans'),
@@ -87,7 +91,9 @@ export { ApiError };
 
 // ── Types (lightweight — full types live in @merchant-realms/shared) ───────────────
 
-export interface Region   { id: string; name: string; bonusType: string; guildControllable: boolean; districts: District[] }
+export interface Region       { id: string; name: string; guildControllable: boolean; districts?: District[] }
+export interface MapPlot      { id: string; name: string; tier: number; x: number; y: number; bonusDescription: string; keeps: { id: string; name: string }[] }
+export interface MapDistrict  { id: string; regionId: string; name: string; q: number; r: number; x: number; y: number; tier: number; plots: MapPlot[] }
 export interface District { id: string; regionId: string; name: string; bonusDescription: string; q: number; r: number; x: number; y: number; plots: Plot[] }
 export interface Plot     { id: string; districtId: string; name: string; tier: number; x: number; y: number; bonusDescription: string; keeps: Keep[]; district?: District }
 export interface Keep   {
@@ -110,7 +116,7 @@ export interface Building { id: string; keepId: string; buildingType: string; le
 export interface LedgerEntry { id: string; keepId: string; resourceType: string; quantity: number }
 export interface Storage { usedWeight: number; maxWeight: number }
 export interface ProductionOrder { id: string; keepId: string; buildingType: string; recipeKey: string; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity: number | null; producedQuantity: number; position: number }
-export interface MarketOrder { id: string; empireId: string | null; regionId: string; orderType: 'BUY' | 'SELL'; resourceType: string; quantity: number; pricePerUnit: number; fulfilledQty: number; status: string }
+export interface ExchangeListing { id: string; empireId: string | null; regionId: string; resourceType: string; quantity: number; pricePerUnit: number; fulfilledQty: number; status: string; createdAt: string }
 export interface AdminStatus { bypassEnabled: boolean; lastTick: { tickNumber: number; processedAt: string; durationMs: number } | null; goldBalance: number; tickIntervalSeconds: number }
 export interface TickResult { tickNumber: number; durationMs: number; produced: number; delivered: number }
 export interface AddOrderBody { recipeKey: string; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity?: number }

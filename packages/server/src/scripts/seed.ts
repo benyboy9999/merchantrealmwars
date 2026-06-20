@@ -151,7 +151,7 @@ async function main() {
   const adminKeep = await db.keep.create({
     data: { empireId: adminEmpire.id, plotId: startingPlotId, name: 'Highwatch Keep', buildingSlotCount: KEEP_DEFAULT_BUILDING_SLOTS },
   });
-  for (const [resourceType, quantity] of [['WOOD', 15], ['LIMESTONE', 15]] as const) {
+  for (const [resourceType, quantity] of [['OAK', 15], ['LIMESTONE', 15]] as const) {
     await db.resourceLedger.create({
       data: { keepId: adminKeep.id, resourceType, quantity },
     });

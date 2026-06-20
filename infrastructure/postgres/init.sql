@@ -4,6 +4,6 @@
 -- Enable UUID extension (used by Prisma cuid alternative if needed)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- The artemis user and database are created by Docker Compose env vars.
+-- The user and database are created by Docker Compose env vars.
 -- Grant privileges to ensure migrations work correctly.
-GRANT ALL PRIVILEGES ON DATABASE artemis_dev TO artemis;
+GRANT ALL PRIVILEGES ON DATABASE merchant_realms_dev TO merchant_realms;

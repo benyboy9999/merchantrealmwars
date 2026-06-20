@@ -176,6 +176,8 @@ model Empire {
   caravans          Caravan[]
   exchangeStorages  ExchangeStorage[]
   marketOrders      MarketOrder[]
+  soldTrades        MarketTrade[]          @relation("TradesSeller")
+  purchasedTrades   MarketTrade[]          @relation("TradesBuyer")
   consumptionLogs   WorkerConsumptionLog[]
   specialisations   EmpireSpecialisation[]
 }
@@ -334,27 +336,32 @@ model MarketOrder {
   status       OrderStatus @default(OPEN)
   createdAt    DateTime    @default(now())
 
-  empire     Empire?       @relation(fields: [empireId], references: [id], onDelete: SetNull)
-  region     Region        @relation(fields: [regionId], references: [id])
-  buyTrades  MarketTrade[] @relation("BuyOrder")
-  sellTrades MarketTrade[] @relation("SellOrder")
+  empire Empire? @relation(fields: [empireId], references: [id], onDelete: SetNull)
+  region Region  @relation(fields: [regionId], references: [id])
+  trades MarketTrade[]
 
   @@index([regionId, resourceType, status])
   @@index([empireId])
 }
 
 model MarketTrade {
-  id           String   @id @default(cuid())
-  buyOrderId   String
-  sellOrderId  String
-  quantity     Float
-  pricePerUnit Float
-  tradedAt     DateTime @default(now())
+  id             String   @id @default(cuid())
+  listingId      String
+  sellerEmpireId String?
+  buyerEmpireId  String
+  resourceType   String
+  quantity       Float
+  pricePerUnit   Float
+  totalGold      Float
+  executedAt     DateTime @default(now())
 
-  buyOrder  MarketOrder @relation("BuyOrder",  fields: [buyOrderId],  references: [id])
-  sellOrder MarketOrder @relation("SellOrder", fields: [sellOrderId], references: [id])
+  listing      MarketOrder @relation(fields: [listingId], references: [id])
+  sellerEmpire Empire?     @relation("TradesSeller", fields: [sellerEmpireId], references: [id], onDelete: SetNull)
+  buyerEmpire  Empire      @relation("TradesBuyer",  fields: [buyerEmpireId],  references: [id])
 
-  @@index([tradedAt])
+  @@index([listingId])
+  @@index([buyerEmpireId])
+  @@index([executedAt])
 }
 
 // ── Guilds ─────────────────────────────────────────────────────────────────

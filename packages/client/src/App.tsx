@@ -5,6 +5,7 @@ import RealmPage from './pages/RealmPage.js';
 import BuildingPage from './pages/BuildingPage.js';
 import ExchangePage from './pages/ExchangePage.js';
 import AdminPage from './pages/AdminPage.js';
+import EncyclopediaPage from './pages/EncyclopediaPage.js';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/realm"                                               element={<RealmPage />} />
           <Route path="/exchange"                                            element={<ExchangePage />} />
           <Route path="/admin"                                               element={<AdminPage />} />
+          <Route path="/encyclopedia"                                        element={<EncyclopediaPage />} />
         </Routes>
       </main>
     </div>

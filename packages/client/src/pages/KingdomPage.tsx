@@ -21,13 +21,35 @@ export default function KingdomPage() {
   const qc = useQueryClient();
   const currentTab = (tab as Tab) ?? 'buildings';
 
-  // Global keep list for sidebar
-  const { data: keepsData } = useQuery({ queryKey: ['keeps'], queryFn: api.keeps, refetchInterval: 10000 });
+  // Global keep list for sidebar — 60 s staleTime so navigating back shows cached data instantly
+  const { data: keepsData, isLoading: keepsLoading, isError: keepsError } = useQuery({
+    queryKey: ['keeps'],
+    queryFn: api.keeps,
+    refetchInterval: 30_000,
+    staleTime: 60_000,
+  });
   const keeps = keepsData?.keeps ?? [];
 
-  // If no keepId in URL, redirect to first keep
+  // Redirect to first keep as soon as we have one (works on cache hit too)
   if (!keepId && keeps.length > 0) {
     return <Navigate to={`/kingdom/${keeps[0]!.id}`} replace />;
+  }
+
+  if (!keepId && keepsError) {
+    return (
+      <div className="h-[calc(100vh-48px)] flex items-center justify-center">
+        <span className="text-red-400 text-sm">Failed to load keeps — check the server is running.</span>
+      </div>
+    );
+  }
+
+  // Don't flash "No keeps" while the initial fetch is still running
+  if (!keepId && keepsLoading) {
+    return (
+      <div className="h-[calc(100vh-48px)] flex items-center justify-center">
+        <span className="text-stone-500 text-sm">Loading…</span>
+      </div>
+    );
   }
 
   return (
@@ -38,7 +60,10 @@ export default function KingdomPage() {
           <span className="text-xs uppercase tracking-wider text-stone-500">My Keeps</span>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {keeps.length === 0 && (
+          {keepsError && (
+            <div className="p-4 text-red-400 text-xs">Error loading keeps</div>
+          )}
+          {!keepsError && keeps.length === 0 && !keepsLoading && (
             <div className="p-4 text-stone-600 text-sm">No keeps yet.</div>
           )}
           {keeps.map((k) => (
@@ -80,13 +105,15 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc }: {
 }) {
   const navigate = useNavigate();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['keep', keepId],
     queryFn: () => api.keep(keepId),
-    refetchInterval: 5000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   });
 
-  if (isLoading || !data) return <div className="p-6 text-stone-500 text-sm">Loading...</div>;
+  if (isError) return <div className="p-6 text-red-400 text-sm">Failed to load keep — check server connection.</div>;
+  if (isLoading || !data) return <div className="p-6 text-stone-500 text-sm">Loading…</div>;
 
   const { keep, storage } = data;
   const ledgerMap = new Map(keep.resourceLedger.map((e) => [e.resourceType, e.quantity]));

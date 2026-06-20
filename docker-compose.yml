@@ -11,8 +11,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U merchant_realms']
-      interval: 5s
+      test: ['CMD-SHELL', 'pg_isready -U merchant_realms -d merchant_realms_dev']
+      interval: 10s
       timeout: 5s
       retries: 5
 

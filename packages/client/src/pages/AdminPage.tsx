@@ -7,7 +7,7 @@ export default function AdminPage() {
   const { data: status, isLoading } = useQuery({
     queryKey: ['admin-status'],
     queryFn: () => api.adminStatus(),
-    refetchInterval: 3000,
+    refetchInterval: 10_000,
   });
 
   const tick = useMutation({

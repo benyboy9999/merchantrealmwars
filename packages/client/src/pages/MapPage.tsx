@@ -12,7 +12,7 @@ export default function MapPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['districts'],
     queryFn: () => api.districts('CENTRAL'),
-    refetchInterval: 10000,
+    staleTime: 60_000,
   });
 
   const createKeep = useMutation({

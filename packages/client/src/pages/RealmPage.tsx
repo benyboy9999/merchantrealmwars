@@ -1,5 +1,6 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { SQRT3, hexToPixel, hexDistance, pixelToHex, axialRound } from '../utils/hex.js';
 import { api } from '../services/api.js';
 
@@ -415,18 +416,69 @@ export default function RealmPage() {
   const rafRef         = useRef<number>(0);
   const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
 
-  const [plotDots, setPlotDots]         = useState<PlotDot[]>([]);
-  const plotDotsRef                     = useRef(plotDots);
-  plotDotsRef.current                   = plotDots;
-
-  const [districtInfo, setDistrictInfo] = useState<Map<string, DistrictEntry>>(new Map());
-  const districtInfoRef                 = useRef(districtInfo);
-  districtInfoRef.current               = districtInfo;
-
   const [selectedPlot, setSelectedPlot] = useState<PlotDot | null>(null);
 
+  const { data: districtsData, isLoading: districtsLoading, isError: districtsError } = useQuery({
+    queryKey: ['all-districts'],
+    queryFn:  api.allDistricts,
+    staleTime: 5 * 60_000, // district layout is static within a session
+  });
+
+  const { plotDots, districtInfo } = useMemo(() => {
+    const districts = districtsData?.districts ?? [];
+    const dots: PlotDot[] = [];
+    const info = new Map<string, DistrictEntry>();
+
+    for (const d of districts) {
+      const center = HEX_CENTER.get(`${d.q},${d.r}`);
+      if (!center) continue;
+      const [cx, cy] = center;
+
+      let occupied = 0;
+      for (const plot of d.plots) {
+        const keeps: PlotKeep[] = (plot.keeps ?? []).map((k) => ({ id: k.id, name: k.name }));
+        const isOccupied = keeps.length > 0;
+        if (isOccupied) occupied++;
+        const worldX = cx + (plot.x - d.x) * MAP_SCALE;
+        const worldY = cy + (plot.y - d.y) * MAP_SCALE;
+        const h = dotHash(plot.id);
+        dots.push({
+          worldX, worldY, type: 'plot',
+          plotId: plot.id, plotName: plot.name,
+          districtName: d.name,
+          keeps,
+          occupied: isOccupied,
+          tier:        (Math.min(4, Math.max(1, plot.tier ?? 1))) as 1 | 2 | 3 | 4,
+          sizeVariant: (h % 3) as 0 | 1 | 2,
+        });
+      }
+      info.set(`${d.q},${d.r}`, { name: d.name, total: d.plots.length, occupied });
+    }
+
+    for (const [key, name] of Object.entries(EXCHANGE_REGION_NAME)) {
+      const center = HEX_CENTER.get(key);
+      if (!center) continue;
+      const [cx, cy] = center;
+      dots.push({
+        worldX: cx, worldY: cy, type: 'exchange',
+        plotId: `exchange-${key}`, plotName: name,
+        districtName: name, keeps: [], occupied: false,
+        tier: 1, sizeVariant: 1,
+      });
+    }
+
+    return { plotDots: dots, districtInfo: info };
+  }, [districtsData]);
+
+  const plotDotsRef = useRef(plotDots);
+  plotDotsRef.current = plotDots;
+
+  const districtInfoRef = useRef(districtInfo);
+  districtInfoRef.current = districtInfo;
+
   const redraw = useCallback(() => {
-    if (rafRef.current !== 0) return;
+    // Cancel any pending frame so the latest state always wins
+    if (rafRef.current !== 0) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;
       const canvas = canvasRef.current;
@@ -439,56 +491,6 @@ export default function RealmPage() {
         plotDotsRef.current, districtInfoRef.current,
       );
     });
-  }, []);
-
-  useEffect(() => {
-    Promise.all(['CENTRAL', 'NE', 'NW', 'SW', 'SE'].map(id => api.districts(id)))
-      .then(results => {
-        const districts = results.flatMap(r => r.districts);
-        const dots: PlotDot[] = [];
-        const info = new Map<string, DistrictEntry>();
-
-        for (const d of districts) {
-          const center = HEX_CENTER.get(`${d.q},${d.r}`);
-          if (!center) continue;
-          const [cx, cy] = center;
-
-          let occupied = 0;
-          for (const plot of d.plots) {
-            const keeps: PlotKeep[] = (plot.keeps ?? []).map((k: { id: string; name: string }) => ({ id: k.id, name: k.name }));
-            const isOccupied = keeps.length > 0;
-            if (isOccupied) occupied++;
-            const worldX = cx + (plot.x - d.x) * MAP_SCALE;
-            const worldY = cy + (plot.y - d.y) * MAP_SCALE;
-            const h = dotHash(plot.id);
-            dots.push({
-              worldX, worldY, type: 'plot',
-              plotId: plot.id, plotName: plot.name,
-              districtName: d.name,
-              keeps,
-              occupied: isOccupied,
-              tier:        (Math.min(4, Math.max(1, plot.tier ?? 1))) as 1 | 2 | 3 | 4,
-              sizeVariant: (h % 3) as 0 | 1 | 2,
-            });
-          }
-          info.set(`${d.q},${d.r}`, { name: d.name, total: d.plots.length, occupied });
-        }
-
-        for (const [key, name] of Object.entries(EXCHANGE_REGION_NAME)) {
-          const center = HEX_CENTER.get(key);
-          if (!center) continue;
-          const [cx, cy] = center;
-          dots.push({
-            worldX: cx, worldY: cy, type: 'exchange',
-            plotId: `exchange-${key}`, plotName: name,
-            districtName: name, keeps: [], occupied: false,
-            tier: 1, sizeVariant: 1,
-          });
-        }
-
-        setPlotDots(dots);
-        setDistrictInfo(info);
-      }).catch(() => {});
   }, []);
 
   useEffect(() => { redraw(); }, [plotDots, districtInfo, redraw]);
@@ -505,7 +507,12 @@ export default function RealmPage() {
     const syncSize = () => {
       const w = canvas.offsetWidth;
       const h = canvas.offsetHeight;
-      if (w > 0 && h > 0) { canvas.width = w; canvas.height = h; }
+      // Only reset canvas dimensions when they actually change — setting canvas.width
+      // unconditionally clears the canvas even if the value is identical.
+      if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+        canvas.width = w;
+        canvas.height = h;
+      }
       redraw();
     };
     const ro = new ResizeObserver(syncSize);
@@ -640,10 +647,20 @@ export default function RealmPage() {
         <h1 className="text-sm font-semibold text-parchment-100">Realm Map</h1>
         <span className="text-xs text-stone-500">Scroll to zoom · Drag to pan · Click a plot</span>
       </div>
+      {districtsError && (
+        <div className="flex-1 flex items-center justify-center">
+          <span className="text-red-400 text-sm">Failed to load realm data — check the server is running.</span>
+        </div>
+      )}
+      {districtsLoading && !districtsData && (
+        <div className="flex-1 flex items-center justify-center">
+          <span className="text-stone-500 text-sm">Loading realm map…</span>
+        </div>
+      )}
       <canvas
         ref={canvasRef}
         className="flex-1 w-full"
-        style={{ display: 'block', cursor: 'grab' }}
+        style={{ display: districtsError || (districtsLoading && !districtsData) ? 'none' : 'block', cursor: 'grab' }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}

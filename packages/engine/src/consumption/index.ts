@@ -26,6 +26,23 @@ export interface ConsumptionResult {
 }
 
 /**
+ * Calculate the empire-wide consumption multiplier due to management overhead.
+ * Below threshold: returns 1.0 (workers consume normally).
+ * Above threshold: returns a value > 1.0 — each worker's resource needs are inflated
+ * to represent logistics, waste, and coordination costs of a large empire.
+ * Capped at maxMultiplier to prevent runaway consumption.
+ */
+export function calculateOverheadFactor(
+  weightedWorkforce: number,
+  threshold: number,
+  penaltyPerUnit: number,
+  maxMultiplier: number,
+): number {
+  const excess = Math.max(0, weightedWorkforce - threshold);
+  return Math.min(maxMultiplier, 1 + excess * penaltyPerUnit);
+}
+
+/**
  * Calculate worker consumption for one tick and derive production modifiers.
  * Each unmet necessary need applies a stacking penalty.
  * Each met optional need applies a stacking bonus.

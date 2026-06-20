@@ -1,27 +1,44 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../../db/client.js';
+import { getAdminEmpireId } from '../../db/admin-empire.js';
 import { adminState } from '../../admin-bypass.js';
-import { RESOURCE_WEIGHT, MULE_CAPACITY_KG, KEEP_FOUNDING_COST } from '@merchant-realms/shared';
+import { RESOURCE_WEIGHT, MULE_CAPACITY_KG, KEEP_FOUNDING_COST, getStarterSpeedMultiplier } from '@merchant-realms/shared';
 
 export const caravanRouter = Router();
 
 const TRAVEL_SECONDS = 60;
 
-async function getAdminEmpire() {
-  const player = await db.player.findUnique({ where: { email: 'admin@merchantrealms.dev' } });
-  if (!player) throw new Error('Admin player not found');
-  const empire = await db.empire.findUnique({ where: { playerId: player.id } });
-  if (!empire) throw new Error('Admin empire not found');
-  return empire;
-}
-
 // ── List caravans ────────────────────────────────────────────────────────────
 caravanRouter.get('/', async (_req, res, next) => {
   try {
-    const empire = await getAdminEmpire();
+    const empireId = await getAdminEmpireId();
+
+    // Deliver any caravans that have passed their arrivesAt — avoids waiting for the next tick
+    const arrived = await db.caravan.findMany({
+      where: { empireId, status: 'IN_TRANSIT', arrivesAt: { lte: new Date() } },
+    });
+    for (const c of arrived) {
+      try {
+        await db.caravan.update({
+          where: { id: c.id },
+          data: {
+            status:       'IDLE',
+            locationType: c.destType!,
+            locationId:   c.destId!,
+            destType:     null,
+            destId:       null,
+            departedAt:   null,
+            arrivesAt:    null,
+          },
+        });
+      } catch (deliveryErr) {
+        console.error(`[caravan] failed to deliver caravan ${c.id}:`, deliveryErr);
+      }
+    }
+
     const caravans = await db.caravan.findMany({
-      where: { empireId: empire.id },
+      where: { empireId },
       include: { cargo: true },
       orderBy: { name: 'asc' },
     });
@@ -73,40 +90,52 @@ caravanRouter.post('/:id/load', async (req, res, next) => {
       res.status(400).json({ error: `Exceeds caravan capacity (${maxWeight} kg)` }); return;
     }
 
-    // Deduct from source inventory (always — bypass only skips availability check)
+    // Deduct from source inventory using a single atomic UPDATE so concurrent requests
+    // cannot both pass the availability check and double-deduct.
     if (caravan.locationType === 'KEEP') {
-      const ledger = await db.resourceLedger.findUnique({
-        where: { keepId_resourceType: { keepId: caravan.locationId, resourceType } },
-      });
-      if (!adminState.bypassEnabled && (!ledger || ledger.quantity < quantity)) {
-        res.status(400).json({ error: 'Not enough resources in keep' }); return;
-      }
-      if (ledger && ledger.quantity > 0) {
-        const take = Math.min(quantity, ledger.quantity);
-        await db.resourceLedger.update({
-          where: { keepId_resourceType: { keepId: caravan.locationId, resourceType } },
-          data:  { quantity: { decrement: take } },
+      if (adminState.bypassEnabled) {
+        // Bypass: deduct whatever is available, allow negative
+        await db.resourceLedger.updateMany({
+          where: { keepId: caravan.locationId, resourceType },
+          data:  { quantity: { decrement: quantity } },
         });
+      } else {
+        // Atomic: only deducts if quantity >= requested; returns 0 rows if not
+        const deducted = await db.$executeRaw`
+          UPDATE "ResourceLedger"
+          SET    quantity = quantity - ${quantity}
+          WHERE  "keepId" = ${caravan.locationId}
+            AND  "resourceType" = ${resourceType}
+            AND  quantity >= ${quantity}
+        `;
+        if (deducted === 0) {
+          res.status(400).json({ error: 'Not enough resources in keep' }); return;
+        }
       }
     } else {
-      // EXCHANGE — deduct from exchange storage
-      const empire = await getAdminEmpire();
-      const storage = await db.exchangeStorage.findUnique({
-        where: { empireId_regionId_resourceType: { empireId: empire.id, regionId: caravan.locationId, resourceType } },
-      });
-      if (!adminState.bypassEnabled && (!storage || storage.quantity < quantity)) {
-        res.status(400).json({ error: 'Not enough resources in exchange storage' }); return;
-      }
-      if (storage && storage.quantity > 0) {
-        const take = Math.min(quantity, storage.quantity);
-        await db.exchangeStorage.update({
-          where: { empireId_regionId_resourceType: { empireId: empire.id, regionId: caravan.locationId, resourceType } },
-          data:  { quantity: { decrement: take } },
+      // EXCHANGE — same atomic pattern
+      const empireId = await getAdminEmpireId();
+      if (adminState.bypassEnabled) {
+        await db.exchangeStorage.updateMany({
+          where: { empireId, regionId: caravan.locationId, resourceType },
+          data:  { quantity: { decrement: quantity } },
         });
+      } else {
+        const deducted = await db.$executeRaw`
+          UPDATE "ExchangeStorage"
+          SET    quantity = quantity - ${quantity}
+          WHERE  "empireId" = ${empireId}
+            AND  "regionId" = ${caravan.locationId}
+            AND  "resourceType" = ${resourceType}
+            AND  quantity >= ${quantity}
+        `;
+        if (deducted === 0) {
+          res.status(400).json({ error: 'Not enough resources in exchange storage' }); return;
+        }
       }
     }
 
-    // Add to cargo
+    // Add to cargo — also atomic so concurrent requests don't stack
     await db.caravanCargo.upsert({
       where: { caravanId_resourceType: { caravanId: caravan.id, resourceType } },
       create: { caravanId: caravan.id, resourceType, quantity },
@@ -154,10 +183,10 @@ caravanRouter.post('/:id/unload', async (req, res, next) => {
         update: { quantity: { increment: quantity } },
       });
     } else if (caravan.locationType === 'EXCHANGE') {
-      const empire = await getAdminEmpire();
+      const empireId = await getAdminEmpireId();
       await db.exchangeStorage.upsert({
-        where:  { empireId_regionId_resourceType: { empireId: empire.id, regionId: caravan.locationId, resourceType } },
-        create: { empireId: empire.id, regionId: caravan.locationId, resourceType, quantity },
+        where:  { empireId_regionId_resourceType: { empireId: empireId, regionId: caravan.locationId, resourceType } },
+        create: { empireId: empireId, regionId: caravan.locationId, resourceType, quantity },
         update: { quantity: { increment: quantity } },
       });
     }
@@ -176,7 +205,10 @@ caravanRouter.post('/:id/dispatch', async (req, res, next) => {
       destId:   z.string(),
     }).parse(req.body);
 
-    const caravan = await db.caravan.findUnique({ where: { id: req.params['id'] } });
+    const caravan = await db.caravan.findUnique({
+      where:   { id: req.params['id'] },
+      include: { empire: { select: { createdAt: true } } },
+    });
     if (!caravan) { res.status(404).json({ error: 'Caravan not found' }); return; }
     if (caravan.status !== 'IDLE') { res.status(400).json({ error: 'Caravan is already in transit' }); return; }
 
@@ -191,9 +223,11 @@ caravanRouter.post('/:id/dispatch', async (req, res, next) => {
     // EXCHANGE: destId is regionId — no validation needed for pilot
 
     const now = new Date();
+    const empireAgeDays = (now.getTime() - caravan.empire.createdAt.getTime()) / 86_400_000;
+    const starterMultiplier = getStarterSpeedMultiplier(empireAgeDays);
     const arrivesAt = adminState.bypassEnabled
       ? new Date(now.getTime() + 1000)
-      : new Date(now.getTime() + TRAVEL_SECONDS * 1000);
+      : new Date(now.getTime() + (TRAVEL_SECONDS / starterMultiplier) * 1000);
 
     const updated = await db.caravan.update({
       where: { id: caravan.id },
@@ -219,7 +253,7 @@ caravanRouter.post('/found', async (req, res, next) => {
       keepName: z.string().min(1).max(40),
     }).parse(req.body);
 
-    const empire = await getAdminEmpire();
+    const empireId = await getAdminEmpireId();
 
     // Check plot is unoccupied
     const existing = await db.keep.findFirst({ where: { plotId } });
@@ -227,7 +261,7 @@ caravanRouter.post('/found', async (req, res, next) => {
 
     // Find all idle caravans at this plot
     const caravans = await db.caravan.findMany({
-      where: { empireId: empire.id, locationType: 'PLOT', locationId: plotId, status: 'IDLE' },
+      where: { empireId: empireId, locationType: 'PLOT', locationId: plotId, status: 'IDLE' },
       include: { cargo: true },
     });
     if (caravans.length === 0) { res.status(400).json({ error: 'No caravans at this plot' }); return; }
@@ -269,12 +303,12 @@ caravanRouter.post('/found', async (req, res, next) => {
 
     // Create the keep
     const keep = await db.keep.create({
-      data: { empireId: empire.id, plotId, name: keepName, buildingSlotCount: 6 },
+      data: { empireId: empireId, plotId, name: keepName, buildingSlotCount: 6 },
     });
 
     // Move caravans to the new keep
     await db.caravan.updateMany({
-      where: { empireId: empire.id, locationType: 'PLOT', locationId: plotId, status: 'IDLE' },
+      where: { empireId: empireId, locationType: 'PLOT', locationId: plotId, status: 'IDLE' },
       data: { locationType: 'KEEP', locationId: keep.id },
     });
 
