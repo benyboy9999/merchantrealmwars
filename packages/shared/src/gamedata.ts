@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import raw from './gamedata.json';
+import raw from './gamedata.json' with { type: 'json' };
 
 // ── Zod schema — validates at module load, crashes with a clear message if data is wrong ──
 
@@ -21,7 +21,7 @@ const BuildingSchema = z.object({
 
 const RecipeSchema = z.object({
   key:          z.string(),
-  category:     z.enum(['EXTRACTION', 'FARMING', 'PRODUCTION']),
+  category:     z.enum(['EXTRACTION', 'FARMING', 'METALLURGY', 'CONSTRUCTION', 'FOOD', 'CRAFTING', 'ALCHEMY', 'RESEARCH', 'COMBAT']),
   timeMinutes:  z.number().positive(),
   reqTech:      z.number().int().min(0),
   buildingType: z.string(),
@@ -43,6 +43,8 @@ const GameDataSchema = z.object({
   animals:     z.record(z.object({ name: z.string(), capacityKg: z.number().positive() })),
   workerTiers: z.record(z.object({ name: z.string(), needs: z.array(WorkerNeedSchema) })),
   regions:     z.record(z.object({ name: z.string(), bonusType: z.string(), guildControllable: z.boolean() })),
+  techLevelCosts: z.array(z.object({ resource: z.string(), quantity: z.number().int().positive() })),
+  starterBonus:   z.array(z.object({ maxDaysAge: z.number().int().positive(), speedMultiplier: z.number().positive() })),
   constants:   z.object({
     keepBaseStorageKg:        z.number(),
     warehouseStoragePerLevel: z.number().int(),
@@ -54,6 +56,15 @@ const GameDataSchema = z.object({
     defaultBuildingSlots:     z.number().int(),
     slotUnlockResource:       z.string(),
     keepFoundingCost:         z.array(CostSchema),
+    buildingDecayPerCycle:        z.number().positive(),
+    buildingDurabilityThreshold:  z.number().min(0).max(100),
+    buildingDurabilityFloor:      z.number().min(0).max(100),
+    overheadThreshold:        z.number().int().positive(),
+    overheadPenaltyPerUnit:   z.number().positive(),
+    overheadMaxMultiplier:    z.number().min(1),
+    overheadWeightT1:         z.number().int().positive(),
+    overheadWeightT2:         z.number().int().positive(),
+    overheadWeightT3:         z.number().int().positive(),
   }),
 });
 
@@ -98,6 +109,35 @@ export const BUILDING_TIER = Object.fromEntries(
 export const BUILDING_CONSTRUCTION_COSTS = Object.fromEntries(
   Object.entries(gamedata.buildings).map(([k, v]) => [k, v.constructionCost])
 ) as Record<BuildingType, Array<{ resource: string; quantity: number }>>;
+
+export const BUILDING_WORKER_COST = Object.fromEntries(
+  Object.entries(gamedata.buildings).map(([k, v]) => [k, v.workerCostPerLevel])
+) as Record<BuildingType, number>;
+
+// Per-building housing capacity — only housing building types have a value here
+export const HOUSING_CAPACITY_PER_LEVEL = Object.fromEntries(
+  Object.entries(gamedata.buildings)
+    .filter(([, v]) => v.housingCapacityPerLevel !== undefined)
+    .map(([k, v]) => [k, v.housingCapacityPerLevel!]),
+) as Partial<Record<BuildingType, number>>;
+
+export const OVERHEAD_CONSTANTS = {
+  threshold:      gamedata.constants.overheadThreshold,
+  penaltyPerUnit: gamedata.constants.overheadPenaltyPerUnit,
+  maxMultiplier:  gamedata.constants.overheadMaxMultiplier,
+} as const;
+
+export const OVERHEAD_TIER_WEIGHTS: Record<WorkerTier, number> = {
+  T1: gamedata.constants.overheadWeightT1,
+  T2: gamedata.constants.overheadWeightT2,
+  T3: gamedata.constants.overheadWeightT3,
+};
+
+export const DURABILITY_CONSTANTS = {
+  decayPerCycle: gamedata.constants.buildingDecayPerCycle,
+  threshold:     gamedata.constants.buildingDurabilityThreshold,
+  floor:         gamedata.constants.buildingDurabilityFloor,
+} as const;
 
 export const WORKERS_PER_LEVEL:     number = gamedata.constants.defaultWorkersPerLevel;
 export const HOUSING_BASE_CAPACITY: number = gamedata.constants.housingWorkersPerLevel;
@@ -148,7 +188,7 @@ export const T1_WORKER_NEEDS: WorkerNeed[] = WORKER_NEEDS['T1'] ?? [];
 
 // ── Recipe types and lookups ─────────────────────────────────────────────────
 
-export type RecipeCategory = 'EXTRACTION' | 'FARMING' | 'PRODUCTION';
+export type RecipeCategory = 'EXTRACTION' | 'FARMING' | 'METALLURGY' | 'CONSTRUCTION' | 'FOOD' | 'CRAFTING' | 'ALCHEMY' | 'RESEARCH' | 'COMBAT';
 
 export interface RecipeInput {
   resource: ResourceType;
@@ -177,6 +217,26 @@ export const RECIPE_BY_KEY: Record<string, Recipe> = ALL_RECIPES.reduce<Record<s
   acc[r.key] = r;
   return acc;
 }, {});
+
+// ── Tech & starter bonus ─────────────────────────────────────────────────────
+
+export interface TechLevelCost { resource: ResourceType; quantity: number; }
+
+export const TECH_LEVEL_COSTS: TechLevelCost[] = gamedata.techLevelCosts.map(c => ({
+  resource: c.resource as ResourceType,
+  quantity: c.quantity,
+}));
+
+export interface StarterBonusTier { maxDaysAge: number; speedMultiplier: number; }
+
+export const STARTER_BONUS_TIERS: StarterBonusTier[] = gamedata.starterBonus;
+
+export function getStarterSpeedMultiplier(empireAgeDays: number): number {
+  for (const tier of STARTER_BONUS_TIERS) {
+    if (empireAgeDays <= tier.maxDaysAge) return tier.speedMultiplier;
+  }
+  return 1;
+}
 
 // ── Caravan / vehicle types (code contracts — not in JSON) ───────────────────
 
