@@ -19,11 +19,7 @@ echo "▶ Building..."
 pnpm build
 
 echo "▶ Running database migrations..."
-# Export env vars so Prisma can reach the database
-set -o allexport
-# shellcheck source=.env.production
-source .env.production
-set +o allexport
+export DATABASE_URL=$(grep '^DATABASE_URL=' .env.production | cut -d'=' -f2-)
 pnpm db:migrate:prod
 
 echo "▶ Restarting server..."
