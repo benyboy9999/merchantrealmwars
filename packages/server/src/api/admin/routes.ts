@@ -1,29 +1,24 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { db } from '../../db/client.js';
 import { adminState } from '../../admin-bypass.js';
 import { runTick } from '../../jobs/tick-job.js';
 import { config } from '../../config/index.js';
-import { RECIPE_BY_KEY } from '@merchant-realms/shared';
+import { requireAdmin } from '../../middleware/auth.js';
+import { RECIPE_BY_KEY, KEEP_FOUNDING_COST } from '@merchant-realms/shared';
 import type { ResourceType } from '@merchant-realms/shared';
 
 export const adminRouter = Router();
+adminRouter.use(requireAdmin);
 
-// Simple token check — set ADMIN_TOKEN in .env
-adminRouter.use((req, res, next) => {
-  const token = req.headers['x-admin-token'] ?? req.query['adminToken'];
-  if (token !== process.env['ADMIN_TOKEN']) {
-    res.status(401).json({ error: 'Invalid admin token' });
-    return;
-  }
-  next();
-});
+// ── Server status ────────────────────────────────────────────────────────────
 
-adminRouter.get('/status', async (_req, res) => {
-  const [lastTick, player] = await Promise.all([
+adminRouter.get('/status', async (req, res) => {
+  const empireId = req.auth!.empireId;
+  const [lastTick, empire] = await Promise.all([
     db.gameTick.findFirst({ orderBy: { tickNumber: 'desc' } }),
-    db.player.findUnique({ where: { email: 'admin@merchantrealms.dev' } }),
+    empireId ? db.empire.findUnique({ where: { id: empireId }, select: { goldBalance: true } }) : null,
   ]);
-  const empire = player ? await db.empire.findUnique({ where: { playerId: player.id } }) : null;
   res.json({
     bypassEnabled: adminState.bypassEnabled,
     lastTick,
@@ -99,7 +94,6 @@ adminRouter.post('/complete-production', async (_req, res) => {
       if (!recipe) continue;
 
       for (const building of buildings) {
-        // Consume inputs (skip when bypass is on)
         const scaledInputs = recipe.inputs.map((inp) => ({
           resource: inp.resource as ResourceType,
           quantity: inp.quantity * building.level,
@@ -154,4 +148,191 @@ adminRouter.get('/world', async (_req, res) => {
     db.marketOrder.findMany({ where: { status: { in: ['OPEN', 'PARTIALLY_FILLED'] } }, take: 50 }),
   ]);
   res.json({ keeps, caravans, orders });
+});
+
+// ── Player management ────────────────────────────────────────────────────────
+
+adminRouter.get('/players', async (_req, res, next) => {
+  try {
+    const players = await db.player.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        email: true,
+        isAdmin: true,
+        createdAt: true,
+        lastActiveAt: true,
+        googleId: true,
+        empire: {
+          select: {
+            id: true,
+            name: true,
+            goldBalance: true,
+            _count: { select: { keeps: true, caravans: true } },
+          },
+        },
+      },
+    });
+    res.json({ players });
+  } catch (err) { next(err); }
+});
+
+adminRouter.get('/players/:id', async (req, res, next) => {
+  try {
+    const player = await db.player.findUnique({
+      where: { id: req.params['id'] },
+      select: {
+        id: true,
+        email: true,
+        isAdmin: true,
+        createdAt: true,
+        lastActiveAt: true,
+        googleId: true,
+        empire: {
+          include: {
+            keeps: {
+              include: {
+                resourceLedger: true,
+                buildings: true,
+                plot: { include: { district: true } },
+              },
+            },
+            caravans: { include: { cargo: true } },
+            exchangeStorages: true,
+          },
+        },
+      },
+    });
+    if (!player) { res.status(404).json({ error: 'Player not found' }); return; }
+    res.json({ player });
+  } catch (err) { next(err); }
+});
+
+// Adjust gold — op: 'set' | 'add'
+adminRouter.patch('/players/:id/gold', async (req, res, next) => {
+  try {
+    const { amount, op } = z.object({
+      amount: z.number(),
+      op: z.enum(['set', 'add']),
+    }).parse(req.body);
+
+    const player = await db.player.findUnique({
+      where: { id: req.params['id'] },
+      select: { empire: { select: { id: true } } },
+    });
+    if (!player?.empire) { res.status(404).json({ error: 'Player has no empire' }); return; }
+
+    const empire = await db.empire.update({
+      where: { id: player.empire.id },
+      data:  op === 'set'
+        ? { goldBalance: Math.max(0, amount) }
+        : { goldBalance: { increment: amount } },
+      select: { goldBalance: true },
+    });
+    res.json({ goldBalance: empire.goldBalance });
+  } catch (err) { next(err); }
+});
+
+// Grant resources to a keep's storage
+adminRouter.post('/players/:id/resources', async (req, res, next) => {
+  try {
+    const { keepId, resourceType, quantity } = z.object({
+      keepId:       z.string(),
+      resourceType: z.string(),
+      quantity:     z.number().positive(),
+    }).parse(req.body);
+
+    const keep = await db.keep.findUnique({
+      where: { id: keepId },
+      select: { empire: { select: { player: { select: { id: true } } } } },
+    });
+    if (!keep || keep.empire.player.id !== req.params['id']) {
+      res.status(404).json({ error: 'Keep not found for this player' }); return;
+    }
+
+    const ledger = await db.resourceLedger.upsert({
+      where:  { keepId_resourceType: { keepId, resourceType } },
+      create: { keepId, resourceType, quantity },
+      update: { quantity: { increment: quantity } },
+    });
+    res.json({ ledger });
+  } catch (err) { next(err); }
+});
+
+// Grant gold to exchange storage
+adminRouter.post('/players/:id/exchange-resources', async (req, res, next) => {
+  try {
+    const { regionId, resourceType, quantity } = z.object({
+      regionId:     z.string(),
+      resourceType: z.string(),
+      quantity:     z.number().positive(),
+    }).parse(req.body);
+
+    const player = await db.player.findUnique({
+      where: { id: req.params['id'] },
+      select: { empire: { select: { id: true } } },
+    });
+    if (!player?.empire) { res.status(404).json({ error: 'Player has no empire' }); return; }
+
+    const storage = await db.exchangeStorage.upsert({
+      where:  { empireId_regionId_resourceType: { empireId: player.empire.id, regionId, resourceType } },
+      create: { empireId: player.empire.id, regionId, resourceType, quantity },
+      update: { quantity: { increment: quantity } },
+    });
+    res.json({ storage });
+  } catch (err) { next(err); }
+});
+
+// Provision starter caravan (for players stuck with no caravan)
+adminRouter.post('/players/:id/starter-caravan', async (req, res, next) => {
+  try {
+    const player = await db.player.findUnique({
+      where: { id: req.params['id'] },
+      select: { empire: { select: { id: true } } },
+    });
+    if (!player?.empire) { res.status(404).json({ error: 'Player has no empire' }); return; }
+
+    const caravan = await db.caravan.create({
+      data: {
+        empireId:     player.empire.id,
+        name:         'Starter Caravan',
+        animalType:   'MULE',
+        animalCount:  1,
+        locationType: 'EXCHANGE',
+        locationId:   'CENTRAL',
+        status:       'IDLE',
+      },
+    });
+
+    await db.caravanCargo.createMany({
+      data: KEEP_FOUNDING_COST.map((cost) => ({
+        caravanId:    caravan.id,
+        resourceType: cost.resource,
+        quantity:     cost.quantity,
+      })),
+    });
+
+    res.json({ caravan });
+  } catch (err) { next(err); }
+});
+
+// Toggle admin status for a player
+adminRouter.patch('/players/:id/admin', async (req, res, next) => {
+  try {
+    const { isAdmin } = z.object({ isAdmin: z.boolean() }).parse(req.body);
+    const player = await db.player.update({
+      where: { id: req.params['id'] },
+      data:  { isAdmin },
+      select: { id: true, email: true, isAdmin: true },
+    });
+    res.json({ player });
+  } catch (err) { next(err); }
+});
+
+// Delete a player and all their data
+adminRouter.delete('/players/:id', async (req, res, next) => {
+  try {
+    await db.player.delete({ where: { id: req.params['id'] } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });

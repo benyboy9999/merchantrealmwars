@@ -29,13 +29,13 @@ export default function ExchangePage() {
     void qc.invalidateQueries({ queryKey: ['exchange-listings', regionId] });
   };
 
-  const { data: storageData, isError: storageError } = useQuery({
+  const { data: storageData, isError: storageError, error: storageErr } = useQuery({
     queryKey: ['exchange-storage', regionId],
     queryFn:  () => api.exchangeStorage(regionId),
     refetchInterval: 30_000,
   });
 
-  const { data: listingsData, isError: listingsError } = useQuery({
+  const { data: listingsData, isError: listingsError, error: listingsErr } = useQuery({
     queryKey: ['exchange-listings', regionId],
     queryFn:  () => api.listings(regionId),
     refetchInterval: 30_000,
@@ -93,7 +93,9 @@ export default function ExchangePage() {
 
       {(storageError || listingsError) && (
         <div className="px-4 py-2 text-xs text-red-400 bg-red-950/20 border-b border-red-900/30">
-          Failed to load exchange data — check the server is running.
+          {storageError && <span>Warehouse: {(storageErr as Error)?.message ?? 'Failed to load'}</span>}
+          {storageError && listingsError && <span className="mx-2">·</span>}
+          {listingsError && <span>Listings: {(listingsErr as Error)?.message ?? 'Failed to load'}</span>}
         </div>
       )}
 

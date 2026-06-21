@@ -25,7 +25,7 @@ export default function KeepPage() {
   const [orderType, setOrderType] = useState<'INFINITE' | 'NUMERICAL'>('INFINITE');
   const [targetQty, setTargetQty] = useState('');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['keep', id],
     queryFn: () => api.keep(id!),
     refetchInterval: 5000,
@@ -62,6 +62,7 @@ export default function KeepPage() {
   });
 
   if (isLoading || !data) return <div className="p-8 text-stone-400 text-sm">Loading...</div>;
+  if (isError) return <div className="p-8 text-red-400 text-sm">Failed to load keep: {error instanceof Error ? error.message : 'Unknown error'}</div>;
 
   const { keep, storage, goldBalance } = data;
   const slotCount = keep.buildingSlotCount;

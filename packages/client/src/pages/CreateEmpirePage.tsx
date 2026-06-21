@@ -4,9 +4,8 @@ import { api } from '../services/api.js';
 import { useAuthStore } from '../stores/auth.js';
 
 export default function CreateEmpirePage() {
-  const navigate = useNavigate();
-  const setEmpireId = useAuthStore((s) => s.setEmpireId);
-  const username = useAuthStore((s) => s.username);
+  const navigate  = useNavigate();
+  const setAuth   = useAuthStore((s) => s.setAuth);
 
   const [name, setName] = useState('');
   const [error, setError] = useState('');
@@ -23,7 +22,9 @@ export default function CreateEmpirePage() {
     setError('');
     try {
       const data = await api.createEmpire(trimmed);
-      setEmpireId(data.empire.id);
+      // Replace the stored token with the new one that carries empireId,
+      // so all subsequent requests include the empire context.
+      setAuth(data.accessToken, data.refreshToken, data.empire.id, data.empire.name);
       navigate('/', { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create empire');
@@ -36,7 +37,7 @@ export default function CreateEmpirePage() {
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
       <div className="w-full max-w-sm space-y-8 px-4">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-zinc-100 tracking-tight">Welcome, {username}</h1>
+          <h1 className="text-3xl font-bold text-zinc-100 tracking-tight">Welcome</h1>
           <p className="text-zinc-400 text-sm">Name your empire to begin</p>
         </div>
 

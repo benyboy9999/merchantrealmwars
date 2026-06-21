@@ -136,8 +136,8 @@ async function main() {
   const hash = await bcrypt.hash('admin', 12);
   const admin = await db.player.upsert({
     where:  { email: 'admin@merchantrealms.dev' },
-    create: { username: 'Admin', email: 'admin@merchantrealms.dev', passwordHash: hash },
-    update: {},
+    create: { username: 'Admin', email: 'admin@merchantrealms.dev', passwordHash: hash, isAdmin: true },
+    update: { isAdmin: true },
   });
   const adminEmpire = await db.empire.upsert({
     where:  { playerId: admin.id },

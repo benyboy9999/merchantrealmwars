@@ -180,7 +180,7 @@ export default function WarehousePanel({
   // Single destination per caravan (replaces the old 3-field destType/destId/plotRegion)
   const [dest, setDest] = useState<Record<string, { type: string; id: string } | null>>({});
 
-  const { data: caravanData }      = useQuery({ queryKey: ['caravans'],       queryFn: api.caravans,     refetchInterval: 15_000 });
+  const { data: caravanData, isError: caravansError, error: caravansErr } = useQuery({ queryKey: ['caravans'], queryFn: api.caravans, refetchInterval: 15_000 });
   const { data: keepData }         = useQuery({ queryKey: ['keeps'],          queryFn: api.keeps });
   const { data: allDistrictsData } = useQuery({ queryKey: ['all-districts'], queryFn: api.allDistricts, staleTime: 60_000 });
 
@@ -442,7 +442,12 @@ export default function WarehousePanel({
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {allCaravans.length === 0 && (
+          {caravansError && (
+            <div className="p-4 text-red-400 text-xs">
+              Failed to load caravans: {caravansErr instanceof Error ? caravansErr.message : 'Unknown error'}
+            </div>
+          )}
+          {!caravansError && allCaravans.length === 0 && (
             <div className="p-4 text-stone-600 text-sm">No caravans.</div>
           )}
 

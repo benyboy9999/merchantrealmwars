@@ -15,8 +15,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api':      { target: 'http://localhost:3000', changeOrigin: true },
-      '/admin':    { target: 'http://localhost:3000', changeOrigin: true },
+      '/api':      { target: 'http://localhost:3000', changeOrigin: true, timeout: 5000, proxyTimeout: 5000 },
+      '/admin':    { target: 'http://localhost:3000', changeOrigin: true, timeout: 5000, proxyTimeout: 5000 },
       '/socket.io':{ target: 'http://localhost:3000', ws: true, changeOrigin: true },
     },
   },

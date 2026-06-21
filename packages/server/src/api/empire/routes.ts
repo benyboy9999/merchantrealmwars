@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { CreateEmpireSchema } from '@merchant-realms/shared';
+import { CreateEmpireSchema, KEEP_FOUNDING_COST } from '@merchant-realms/shared';
 import { db } from '../../db/client.js';
 import { requireAuth } from '../../middleware/auth.js';
+import { issueTokens, saveRefreshToken } from '../../utils/tokens.js';
 
 export const empireRouter = Router();
 
@@ -31,10 +32,39 @@ empireRouter.post('/', async (req, res, next) => {
       return;
     }
     const body = CreateEmpireSchema.parse(req.body);
+
     const empire = await db.empire.create({
-      data: { playerId: req.auth!.playerId, name: body.name, goldBalance: 0 },
+      data: { playerId: req.auth!.playerId, name: body.name, goldBalance: 100 },
     });
-    res.status(201).json({ empire });
+
+    // Provision starter caravan at the CENTRAL exchange, pre-loaded with
+    // founding materials so the player can immediately dispatch to a plot.
+    const caravan = await db.caravan.create({
+      data: {
+        empireId:     empire.id,
+        name:         'Starter Caravan',
+        animalType:   'MULE',
+        animalCount:  1,
+        locationType: 'EXCHANGE',
+        locationId:   'CENTRAL',
+        status:       'IDLE',
+      },
+    });
+
+    await db.caravanCargo.createMany({
+      data: KEEP_FOUNDING_COST.map((cost) => ({
+        caravanId:    caravan.id,
+        resourceType: cost.resource,
+        quantity:     cost.quantity,
+      })),
+    });
+
+    // Re-issue tokens so the JWT carries the new empireId.
+    // Without this, all subsequent empire-gated requests would carry empireId:null.
+    const { accessToken, refreshToken } = issueTokens(req.auth!.playerId, empire.id);
+    await saveRefreshToken(req.auth!.playerId, refreshToken);
+
+    res.status(201).json({ empire, accessToken, refreshToken });
   } catch (err) {
     next(err);
   }

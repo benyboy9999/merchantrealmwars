@@ -9,7 +9,7 @@ export default function MapPage() {
   const [newKeepName, setNewKeepName] = useState('');
   const [selectedPlot, setSelectedPlot] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['districts'],
     queryFn: () => api.districts('CENTRAL'),
     staleTime: 60_000,
@@ -21,6 +21,7 @@ export default function MapPage() {
   });
 
   if (isLoading) return <div className="p-8 text-stone-400 text-sm">Loading...</div>;
+  if (isError) return <div className="p-8 text-red-400 text-sm">Failed to load map: {error instanceof Error ? error.message : 'Unknown error'}</div>;
 
   const plots = (data?.districts ?? []).flatMap((d) => d.plots);
 

@@ -17,7 +17,7 @@ regionRouter.get('/districts', async (_req, res, next) => {
       include: {
         plots: {
           include: {
-            keeps: { select: { id: true, name: true } },
+            keeps: { select: { id: true, name: true, empireId: true } },
           },
         },
       },

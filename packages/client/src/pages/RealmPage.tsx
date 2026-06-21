@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { SQRT3, hexToPixel, hexDistance, pixelToHex, axialRound } from '../utils/hex.js';
 import { api } from '../services/api.js';
+import { useAuthStore } from '../stores/auth.js';
 
 interface Camera { x: number; y: number; zoom: number; }
 
@@ -156,7 +157,7 @@ const DISTRICT_NAME_ZOOM_FULL = 2.3;
 // Y offset to the bottom flat edge of the hex interior (textBaseline = 'bottom')
 const DISTRICT_NAME_Y = INNER_R * Math.sin(Math.PI / 3) - 2; // ~31.8 world units
 
-type PlotKeep = { id: string; name: string };
+type PlotKeep = { id: string; name: string; empireId: string };
 
 type PlotDot = {
   worldX: number; worldY: number;
@@ -277,7 +278,8 @@ function draw(
 
 // ── Plot panel ────────────────────────────────────────────────────────────────
 function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const myEmpireId = useAuthStore((s) => s.empireId);
 
   if (dot.type === 'exchange') {
     return (
@@ -292,43 +294,37 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
     );
   }
 
+  const myKeeps    = dot.keeps.filter((k) => k.empireId === myEmpireId);
+  const otherKeeps = dot.keeps.filter((k) => k.empireId !== myEmpireId);
+  const isEmpty    = dot.keeps.length === 0;
+
   return (
     <Overlay onClose={onClose}>
-      {/* Header */}
       <PanelHeader title={dot.plotName} subtitle={dot.districtName} onClose={onClose} />
 
-      {/* Traits */}
       <PanelSection label="Plot Traits">
         <p className="text-stone-600 text-xs italic">No traits recorded — coming once item chains are finalised.</p>
       </PanelSection>
 
-      {/* Actions */}
       <PanelActions>
-        {dot.keeps[0] && (
-          <ActionButton variant="blue" onClick={() => { navigate(`/kingdom/${dot.keeps[0]!.id}`); onClose(); }}>
-            View Keep — {dot.keeps[0].name}
+        {myKeeps.map((k) => (
+          <ActionButton key={k.id} variant="blue" onClick={() => { navigate(`/kingdom/${k.id}`); onClose(); }}>
+            View Keep — {k.name}
           </ActionButton>
-        )}
+        ))}
         <ActionButton variant="muted" disabled>
           Travel here — coming soon
         </ActionButton>
-        {dot.keeps.length === 0 && (
+        {isEmpty && (
           <p className="text-stone-600 text-xs text-center py-1">Empty plot — no keep founded here</p>
         )}
       </PanelActions>
 
-      {/* Empires */}
-      {dot.keeps.length > 0 && (
-        <PanelSection label="Empires here">
-          {dot.keeps.map(k => (
-            <div key={k.id} className="flex items-center justify-between py-1.5 border-b border-stone-800 last:border-0">
-              <span className="text-parchment-200 text-xs">{k.name}</span>
-              <button
-                onClick={() => { navigate(`/kingdom/${k.id}`); onClose(); }}
-                className="text-xs text-stone-400 hover:text-stone-200 transition-colors"
-              >
-                View →
-              </button>
+      {otherKeeps.length > 0 && (
+        <PanelSection label="Occupied by">
+          {otherKeeps.map((k) => (
+            <div key={k.id} className="py-1.5 border-b border-stone-800 last:border-0">
+              <span className="text-stone-400 text-xs">{k.name}</span>
             </div>
           ))}
         </PanelSection>
@@ -417,6 +413,7 @@ export default function RealmPage() {
   const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const [selectedPlot, setSelectedPlot] = useState<PlotDot | null>(null);
+  const myEmpireId = useAuthStore((s) => s.empireId);
 
   const { data: districtsData, isLoading: districtsLoading, isError: districtsError } = useQuery({
     queryKey: ['all-districts'],
@@ -436,9 +433,9 @@ export default function RealmPage() {
 
       let occupied = 0;
       for (const plot of d.plots) {
-        const keeps: PlotKeep[] = (plot.keeps ?? []).map((k) => ({ id: k.id, name: k.name }));
-        const isOccupied = keeps.length > 0;
-        if (isOccupied) occupied++;
+        const keeps: PlotKeep[] = (plot.keeps ?? []).map((k) => ({ id: k.id, name: k.name, empireId: k.empireId }));
+        const hasMyKeep = keeps.some((k) => k.empireId === myEmpireId);
+        if (hasMyKeep) occupied++;
         const worldX = cx + (plot.x - d.x) * MAP_SCALE;
         const worldY = cy + (plot.y - d.y) * MAP_SCALE;
         const h = dotHash(plot.id);
@@ -447,7 +444,7 @@ export default function RealmPage() {
           plotId: plot.id, plotName: plot.name,
           districtName: d.name,
           keeps,
-          occupied: isOccupied,
+          occupied: hasMyKeep,
           tier:        (Math.min(4, Math.max(1, plot.tier ?? 1))) as 1 | 2 | 3 | 4,
           sizeVariant: (h % 3) as 0 | 1 | 2,
         });
@@ -468,7 +465,7 @@ export default function RealmPage() {
     }
 
     return { plotDots: dots, districtInfo: info };
-  }, [districtsData]);
+  }, [districtsData, myEmpireId]);
 
   const plotDotsRef = useRef(plotDots);
   plotDotsRef.current = plotDots;

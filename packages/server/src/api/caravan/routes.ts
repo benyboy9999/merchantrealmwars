@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '../../db/client.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { adminState } from '../../admin-bypass.js';
-import { RESOURCE_WEIGHT, MULE_CAPACITY_KG, KEEP_FOUNDING_COST, getStarterSpeedMultiplier } from '@merchant-realms/shared';
+import { RESOURCE_WEIGHT, MULE_CAPACITY_KG, KEEP_FOUNDING_COST, KEEP_DEFAULT_BUILDING_SLOTS, getStarterSpeedMultiplier } from '@merchant-realms/shared';
 
 export const caravanRouter = Router();
 caravanRouter.use(requireAuth);
@@ -287,7 +287,7 @@ caravanRouter.post('/found', async (req, res, next) => {
     }
 
     const keep = await db.keep.create({
-      data: { empireId, plotId, name: keepName, buildingSlotCount: 6 },
+      data: { empireId, plotId, name: keepName, buildingSlotCount: KEEP_DEFAULT_BUILDING_SLOTS },
     });
 
     await db.caravan.updateMany({

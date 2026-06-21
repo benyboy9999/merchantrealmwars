@@ -63,6 +63,7 @@ model Player {
   email        String   @unique
   passwordHash String?
   googleId     String?  @unique
+  isAdmin      Boolean  @default(false)
   createdAt    DateTime @default(now())
   lastActiveAt DateTime @default(now())
 
