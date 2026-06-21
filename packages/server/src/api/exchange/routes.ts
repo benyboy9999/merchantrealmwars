@@ -1,16 +1,23 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../../db/client.js';
-import { getAdminEmpireId } from '../../db/admin-empire.js';
+import { requireAuth } from '../../middleware/auth.js';
 
 export const exchangeRouter = Router();
+exchangeRouter.use(requireAuth);
+
+function empireGuard(empireId: string | null | undefined, res: import('express').Response): empireId is string {
+  if (!empireId) { res.status(403).json({ error: 'Create an empire first' }); return false; }
+  return true;
+}
 
 // ── Exchange storage ──────────────────────────────────────────────────────────
 
 exchangeRouter.get('/storage', async (req, res, next) => {
   try {
-    const regionId  = (req.query['regionId'] as string) ?? 'CENTRAL';
-    const empireId  = await getAdminEmpireId();
+    const empireId = req.auth!.empireId;
+    if (!empireGuard(empireId, res)) return;
+    const regionId = (req.query['regionId'] as string) ?? 'CENTRAL';
     const [storage, empire] = await Promise.all([
       db.exchangeStorage.findMany({
         where: { empireId, regionId },
@@ -42,7 +49,6 @@ exchangeRouter.get('/:regionId/listings', async (req, res, next) => {
 });
 
 // ── Listings — create ─────────────────────────────────────────────────────────
-// Moves resources from ExchangeStorage into a public listing (weightless).
 
 exchangeRouter.post('/:regionId/listings', async (req, res, next) => {
   try {
@@ -53,7 +59,8 @@ exchangeRouter.post('/:regionId/listings', async (req, res, next) => {
     }).parse(req.body);
 
     const regionId = req.params['regionId']!;
-    const empireId = await getAdminEmpireId();
+    const empireId = req.auth!.empireId;
+    if (!empireGuard(empireId, res)) return;
 
     const storage = await db.exchangeStorage.findUnique({
       where: { empireId_regionId_resourceType: { empireId, regionId, resourceType } },
@@ -78,14 +85,13 @@ exchangeRouter.post('/:regionId/listings', async (req, res, next) => {
 });
 
 // ── Listings — buy ────────────────────────────────────────────────────────────
-// Real-time purchase: atomically claims quantity with a raw SQL WHERE check so
-// two simultaneous buyers cannot both succeed on the same stock.
 
 exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
   try {
     const { quantity } = z.object({ quantity: z.number().positive() }).parse(req.body);
-    const listingId  = req.params['id']!;
-    const buyerEmpireId = await getAdminEmpireId();
+    const listingId     = req.params['id']!;
+    const buyerEmpireId = req.auth!.empireId;
+    if (!empireGuard(buyerEmpireId, res)) return;
 
     const [listing, buyer] = await Promise.all([
       db.marketOrder.findUnique({ where: { id: listingId } }),
@@ -106,7 +112,6 @@ exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
 
     try {
       await db.$transaction(async (tx) => {
-        // Atomically deduct from listing; returns 0 rows if stock is insufficient
         const claimed = await tx.$executeRaw`
           UPDATE "MarketOrder"
           SET    "fulfilledQty" = "fulfilledQty" + ${quantity}
@@ -116,20 +121,17 @@ exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
         `;
         if (claimed === 0) throw new Error('LISTING_EXPIRED');
 
-        // Transfer gold
         await tx.empire.update({ where: { id: buyer.id }, data: { goldBalance: { decrement: totalGold } } });
         if (listing.empireId) {
           await tx.empire.update({ where: { id: listing.empireId }, data: { goldBalance: { increment: totalGold } } });
         }
 
-        // Resources land in buyer's ExchangeStorage at this region
         await tx.exchangeStorage.upsert({
           where:  { empireId_regionId_resourceType: { empireId: buyer.id, regionId: listing.regionId, resourceType: listing.resourceType } },
           create: { empireId: buyer.id, regionId: listing.regionId, resourceType: listing.resourceType, quantity },
           update: { quantity: { increment: quantity } },
         });
 
-        // Mark listing FILLED if fully sold
         const updated = await tx.marketOrder.findUnique({ where: { id: listingId }, select: { quantity: true, fulfilledQty: true } });
         if (updated && updated.fulfilledQty >= updated.quantity) {
           await tx.marketOrder.update({ where: { id: listingId }, data: { status: 'FILLED' } });
@@ -137,7 +139,6 @@ exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
           await tx.marketOrder.update({ where: { id: listingId }, data: { status: 'PARTIALLY_FILLED' } });
         }
 
-        // Trade record
         await tx.marketTrade.create({
           data: {
             listingId,
@@ -163,12 +164,12 @@ exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
 });
 
 // ── Listings — cancel ─────────────────────────────────────────────────────────
-// Returns unsold quantity to ExchangeStorage.
 
 exchangeRouter.delete('/listings/:id', async (req, res, next) => {
   try {
-    const empireId = await getAdminEmpireId();
-    const listing  = await db.marketOrder.findUnique({ where: { id: req.params['id'] } });
+    const empireId = req.auth!.empireId;
+    if (!empireGuard(empireId, res)) return;
+    const listing = await db.marketOrder.findUnique({ where: { id: req.params['id'] } });
 
     if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
     if (listing.empireId !== empireId) { res.status(403).json({ error: 'Not your listing' }); return; }
@@ -177,7 +178,6 @@ exchangeRouter.delete('/listings/:id', async (req, res, next) => {
     }
 
     const remaining = listing.quantity - listing.fulfilledQty;
-
     await db.$transaction([
       db.marketOrder.update({ where: { id: listing.id }, data: { status: 'CANCELLED' } }),
       db.exchangeStorage.upsert({
@@ -201,8 +201,9 @@ exchangeRouter.post('/sell', async (req, res, next) => {
       quantity:     z.number().positive(),
     }).parse(req.body);
 
-    const empireId = await getAdminEmpireId();
-    const entry    = await db.exchangeStorage.findUnique({
+    const empireId = req.auth!.empireId;
+    if (!empireGuard(empireId, res)) return;
+    const entry = await db.exchangeStorage.findUnique({
       where: { empireId_regionId_resourceType: { empireId, regionId, resourceType } },
     });
     if (!entry || entry.quantity < quantity) {
@@ -210,7 +211,7 @@ exchangeRouter.post('/sell', async (req, res, next) => {
       return;
     }
 
-    const gold = quantity; // 1g/unit NPC price
+    const gold = quantity;
     await db.$transaction([
       entry.quantity - quantity < 0.001
         ? db.exchangeStorage.delete({ where: { empireId_regionId_resourceType: { empireId, regionId, resourceType } } })

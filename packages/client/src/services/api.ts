@@ -1,7 +1,8 @@
-const BASE = '';
-const ADMIN_TOKEN = 'merchantrealms-admin-dev';
+import { useAuthStore } from '../stores/auth.js';
 
-class ApiError extends Error {
+const BASE = '';
+
+export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
     this.name = 'ApiError';
@@ -9,14 +10,20 @@ class ApiError extends Error {
 }
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = useAuthStore.getState().token;
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'x-admin-token': ADMIN_TOKEN,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
   });
+  if (res.status === 401) {
+    useAuthStore.getState().logout();
+    window.location.href = '/login';
+    throw new ApiError(401, 'Session expired');
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new ApiError(res.status, (body as { error: string }).error ?? res.statusText);
@@ -30,6 +37,13 @@ const del  = <T>(path: string)                => req<T>(path, { method: 'DELETE'
 const patch = <T>(path: string, body: unknown) => req<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
 
 export const api = {
+  // Auth
+  loginGoogle:   (credential: string) =>
+    post<{ accessToken: string; refreshToken: string; player: { id: string; username: string }; empireId: string | null }>(
+      '/api/auth/google', { credential }),
+  logout:        () => post('/api/auth/logout'),
+  createEmpire:  (name: string) => post<{ empire: { id: string; name: string } }>('/api/empire', { name }),
+
   // Regions
   regions:      () => get<{ regions: Region[] }>('/api/regions'),
   allDistricts: () => get<{ districts: MapDistrict[] }>('/api/regions/districts'),
@@ -86,8 +100,6 @@ export const api = {
   adminCompleteCaravans:   () => post<{ completed: number }>('/admin/complete-caravans'),
   adminCompleteProduction: () => post<{ completed: number }>('/admin/complete-production'),
 };
-
-export { ApiError };
 
 // ── Types (lightweight — full types live in @merchant-realms/shared) ───────────────
 

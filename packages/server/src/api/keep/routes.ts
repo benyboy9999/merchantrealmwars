@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../../db/client.js';
-import { getAdminEmpireId } from '../../db/admin-empire.js';
+import { requireAuth } from '../../middleware/auth.js';
 import {
   RESOURCE_WEIGHT, KEEP_BASE_STORAGE, WAREHOUSE_BASE_CAPACITY,
   BUILDING_CONSTRUCTION_COSTS, KEEP_MAX_BUILDING_SLOTS,
@@ -11,11 +11,18 @@ import type { BuildingType } from '@merchant-realms/shared';
 import { calculateRepairCost } from '@merchant-realms/engine';
 
 export const keepRouter = Router();
+keepRouter.use(requireAuth);
+
+function empireGuard(empireId: string | null | undefined, res: import('express').Response): empireId is string {
+  if (!empireId) { res.status(403).json({ error: 'Create an empire first' }); return false; }
+  return true;
+}
 
 // ── List keeps ───────────────────────────────────────────────────────────────
-keepRouter.get('/', async (_req, res, next) => {
+keepRouter.get('/', async (req, res, next) => {
   try {
-    const empireId = await getAdminEmpireId();
+    const empireId = req.auth!.empireId;
+    if (!empireGuard(empireId, res)) return;
     const keeps = await db.keep.findMany({
       where: { empireId },
       include: { plot: { include: { district: true } }, buildings: true },
@@ -28,7 +35,8 @@ keepRouter.get('/', async (_req, res, next) => {
 keepRouter.post('/', async (req, res, next) => {
   try {
     const { plotId, name } = z.object({ plotId: z.string(), name: z.string().min(1).max(40) }).parse(req.body);
-    const empireId = await getAdminEmpireId();
+    const empireId = req.auth!.empireId;
+    if (!empireGuard(empireId, res)) return;
 
     const existing = await db.keep.findFirst({ where: { plotId } });
     if (existing) { res.status(409).json({ error: 'Plot already has a Keep' }); return; }
@@ -41,10 +49,12 @@ keepRouter.post('/', async (req, res, next) => {
 // ── Keep detail ──────────────────────────────────────────────────────────────
 keepRouter.get('/:id', async (req, res, next) => {
   try {
+    const empireId = req.auth!.empireId;
+    if (!empireGuard(empireId, res)) return;
     // Run keep query and empire gold fetch in parallel
-    const [keep, empireId] = await Promise.all([
+    const [keep, empire] = await Promise.all([
       db.keep.findUnique({
-        where: { id: req.params['id'] },
+        where: { id: req.params['id'], empireId },
         include: {
           plot: { include: { district: true } },
           buildings: { orderBy: { slotIndex: 'asc' } },
@@ -52,12 +62,9 @@ keepRouter.get('/:id', async (req, res, next) => {
           productionOrders: { orderBy: [{ buildingType: 'asc' }, { position: 'asc' }] },
         },
       }),
-      getAdminEmpireId(),
+      db.empire.findUnique({ where: { id: empireId }, select: { goldBalance: true } }),
     ]);
     if (!keep) { res.status(404).json({ error: 'Keep not found' }); return; }
-
-    // Fetch gold — empireId is cached so this is just one query
-    const empire = await db.empire.findUnique({ where: { id: empireId }, select: { goldBalance: true } });
 
     let usedWeight = 0;
     for (const entry of keep.resourceLedger) {

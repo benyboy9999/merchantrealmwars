@@ -12,6 +12,7 @@ const ConfigSchema = z.object({
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('7d'),
 
   ADMIN_TOKEN: z.string().default('merchantrealms-admin-dev'),
+  GOOGLE_CLIENT_ID: z.string().min(1),
 
   TICK_INTERVAL_SECONDS: z.coerce.number().int().positive().default(10),
   ENABLE_DEBUG_ENDPOINTS: z

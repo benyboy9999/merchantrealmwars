@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api.js';
+import { useAuthStore } from '../stores/auth.js';
 
 const settingsItems = [
   { to: '/encyclopedia', label: 'Encyclopedia' },
@@ -13,6 +14,15 @@ export default function NavBar() {
   const qc           = useQueryClient();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const username = useAuthStore((s) => s.username);
+  const logout   = useAuthStore((s) => s.logout);
+
+  async function handleLogout() {
+    await api.logout().catch(() => null);
+    logout();
+    qc.clear();
+    navigate('/login', { replace: true });
+  }
 
   const { data } = useQuery({
     queryKey: ['admin-status'],
@@ -110,6 +120,15 @@ export default function NavBar() {
                   {label}
                 </Link>
               ))}
+              <div className="border-t border-stone-700 mt-1 pt-1">
+                <div className="px-4 py-1.5 text-xs text-stone-500 truncate">{username}</div>
+                <button
+                  onClick={() => { setSettingsOpen(false); void handleLogout(); }}
+                  className="block w-full text-left px-4 py-2 text-sm text-stone-300 hover:bg-stone-800 hover:text-red-400 transition-colors"
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
           )}
         </div>
