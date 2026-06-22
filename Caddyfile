@@ -25,3 +25,33 @@ merchantrealmwars.com, www.merchantrealmwars.com {
         file_server
     }
 }
+
+dev.merchantrealmwars.com {
+    encode gzip
+
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    handle /admin/* {
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    handle /socket.io/* {
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    handle /health {
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    handle /debug/* {
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    handle {
+        root * /var/www/merchant-realms-staging/packages/client/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
