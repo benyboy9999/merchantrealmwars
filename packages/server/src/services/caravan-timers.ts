@@ -3,13 +3,13 @@ import { WsEvent } from '@merchant-realms/shared';
 import { db } from '../db/client.js';
 
 let io: Server | null = null;
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
 export function initCaravanTimers(socketServer: Server): void {
   io = socketServer;
 }
 
-export function scheduleArrival(caravanId: string, arrivesAt: Date): void {
+export function scheduleArrival(caravanId: number, arrivesAt: Date): void {
   // Clear any existing timer (e.g. if a caravan is re-dispatched after cancellation)
   const existing = timers.get(caravanId);
   if (existing) clearTimeout(existing);
@@ -18,12 +18,12 @@ export function scheduleArrival(caravanId: string, arrivesAt: Date): void {
   timers.set(caravanId, setTimeout(() => void arrive(caravanId), delayMs));
 }
 
-export function cancelArrival(caravanId: string): void {
+export function cancelArrival(caravanId: number): void {
   const t = timers.get(caravanId);
   if (t) { clearTimeout(t); timers.delete(caravanId); }
 }
 
-async function arrive(caravanId: string): Promise<void> {
+async function arrive(caravanId: number): Promise<void> {
   timers.delete(caravanId);
 
   // Fetch caravan + empire.playerId in one query

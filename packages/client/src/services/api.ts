@@ -120,58 +120,58 @@ export const api = {
   register:      (email: string, password: string) =>
     post<AuthResponse>('/api/auth/register', { email, password }),
   logout:        () => post('/api/auth/logout'),
-  createEmpire:  (name: string) => post<{ empire: { id: string; name: string }; accessToken: string; refreshToken: string }>('/api/empire', { name }),
+  createEmpire:  (name: string) => post<{ empire: { id: number; name: string }; accessToken: string; refreshToken: string }>('/api/empire', { name }),
   empireBootstrap: () => get<{ empire: EmpireBootstrap }>('/api/empire/me'),
 
   // Regions
   regions:      () => get<{ regions: Region[] }>('/api/regions'),
   allDistricts: () => get<{ districts: MapDistrict[] }>('/api/regions/districts'),
-  districts:    (regionId: string) => get<{ districts: District[] }>(`/api/regions/${regionId}/districts`),
+  districts:    (regionId: number) => get<{ districts: District[] }>(`/api/regions/${regionId}/districts`),
 
   // Keeps
   keeps:        () => get<{ keeps: Keep[] }>('/api/keeps'),
-  keep:         (id: string) => get<{ keep: Keep; storage: Storage; goldBalance: number }>(`/api/keeps/${id}`),
-  createKeep:   (plotId: string, name: string) => post<{ keep: Keep }>('/api/keeps', { plotId, name }),
-  renameKeep:   (id: string, name: string) => patch<{ keep: Keep }>(`/api/keeps/${id}`, { name }),
-  buildBuilding:(keepId: string, buildingType: string, slotIndex: number) =>
+  keep:         (id: number) => get<{ keep: Keep; storage: Storage; goldBalance: number }>(`/api/keeps/${id}`),
+  createKeep:   (plotId: number, name: string) => post<{ keep: Keep }>('/api/keeps', { plotId, name }),
+  renameKeep:   (id: number, name: string) => patch<{ keep: Keep }>(`/api/keeps/${id}`, { name }),
+  buildBuilding:(keepId: number, buildingType: string, slotIndex: number) =>
     post<{ building: Building }>(`/api/keeps/${keepId}/buildings`, { buildingType, slotIndex }),
-  demolish:     (keepId: string, buildingId: string) => del(`/api/keeps/${keepId}/buildings/${buildingId}`),
-  unlockSlot:   (keepId: string) => post<{ keep: Keep; cost: number; resource: string }>(`/api/keeps/${keepId}/unlock-slot`),
-  setWorkers:   (keepId: string, buildingId: string, count: number) =>
+  demolish:     (keepId: number, buildingId: number) => del(`/api/keeps/${keepId}/buildings/${buildingId}`),
+  unlockSlot:   (keepId: number) => post<{ keep: Keep; cost: number; resource: string }>(`/api/keeps/${keepId}/unlock-slot`),
+  setWorkers:   (keepId: number, buildingId: number, count: number) =>
     patch<{ building: Building }>(`/api/keeps/${keepId}/buildings/${buildingId}/workers`, { count }),
 
   // Queue
-  queue:       (keepId: string, buildingType: string) =>
+  queue:       (keepId: number, buildingType: string) =>
     get<{ orders: ProductionOrder[] }>(`/api/keeps/${keepId}/queue/${buildingType}`),
-  addOrder:    (keepId: string, buildingType: string, body: AddOrderBody) =>
+  addOrder:    (keepId: number, buildingType: string, body: AddOrderBody) =>
     post<{ order: ProductionOrder }>(`/api/keeps/${keepId}/queue/${buildingType}`, body),
-  removeOrder: (keepId: string, orderId: string) => del(`/api/keeps/${keepId}/queue/${orderId}`),
+  removeOrder: (keepId: number, orderId: number) => del(`/api/keeps/${keepId}/queue/${orderId}`),
 
   // Exchange
-  exchangeWarehouse: (regionId: string) => get<{ warehouse: Warehouse | null; goldBalance: number }>(`/api/exchange/warehouse?regionId=${regionId}`),
-  exchangeSell:    (regionId: string, resourceType: string, quantity: number) =>
+  exchangeWarehouse: (regionId: number) => get<{ warehouse: Warehouse | null; goldBalance: number }>(`/api/exchange/warehouse?regionId=${regionId}`),
+  exchangeSell:    (regionId: number, resourceType: string, quantity: number) =>
     post<{ ok: boolean; sold: number; gold: number }>('/api/exchange/sell', { regionId, resourceType, quantity }),
-  listings:        (regionId: string, resourceType?: string) =>
+  listings:        (regionId: number, resourceType?: string) =>
     get<{ listings: ExchangeListing[] }>(`/api/exchange/${regionId}/listings${resourceType ? `?resourceType=${resourceType}` : ''}`),
-  createListing:   (regionId: string, resourceType: string, quantity: number, pricePerUnit: number) =>
+  createListing:   (regionId: number, resourceType: string, quantity: number, pricePerUnit: number) =>
     post<{ listing: ExchangeListing }>(`/api/exchange/${regionId}/listings`, { resourceType, quantity, pricePerUnit }),
-  buyListing:      (id: string, quantity: number) =>
+  buyListing:      (id: number, quantity: number) =>
     post<{ ok: boolean; quantity: number; resourceType: string; totalGold: number }>(`/api/exchange/listings/${id}/buy`, { quantity }),
-  cancelListing:   (id: string) =>
+  cancelListing:   (id: number) =>
     del<{ ok: boolean; returned: number; resourceType: string }>(`/api/exchange/listings/${id}`),
 
   // Caravans
   caravans:        () => get<{ caravans: CaravanWithCargo[] }>('/api/caravans'),
-  caravan:         (id: string) => get<{ caravan: CaravanWithCargo; capacity: CaravanCapacity }>(`/api/caravans/${id}`),
+  caravan:         (id: number) => get<{ caravan: CaravanWithCargo; capacity: CaravanCapacity }>(`/api/caravans/${id}`),
   transfer: (params: {
-    fromWarehouseId: string;
-    toWarehouseId:   string;
+    fromWarehouseId: number;
+    toWarehouseId:   number;
     resourceType:    string;
     quantity:        number;
   }) => post<{ ok: boolean; fromWarehouse: Warehouse; toWarehouse: Warehouse }>('/api/inventory/transfer', params),
-  caravanDispatch: (id: string, destType: string, destId: string) =>
+  caravanDispatch: (id: number, destType: string, destId: number) =>
     post<{ caravan: CaravanWithCargo }>(`/api/caravans/${id}/dispatch`, { destType, destId }),
-  foundKeep:       (plotId: string, keepName: string) =>
+  foundKeep:       (plotId: number, keepName: string) =>
     post<{ keep: Keep }>('/api/caravans/found', { plotId, keepName }),
 
   // Admin — server controls
@@ -183,17 +183,17 @@ export const api = {
 
   // Admin — player management
   adminPlayers:        () => get<{ players: AdminPlayer[] }>('/admin/players'),
-  adminPlayer:         (id: string) => get<{ player: AdminPlayerDetail }>(`/admin/players/${id}`),
-  adminSetGold:        (id: string, amount: number, op: 'set' | 'add') =>
+  adminPlayer:         (id: number) => get<{ player: AdminPlayerDetail }>(`/admin/players/${id}`),
+  adminSetGold:        (id: number, amount: number, op: 'set' | 'add') =>
     patch<{ goldBalance: number }>(`/admin/players/${id}/gold`, { amount, op }),
-  adminGrantResources: (id: string, keepId: string, resourceType: string, quantity: number) =>
+  adminGrantResources: (id: number, keepId: number, resourceType: string, quantity: number) =>
     post(`/admin/players/${id}/resources`, { keepId, resourceType, quantity }),
-  adminGrantExchangeResources: (id: string, regionId: string, resourceType: string, quantity: number) =>
+  adminGrantExchangeResources: (id: number, regionId: number, resourceType: string, quantity: number) =>
     post(`/admin/players/${id}/exchange-resources`, { regionId, resourceType, quantity }),
-  adminStarterCaravan: (id: string) => post(`/admin/players/${id}/starter-caravan`),
-  adminSetAdmin:       (id: string, isAdmin: boolean) =>
+  adminStarterCaravan: (id: number) => post(`/admin/players/${id}/starter-caravan`),
+  adminSetAdmin:       (id: number, isAdmin: boolean) =>
     patch(`/admin/players/${id}/admin`, { isAdmin }),
-  adminDeletePlayer:   (id: string) => del(`/admin/players/${id}`),
+  adminDeletePlayer:   (id: number) => del(`/admin/players/${id}`),
 };
 
 // ── Types (lightweight — full types live in @merchant-realms/shared) ───────────────
@@ -201,75 +201,75 @@ export const api = {
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
-  empireId: string | null;
+  empireId: number | null;
   empireName: string | null;
 }
 
-export interface Region       { id: string; name: string; guildControllable: boolean; districts?: District[] }
-export interface MapPlot      { id: string; name: string; tier: number; isCenter: boolean; x: number; y: number; bonusDescription: string; keeps: { id: string; name: string; empireId: string }[] }
-export interface MapDistrict  { id: string; regionId: string; name: string; q: number; r: number; x: number; y: number; tier: number; plots: MapPlot[] }
-export interface District { id: string; regionId: string; name: string; bonusDescription: string; q: number; r: number; x: number; y: number; plots: Plot[] }
-export interface Plot     { id: string; districtId: string; name: string; tier: number; x: number; y: number; bonusDescription: string; keeps: Keep[]; district?: District }
+export interface Region       { id: number; name: string; guildControllable: boolean; districts?: District[] }
+export interface MapPlot      { id: number; name: string; tier: number; isCenter: boolean; x: number; y: number; bonusDescription: string; keeps: { id: number; name: string; empireId: number }[] }
+export interface MapDistrict  { id: number; regionId: number; name: string; q: number; r: number; x: number; y: number; tier: number; plots: MapPlot[] }
+export interface District { id: number; regionId: number; name: string; bonusDescription: string; q: number; r: number; x: number; y: number; plots: Plot[] }
+export interface Plot     { id: number; districtId: number; name: string; tier: number; x: number; y: number; bonusDescription: string; keeps: Keep[]; district?: District }
 export interface WarehouseItem {
-  id: string; warehouseId: string; resourceType: string; quantity: number; updatedAt: string;
+  id: number; warehouseId: number; resourceType: string; quantity: number; updatedAt: string;
 }
 export interface Warehouse {
-  id: string; type: 'KEEP' | 'CARAVAN' | 'EXCHANGE'; empireId: string; regionId: string | null;
+  id: number; type: 'KEEP' | 'CARAVAN' | 'EXCHANGE'; empireId: number; regionId: number | null;
   cap: number; items: WarehouseItem[];
 }
 export interface Keep {
-  id: string; name: string; empireId: string; plotId: string; buildingSlotCount: number; createdAt: string;
-  warehouseId: string | null;
+  id: number; name: string; empireId: number; plotId: number; buildingSlotCount: number; createdAt: string;
+  warehouseId: number | null;
   buildings: Building[]; warehouse: Warehouse | null; productionOrders: ProductionOrder[];
   plot?: Plot;
 }
 export interface CaravanWithCargo {
-  id: string; empireId: string; name: string; animalType: string; animalCount: number;
-  locationType: 'KEEP' | 'EXCHANGE' | 'PLOT'; locationId: string;
+  id: number; empireId: number; name: string; animalType: string; animalCount: number;
+  locationType: 'KEEP' | 'EXCHANGE' | 'PLOT'; locationId: number;
   status: 'IDLE' | 'IN_TRANSIT';
-  destType: 'KEEP' | 'EXCHANGE' | 'PLOT' | null; destId: string | null;
+  destType: 'KEEP' | 'EXCHANGE' | 'PLOT' | null; destId: number | null;
   departedAt: string | null; arrivesAt: string | null;
-  warehouseId: string | null;
+  warehouseId: number | null;
   warehouse: Warehouse | null;
 }
 export interface CaravanCapacity { usedWeight: number; maxWeight: number }
 export interface ProductionTask {
-  id: string; buildingId: string; keepId: string; recipeKey: string;
+  id: number; buildingId: number; keepId: number; recipeKey: string;
   startedAt: string; completesAt: string;
   progressAtUpdate: number; updatedAt: string; speedSnapshot: number;
 }
 export interface Building {
-  id: string; keepId: string; buildingType: string; level: number; slotIndex: number;
+  id: number; keepId: number; buildingType: string; level: number; slotIndex: number;
   isActive: boolean; isDormant: boolean; health: number; workersAssigned: number; productionProgress: number;
   productionTask: ProductionTask | null;
 }
 export interface Storage { usedWeight: number; maxWeight: number }
-export interface ProductionOrder { id: string; keepId: string; buildingType: string; recipeKey: string; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity: number | null; producedQuantity: number; position: number }
-export interface ExchangeListing { id: string; empireId: string | null; regionId: string; resourceType: string; quantity: number; pricePerUnit: number; fulfilledQty: number; status: string; createdAt: string }
+export interface ProductionOrder { id: number; keepId: number; buildingType: string; recipeKey: string; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity: number | null; producedQuantity: number; position: number }
+export interface ExchangeListing { id: number; empireId: number | null; regionId: number; resourceType: string; quantity: number; pricePerUnit: number; fulfilledQty: number; status: string; createdAt: string }
 export interface AdminStatus { bypassEnabled: boolean; lastTick: { tickNumber: number; processedAt: string; durationMs: number } | null; goldBalance: number; tickIntervalSeconds: number }
 export interface TickResult { tickNumber: number; durationMs: number; produced: number; delivered: number }
 export interface AddOrderBody { recipeKey: string; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity?: number }
 
 export interface EmpireBootstrap {
-  id: string;
+  id: number;
   name: string;
   goldBalance: number;
   keeps: Array<{
-    id: string; name: string; plotId: string; warehouseId: string | null;
-    plot?: { id: string; name: string; districtId: string; district?: { id: string; name: string; regionId: string } | null } | null;
+    id: number; name: string; plotId: number; warehouseId: number | null;
+    plot?: { id: number; name: string; districtId: number; district?: { id: number; name: string; regionId: number } | null } | null;
   }>;
   caravans: CaravanWithCargo[];
-  warehouses: Array<{ id: string; regionId: string | null; cap: number }>;
+  warehouses: Array<{ id: number; regionId: number | null; cap: number }>;
 }
 
 export interface AdminPlayer {
-  id: string; email: string; isAdmin: boolean; createdAt: string; lastActiveAt: string; googleId: string | null;
-  empire: { id: string; name: string; goldBalance: number; _count: { keeps: number; caravans: number } } | null;
+  id: number; email: string; isAdmin: boolean; createdAt: string; lastActiveAt: string; googleId: string | null;
+  empire: { id: number; name: string; goldBalance: number; _count: { keeps: number; caravans: number } } | null;
 }
 export interface AdminPlayerDetail {
-  id: string; email: string; isAdmin: boolean; createdAt: string; lastActiveAt: string; googleId: string | null;
+  id: number; email: string; isAdmin: boolean; createdAt: string; lastActiveAt: string; googleId: string | null;
   empire: {
-    id: string; name: string; goldBalance: number;
+    id: number; name: string; goldBalance: number;
     keeps: (Keep & { plot: (Plot & { district: { name: string } | null }) | null })[];
     caravans: CaravanWithCargo[];
     warehouses: Warehouse[];

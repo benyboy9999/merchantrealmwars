@@ -10,7 +10,8 @@ chatRouter.use(requireAuth);
 chatRouter.get('/:channelType', async (req, res, next) => {
   try {
     const { page, limit } = PaginationSchema.parse(req.query);
-    const channelId = typeof req.query['channelId'] === 'string' ? req.query['channelId'] : null;
+    const rawChannelId = req.query['channelId'];
+    const channelId = typeof rawChannelId === 'string' && rawChannelId !== '' ? parseInt(rawChannelId) : null;
 
     const messages = await db.chatMessage.findMany({
       where: {

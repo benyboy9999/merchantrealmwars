@@ -14,7 +14,7 @@ import { startTask } from '../../services/production-timers.js';
 export const keepRouter = Router();
 keepRouter.use(requireAuth);
 
-function empireGuard(empireId: string | null | undefined, res: import('express').Response): empireId is string {
+function empireGuard(empireId: number | null | undefined, res: import('express').Response): empireId is number {
   if (!empireId) { res.status(403).json({ error: 'Create an empire first' }); return false; }
   return true;
 }
@@ -42,7 +42,7 @@ keepRouter.get('/', async (req, res, next) => {
 // ── Create keep ──────────────────────────────────────────────────────────────
 keepRouter.post('/', async (req, res, next) => {
   try {
-    const { plotId, name } = z.object({ plotId: z.string(), name: z.string().min(1).max(40) }).parse(req.body);
+    const { plotId, name } = z.object({ plotId: z.number().int(), name: z.string().min(1).max(40) }).parse(req.body);
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
 
@@ -65,11 +65,12 @@ keepRouter.post('/', async (req, res, next) => {
 // ── Keep detail ──────────────────────────────────────────────────────────────
 keepRouter.get('/:id', async (req, res, next) => {
   try {
+    const id       = parseInt(req.params['id']!);
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
     const [keep, empire] = await Promise.all([
       db.keep.findUnique({
-        where:   { id: req.params['id'], empireId },
+        where:   { id, empireId },
         include: {
           plot:             { include: { district: true } },
           buildings:        { orderBy: { slotIndex: 'asc' }, include: { productionTask: true } },
@@ -97,9 +98,10 @@ keepRouter.post('/:id/buildings', async (req, res, next) => {
       slotIndex:    z.number().int().min(0),
     }).parse(req.body);
 
+    const id       = parseInt(req.params['id']!);
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
-    const keep = await db.keep.findUnique({ where: { id: req.params['id'], empireId } });
+    const keep = await db.keep.findUnique({ where: { id, empireId } });
     if (!keep) { res.status(404).json({ error: 'Keep not found' }); return; }
     if (slotIndex >= keep.buildingSlotCount) { res.status(400).json({ error: 'Slot index out of range' }); return; }
 
@@ -148,9 +150,10 @@ keepRouter.post('/:id/buildings', async (req, res, next) => {
 // ── Unlock building slot ─────────────────────────────────────────────────────
 keepRouter.post('/:id/unlock-slot', async (req, res, next) => {
   try {
+    const id       = parseInt(req.params['id']!);
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
-    const keep = await db.keep.findUnique({ where: { id: req.params['id'], empireId } });
+    const keep = await db.keep.findUnique({ where: { id, empireId } });
     if (!keep) { res.status(404).json({ error: 'Keep not found' }); return; }
     if (keep.buildingSlotCount >= KEEP_MAX_BUILDING_SLOTS) {
       res.status(400).json({ error: 'All building slots already unlocked' }); return;
@@ -185,11 +188,12 @@ keepRouter.post('/:id/unlock-slot', async (req, res, next) => {
 keepRouter.patch('/:id', async (req, res, next) => {
   try {
     const { name } = z.object({ name: z.string().min(1).max(40) }).parse(req.body);
+    const id       = parseInt(req.params['id']!);
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
-    const existing = await db.keep.findUnique({ where: { id: req.params['id'], empireId } });
+    const existing = await db.keep.findUnique({ where: { id, empireId } });
     if (!existing) { res.status(404).json({ error: 'Keep not found' }); return; }
-    const keep = await db.keep.update({ where: { id: req.params['id'] }, data: { name } });
+    const keep = await db.keep.update({ where: { id }, data: { name } });
     res.json({ keep });
   } catch (err) { next(err); }
 });
@@ -197,10 +201,12 @@ keepRouter.patch('/:id', async (req, res, next) => {
 // ── Demolish building ────────────────────────────────────────────────────────
 keepRouter.delete('/:keepId/buildings/:buildingId', async (req, res, next) => {
   try {
-    const empireId = req.auth!.empireId;
+    const keepId     = parseInt(req.params['keepId']!);
+    const buildingId = parseInt(req.params['buildingId']!);
+    const empireId   = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
     const building = await db.building.findFirst({
-      where: { id: req.params['buildingId'], keep: { id: req.params['keepId'], empireId } },
+      where: { id: buildingId, keep: { id: keepId, empireId } },
     });
     if (!building) { res.status(404).json({ error: 'Building not found' }); return; }
 
@@ -208,7 +214,7 @@ keepRouter.delete('/:keepId/buildings/:buildingId', async (req, res, next) => {
       await tx.building.delete({ where: { id: building.id } });
       // Decrease warehouse cap when a Warehouse building is demolished
       if (building.buildingType === 'WAREHOUSE') {
-        const keep = await tx.keep.findUnique({ where: { id: req.params['keepId'] } });
+        const keep = await tx.keep.findUnique({ where: { id: keepId } });
         if (keep?.warehouseId) {
           await tx.warehouse.update({
             where: { id: keep.warehouseId },
@@ -224,11 +230,13 @@ keepRouter.delete('/:keepId/buildings/:buildingId', async (req, res, next) => {
 // ── Assign workers ────────────────────────────────────────────────────────────
 keepRouter.patch('/:keepId/buildings/:buildingId/workers', async (req, res, next) => {
   try {
-    const { count } = z.object({ count: z.number().int().min(0) }).parse(req.body);
-    const empireId  = req.auth!.empireId;
+    const { count }  = z.object({ count: z.number().int().min(0) }).parse(req.body);
+    const keepId     = parseInt(req.params['keepId']!);
+    const buildingId = parseInt(req.params['buildingId']!);
+    const empireId   = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
     const existing = await db.building.findFirst({
-      where: { id: req.params['buildingId'], keep: { id: req.params['keepId'], empireId } },
+      where: { id: buildingId, keep: { id: keepId, empireId } },
     });
     if (!existing) { res.status(404).json({ error: 'Building not found' }); return; }
     const building = await db.building.update({ where: { id: existing.id }, data: { workersAssigned: count } });
@@ -239,10 +247,12 @@ keepRouter.patch('/:keepId/buildings/:buildingId/workers', async (req, res, next
 // ── Repair building ───────────────────────────────────────────────────────────
 keepRouter.post('/:keepId/buildings/:buildingId/repair', async (req, res, next) => {
   try {
-    const empireId = req.auth!.empireId;
+    const keepId     = parseInt(req.params['keepId']!);
+    const buildingId = parseInt(req.params['buildingId']!);
+    const empireId   = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
     const building = await db.building.findFirst({
-      where: { id: req.params['buildingId'], keep: { id: req.params['keepId'], empireId } },
+      where: { id: buildingId, keep: { id: keepId, empireId } },
     });
     if (!building) { res.status(404).json({ error: 'Building not found' }); return; }
     if (building.health >= 100) { res.status(400).json({ error: 'Building is already at full health' }); return; }
@@ -251,7 +261,7 @@ keepRouter.post('/:keepId/buildings/:buildingId/repair', async (req, res, next) 
     if (!constructionCost) { res.status(400).json({ error: 'No construction cost defined for this building type' }); return; }
 
     const repairCost  = calculateRepairCost(constructionCost, building.level, building.health);
-    const keep        = await db.keep.findUnique({ where: { id: req.params['keepId'] } });
+    const keep        = await db.keep.findUnique({ where: { id: keepId } });
     const warehouseId = keep?.warehouseId!;
 
     const items    = await db.warehouseItem.findMany({ where: { warehouseId } });
@@ -281,8 +291,9 @@ keepRouter.post('/:keepId/buildings/:buildingId/repair', async (req, res, next) 
 // ── Production queue ──────────────────────────────────────────────────────────
 keepRouter.get('/:id/queue/:buildingType', async (req, res, next) => {
   try {
+    const keepId = parseInt(req.params['id']!);
     const orders = await db.productionOrder.findMany({
-      where:   { keepId: req.params['id'], buildingType: req.params['buildingType'] },
+      where:   { keepId, buildingType: req.params['buildingType'] },
       orderBy: [{ orderType: 'asc' }, { position: 'asc' }],
     });
     res.json({ orders });
@@ -302,19 +313,20 @@ keepRouter.post('/:id/queue/:buildingType', async (req, res, next) => {
       return;
     }
 
+    const keepId   = parseInt(req.params['id']!);
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
-    const keepOwned = await db.keep.findUnique({ where: { id: req.params['id'], empireId } });
+    const keepOwned = await db.keep.findUnique({ where: { id: keepId, empireId } });
     if (!keepOwned) { res.status(404).json({ error: 'Keep not found' }); return; }
 
     const last = await db.productionOrder.findFirst({
-      where:   { keepId: req.params['id'], buildingType: req.params['buildingType'] },
+      where:   { keepId, buildingType: req.params['buildingType'] },
       orderBy: { position: 'desc' },
     });
 
     const order = await db.productionOrder.create({
       data: {
-        keepId:           req.params['id'],
+        keepId,
         buildingType:     req.params['buildingType'],
         recipeKey,
         orderType,
@@ -326,11 +338,11 @@ keepRouter.post('/:id/queue/:buildingType', async (req, res, next) => {
 
     // If this building has no active ProductionTask, start one now
     const building = await db.building.findFirst({
-      where: { keepId: req.params['id'], buildingType: req.params['buildingType'], isActive: true, isDormant: false },
+      where: { keepId, buildingType: req.params['buildingType'], isActive: true, isDormant: false },
       include: { productionTask: true },
     });
     if (building && !building.productionTask) {
-      await startTask(building.id, req.params['id']!, recipeKey);
+      await startTask(building.id, keepId, recipeKey);
     }
 
     res.status(201).json({ order });
@@ -339,10 +351,12 @@ keepRouter.post('/:id/queue/:buildingType', async (req, res, next) => {
 
 keepRouter.delete('/:keepId/queue/:orderId', async (req, res, next) => {
   try {
+    const keepId  = parseInt(req.params['keepId']!);
+    const orderId = parseInt(req.params['orderId']!);
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
     const order = await db.productionOrder.findFirst({
-      where: { id: req.params['orderId'], keep: { id: req.params['keepId'], empireId } },
+      where: { id: orderId, keep: { id: keepId, empireId } },
     });
     if (!order) { res.status(404).json({ error: 'Order not found' }); return; }
     await db.productionOrder.delete({ where: { id: order.id } });

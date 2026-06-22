@@ -2,21 +2,22 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { api } from '../services/api.js';
+import { REGION_IDS } from '@merchant-realms/shared';
 
 export default function MapPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [newKeepName, setNewKeepName] = useState('');
-  const [selectedPlot, setSelectedPlot] = useState<string | null>(null);
+  const [selectedPlot, setSelectedPlot] = useState<number | null>(null);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['districts'],
-    queryFn: () => api.districts('CENTRAL'),
+    queryFn: () => api.districts(REGION_IDS.CENTRAL),
     staleTime: 60_000,
   });
 
   const createKeep = useMutation({
-    mutationFn: ({ plotId, name }: { plotId: string; name: string }) => api.createKeep(plotId, name),
+    mutationFn: ({ plotId, name }: { plotId: number; name: string }) => api.createKeep(plotId, name),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['districts'] }); setSelectedPlot(null); setNewKeepName(''); },
   });
 

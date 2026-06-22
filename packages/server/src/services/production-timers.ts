@@ -3,13 +3,13 @@ import { WsEvent, RECIPE_BY_KEY } from '@merchant-realms/shared';
 import { db } from '../db/client.js';
 
 let io: Server | null = null;
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
 export function initProductionTimers(socketServer: Server): void {
   io = socketServer;
 }
 
-export function scheduleCompletion(buildingId: string, completesAt: Date): void {
+export function scheduleCompletion(buildingId: number, completesAt: Date): void {
   const existing = timers.get(buildingId);
   if (existing) clearTimeout(existing);
 
@@ -17,12 +17,12 @@ export function scheduleCompletion(buildingId: string, completesAt: Date): void 
   timers.set(buildingId, setTimeout(() => void complete(buildingId), delayMs));
 }
 
-export function cancelCompletion(buildingId: string): void {
+export function cancelCompletion(buildingId: number): void {
   const t = timers.get(buildingId);
   if (t) { clearTimeout(t); timers.delete(buildingId); }
 }
 
-async function complete(buildingId: string): Promise<void> {
+async function complete(buildingId: number): Promise<void> {
   timers.delete(buildingId);
 
   const task = await db.productionTask.findUnique({
@@ -115,7 +115,7 @@ async function complete(buildingId: string): Promise<void> {
   await scheduleNextCycle(buildingId, task.keepId, task.building.buildingType);
 }
 
-async function scheduleNextCycle(buildingId: string, keepId: string, buildingType: string): Promise<void> {
+async function scheduleNextCycle(buildingId: number, keepId: number, buildingType: string): Promise<void> {
   const nextOrder = await db.productionOrder.findFirst({
     where:   { keepId, buildingType },
     orderBy: { position: 'asc' },
@@ -157,8 +157,8 @@ export async function rescheduleActiveTasks(): Promise<void> {
 // Creates a ProductionTask for a building that has no active task but has
 // queued orders. Called from the route when an order is added to an idle building.
 export async function startTask(
-  buildingId: string,
-  keepId:     string,
+  buildingId: number,
+  keepId:     number,
   recipeKey:  string,
 ): Promise<void> {
   const recipe = RECIPE_BY_KEY[recipeKey];

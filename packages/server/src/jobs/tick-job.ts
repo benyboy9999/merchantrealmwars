@@ -65,7 +65,7 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
   const decayThisTick = DURABILITY_CONSTANTS.decayPerCycle * (config.TICK_INTERVAL_SECONDS / BASE_CYCLE_SECONDS);
 
   // ── Pre-pass: empire-wide weighted workforce for overhead ────────────────────
-  const empireWeightedWorkforce = new Map<string, number>();
+  const empireWeightedWorkforce = new Map<number, number>();
   for (const keep of keeps) {
     let keepWeighted = 0;
     for (const b of keep.buildings) {
@@ -176,7 +176,7 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
       const infiniteOrders  = orders.filter((o) => o.orderType === 'INFINITE');
 
       let activeRecipeKey: string | null = null;
-      let activeOrderId: string | null = null;
+      let activeOrderId: number | null = null;
 
       if (numericalOrders.length > 0) {
         activeRecipeKey = numericalOrders[0]!.recipeKey;

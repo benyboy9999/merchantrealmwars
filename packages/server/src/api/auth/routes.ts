@@ -133,9 +133,9 @@ authRouter.post('/refresh', async (req, res, next) => {
       return;
     }
 
-    let payload: { playerId: string };
+    let payload: { playerId: number };
     try {
-      payload = jwt.verify(refreshToken, config.JWT_SECRET) as { playerId: string };
+      payload = jwt.verify(refreshToken, config.JWT_SECRET) as { playerId: number };
     } catch {
       res.status(401).json({ error: 'Invalid or expired refresh token' });
       return;

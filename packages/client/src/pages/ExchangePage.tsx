@@ -3,15 +3,15 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api.js';
 import type { ExchangeListing } from '../services/api.js';
-import { RESOURCE_NAMES } from '@merchant-realms/shared';
+import { RESOURCE_NAMES, REGION_IDS } from '@merchant-realms/shared';
 import WarehousePanel from '../components/WarehousePanel.js';
 
 const REGIONS = [
-  { id: 'CENTRAL', name: 'Central' },
-  { id: 'NE',      name: 'Northeast' },
-  { id: 'NW',      name: 'Northwest' },
-  { id: 'SW',      name: 'Southwest' },
-  { id: 'SE',      name: 'Southeast' },
+  { id: REGION_IDS.CENTRAL, name: 'Central'   },
+  { id: REGION_IDS.NE,      name: 'Northeast' },
+  { id: REGION_IDS.NW,      name: 'Northwest' },
+  { id: REGION_IDS.SW,      name: 'Southwest' },
+  { id: REGION_IDS.SE,      name: 'Southeast' },
 ] as const;
 
 const rName = (rt: string) => RESOURCE_NAMES[rt as keyof typeof RESOURCE_NAMES] ?? rt;
@@ -19,10 +19,10 @@ const rName = (rt: string) => RESOURCE_NAMES[rt as keyof typeof RESOURCE_NAMES] 
 export default function ExchangePage() {
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
-  const initialRegion = REGIONS.find((r) => r.id === searchParams.get('region'))?.id ?? 'CENTRAL';
-  const [regionId, setRegionId]   = useState<string>(initialRegion);
+  const initialRegion = REGIONS.find((r) => r.id === parseInt(searchParams.get('region') ?? ''))?.id ?? REGION_IDS.CENTRAL;
+  const [regionId, setRegionId]   = useState<number>(initialRegion);
   const [selected, setSelected]   = useState<string | null>(null); // resourceType
-  const [buyListingId, setBuyListingId] = useState<string | null>(null);
+  const [buyListingId, setBuyListingId] = useState<number | null>(null);
   const [buyQty, setBuyQty]       = useState('');
   const [listQty, setListQty]     = useState('');
   const [listPrice, setListPrice] = useState('');
@@ -58,7 +58,7 @@ export default function ExchangePage() {
   });
 
   const cancelListing = useMutation({
-    mutationFn: (id: string) => api.cancelListing(id),
+    mutationFn: (id: number) => api.cancelListing(id),
     onSuccess: invalidate,
   });
 
@@ -80,7 +80,7 @@ export default function ExchangePage() {
   const warehouseQty     = selected ? (storageMap.get(selected) ?? 0) : 0;
   const activeBuyListing = buyListingId ? allListings.find((l) => l.id === buyListingId) ?? null : null;
 
-  const switchRegion = (id: string) => {
+  const switchRegion = (id: number) => {
     setRegionId(id);
     setSelected(null);
     setBuyListingId(null);
@@ -124,7 +124,7 @@ export default function ExchangePage() {
       <WarehousePanel
         locationType="EXCHANGE"
         locationId={regionId}
-        warehouseId={storageData?.warehouse?.id ?? ''}
+        warehouseId={storageData?.warehouse?.id ?? 0}
         locationLabel={`${REGIONS.find((r) => r.id === regionId)?.name ?? regionId} Warehouse`}
         inventory={inventory}
         goldBalance={goldBalance}
@@ -233,7 +233,7 @@ export default function ExchangePage() {
                       <tbody>
                         {resourceListings
                           .sort((a, b) => a.pricePerUnit - b.pricePerUnit)
-                          .map((listing) => {
+                          .map((listing: ExchangeListing) => {
                             const remaining = listing.quantity - listing.fulfilledQty;
                             const isSelected = buyListingId === listing.id;
                             const isNpc = listing.empireId === null;

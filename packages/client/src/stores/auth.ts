@@ -4,12 +4,12 @@ import { persist } from 'zustand/middleware';
 interface AuthState {
   token: string | null;
   refreshToken: string | null;
-  empireId: string | null;
+  empireId: number | null;
   empireName: string | null;
 
-  setAuth: (token: string, refreshToken: string, empireId: string | null, empireName: string | null) => void;
+  setAuth: (token: string, refreshToken: string, empireId: number | null, empireName: string | null) => void;
   setTokens: (token: string, refreshToken: string) => void;
-  setEmpire: (empireId: string, empireName: string) => void;
+  setEmpire: (empireId: number, empireName: string) => void;
   logout: () => void;
 }
 

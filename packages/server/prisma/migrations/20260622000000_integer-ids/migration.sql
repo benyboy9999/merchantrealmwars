@@ -1,8 +1,5 @@
 -- CreateEnum
-CREATE TYPE "RegionId" AS ENUM ('CENTRAL', 'EXTRACTION', 'FARMING', 'CRAFTING');
-
--- CreateEnum
-CREATE TYPE "RegionBonusType" AS ENUM ('NONE', 'EXTRACTION', 'FARMING', 'CRAFTING');
+CREATE TYPE "WarehouseType" AS ENUM ('KEEP', 'CARAVAN', 'EXCHANGE');
 
 -- CreateEnum
 CREATE TYPE "CaravanStatus" AS ENUM ('IDLE', 'IN_TRANSIT');
@@ -30,90 +27,117 @@ CREATE TYPE "ChatChannelType" AS ENUM ('GLOBAL', 'GUILD', 'REGION');
 
 -- CreateTable
 CREATE TABLE "Player" (
-    "id" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
     "username" TEXT NOT NULL,
     "email" TEXT NOT NULL,
-    "passwordHash" TEXT NOT NULL,
+    "passwordHash" TEXT,
+    "googleId" TEXT,
+    "isAdmin" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "lastActiveAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "Player_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "RefreshToken" (
-    "id" TEXT NOT NULL,
-    "playerId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "playerId" INTEGER NOT NULL,
     "token" TEXT NOT NULL,
     "expiresAt" TIMESTAMP(3) NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "RefreshToken_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Region" (
-    "id" TEXT NOT NULL,
+    "id" INTEGER NOT NULL,
     "name" TEXT NOT NULL,
-    "bonusType" "RegionBonusType" NOT NULL,
     "guildControllable" BOOLEAN NOT NULL,
-
     CONSTRAINT "Region_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "District" (
-    "id" TEXT NOT NULL,
-    "regionId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "regionId" INTEGER NOT NULL,
     "name" TEXT NOT NULL,
     "bonusDescription" TEXT NOT NULL,
+    "tier" INTEGER NOT NULL DEFAULT 1,
     "q" INTEGER NOT NULL,
     "r" INTEGER NOT NULL,
     "x" DOUBLE PRECISION NOT NULL,
     "y" DOUBLE PRECISION NOT NULL,
-
     CONSTRAINT "District_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Plot" (
-    "id" TEXT NOT NULL,
-    "districtId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "districtId" INTEGER NOT NULL,
     "name" TEXT NOT NULL,
     "bonusDescription" TEXT NOT NULL,
+    "tier" INTEGER NOT NULL DEFAULT 1,
+    "isCenter" BOOLEAN NOT NULL DEFAULT false,
     "x" DOUBLE PRECISION NOT NULL,
     "y" DOUBLE PRECISION NOT NULL,
-
     CONSTRAINT "Plot_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
+CREATE TABLE "PlotTrait" (
+    "id" SERIAL NOT NULL,
+    "plotId" INTEGER NOT NULL,
+    "traitType" TEXT NOT NULL,
+    "baseValue" DOUBLE PRECISION NOT NULL,
+    CONSTRAINT "PlotTrait_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Warehouse" (
+    "id" SERIAL NOT NULL,
+    "type" "WarehouseType" NOT NULL,
+    "empireId" INTEGER NOT NULL,
+    "regionId" INTEGER,
+    "cap" DOUBLE PRECISION NOT NULL,
+    CONSTRAINT "Warehouse_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "WarehouseItem" (
+    "id" SERIAL NOT NULL,
+    "warehouseId" INTEGER NOT NULL,
+    "resourceType" TEXT NOT NULL,
+    "quantity" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "WarehouseItem_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Empire" (
-    "id" TEXT NOT NULL,
-    "playerId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "playerId" INTEGER NOT NULL,
     "name" TEXT NOT NULL,
     "goldBalance" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "Empire_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Keep" (
-    "id" TEXT NOT NULL,
-    "empireId" TEXT NOT NULL,
-    "plotId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "empireId" INTEGER NOT NULL,
+    "plotId" INTEGER NOT NULL,
     "name" TEXT NOT NULL,
     "buildingSlotCount" INTEGER NOT NULL DEFAULT 7,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
+    "warehouseId" INTEGER,
     CONSTRAINT "Keep_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Building" (
-    "id" TEXT NOT NULL,
-    "keepId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "keepId" INTEGER NOT NULL,
     "buildingType" TEXT NOT NULL,
     "level" INTEGER NOT NULL DEFAULT 1,
     "slotIndex" INTEGER NOT NULL,
@@ -122,25 +146,13 @@ CREATE TABLE "Building" (
     "health" DOUBLE PRECISION NOT NULL DEFAULT 100,
     "workersAssigned" INTEGER NOT NULL DEFAULT 0,
     "productionProgress" DOUBLE PRECISION NOT NULL DEFAULT 0,
-
     CONSTRAINT "Building_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "ResourceLedger" (
-    "id" TEXT NOT NULL,
-    "keepId" TEXT NOT NULL,
-    "resourceType" TEXT NOT NULL,
-    "quantity" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "ResourceLedger_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "ProductionOrder" (
-    "id" TEXT NOT NULL,
-    "keepId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "keepId" INTEGER NOT NULL,
     "buildingType" TEXT NOT NULL,
     "recipeKey" TEXT NOT NULL,
     "orderType" "ProductionOrderType" NOT NULL,
@@ -148,67 +160,46 @@ CREATE TABLE "ProductionOrder" (
     "producedQuantity" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "position" INTEGER NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "ProductionOrder_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "WorkerConsumptionLog" (
-    "id" TEXT NOT NULL,
-    "empireId" TEXT NOT NULL,
-    "tickId" TEXT NOT NULL,
-    "resourceType" TEXT NOT NULL,
-    "required" DOUBLE PRECISION NOT NULL,
-    "actual" DOUBLE PRECISION NOT NULL,
-    "penaltyApplied" DOUBLE PRECISION NOT NULL,
-
-    CONSTRAINT "WorkerConsumptionLog_pkey" PRIMARY KEY ("id")
+CREATE TABLE "ProductionTask" (
+    "id" SERIAL NOT NULL,
+    "buildingId" INTEGER NOT NULL,
+    "keepId" INTEGER NOT NULL,
+    "recipeKey" TEXT NOT NULL,
+    "startedAt" TIMESTAMP(3) NOT NULL,
+    "completesAt" TIMESTAMP(3) NOT NULL,
+    "progressAtUpdate" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "speedSnapshot" DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    CONSTRAINT "ProductionTask_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Caravan" (
-    "id" TEXT NOT NULL,
-    "empireId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "empireId" INTEGER NOT NULL,
     "name" TEXT NOT NULL DEFAULT 'Caravan',
     "animalType" TEXT NOT NULL DEFAULT 'MULE',
     "animalCount" INTEGER NOT NULL DEFAULT 1,
     "locationType" "CaravanLocationType" NOT NULL,
-    "locationId" TEXT NOT NULL,
+    "locationId" INTEGER NOT NULL,
     "status" "CaravanStatus" NOT NULL DEFAULT 'IDLE',
     "destType" "CaravanLocationType",
-    "destId" TEXT,
+    "destId" INTEGER,
     "departedAt" TIMESTAMP(3),
     "arrivesAt" TIMESTAMP(3),
-
+    "warehouseId" INTEGER,
     CONSTRAINT "Caravan_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "CaravanCargo" (
-    "id" TEXT NOT NULL,
-    "caravanId" TEXT NOT NULL,
-    "resourceType" TEXT NOT NULL,
-    "quantity" DOUBLE PRECISION NOT NULL,
-
-    CONSTRAINT "CaravanCargo_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ExchangeStorage" (
-    "id" TEXT NOT NULL,
-    "empireId" TEXT NOT NULL,
-    "regionId" TEXT NOT NULL,
-    "resourceType" TEXT NOT NULL,
-    "quantity" DOUBLE PRECISION NOT NULL DEFAULT 0,
-
-    CONSTRAINT "ExchangeStorage_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "MarketOrder" (
-    "id" TEXT NOT NULL,
-    "empireId" TEXT,
-    "regionId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "empireId" INTEGER,
+    "regionId" INTEGER NOT NULL,
     "orderType" "OrderType" NOT NULL,
     "resourceType" TEXT NOT NULL,
     "quantity" DOUBLE PRECISION NOT NULL,
@@ -216,327 +207,173 @@ CREATE TABLE "MarketOrder" (
     "fulfilledQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "status" "OrderStatus" NOT NULL DEFAULT 'OPEN',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "MarketOrder_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "MarketTrade" (
-    "id" TEXT NOT NULL,
-    "buyOrderId" TEXT NOT NULL,
-    "sellOrderId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "listingId" INTEGER NOT NULL,
+    "sellerEmpireId" INTEGER,
+    "buyerEmpireId" INTEGER NOT NULL,
+    "resourceType" TEXT NOT NULL,
     "quantity" DOUBLE PRECISION NOT NULL,
     "pricePerUnit" DOUBLE PRECISION NOT NULL,
-    "tradedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
+    "totalGold" DOUBLE PRECISION NOT NULL,
+    "executedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "MarketTrade_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Guild" (
-    "id" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
     "name" TEXT NOT NULL,
-    "leaderId" TEXT NOT NULL,
+    "leaderId" INTEGER NOT NULL,
     "level" INTEGER NOT NULL DEFAULT 1,
     "goldBalance" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "Guild_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "GuildMember" (
-    "id" TEXT NOT NULL,
-    "guildId" TEXT NOT NULL,
-    "playerId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "guildId" INTEGER NOT NULL,
+    "playerId" INTEGER NOT NULL,
     "role" "GuildRole" NOT NULL DEFAULT 'MEMBER',
     "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "GuildMember_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "RegionControl" (
-    "id" TEXT NOT NULL,
-    "guildId" TEXT NOT NULL,
-    "regionId" TEXT NOT NULL,
+CREATE TABLE "DistrictControl" (
+    "id" SERIAL NOT NULL,
+    "guildId" INTEGER NOT NULL,
+    "districtId" INTEGER NOT NULL,
     "weekNumber" INTEGER NOT NULL,
     "controlStart" TIMESTAMP(3) NOT NULL,
     "controlEnd" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "RegionControl_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "SpecialisationTree" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "description" TEXT NOT NULL,
-
-    CONSTRAINT "SpecialisationTree_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "SpecialisationNode" (
-    "id" TEXT NOT NULL,
-    "treeId" TEXT NOT NULL,
-    "level" INTEGER NOT NULL,
-    "bonusDescription" TEXT NOT NULL,
-    "recipeUnlocks" JSONB NOT NULL DEFAULT '[]',
-    "cost" JSONB NOT NULL,
-
-    CONSTRAINT "SpecialisationNode_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "EmpireSpecialisation" (
-    "id" TEXT NOT NULL,
-    "empireId" TEXT NOT NULL,
-    "nodeId" TEXT NOT NULL,
-    "acquiredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "EmpireSpecialisation_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "DistrictControl_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ChatMessage" (
-    "id" TEXT NOT NULL,
-    "senderId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "senderId" INTEGER NOT NULL,
     "channelType" "ChatChannelType" NOT NULL,
-    "channelId" TEXT,
+    "channelId" INTEGER,
     "content" VARCHAR(500) NOT NULL,
     "sentAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "ChatMessage_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "GameTick" (
-    "id" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
     "tickNumber" INTEGER NOT NULL,
     "processedAt" TIMESTAMP(3) NOT NULL,
     "durationMs" INTEGER NOT NULL,
-
     CONSTRAINT "GameTick_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "TaxCollection" (
-    "id" TEXT NOT NULL,
-    "regionId" TEXT NOT NULL,
-    "tickId" TEXT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "regionId" INTEGER NOT NULL,
+    "tickId" INTEGER NOT NULL,
     "totalAmount" DOUBLE PRECISION NOT NULL,
     "guildShare" DOUBLE PRECISION NOT NULL,
     "treasuryShare" DOUBLE PRECISION NOT NULL,
     "collectedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "TaxCollection_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "BuildingUpkeepLog" (
-    "id" TEXT NOT NULL,
-    "buildingId" TEXT NOT NULL,
-    "keepId" TEXT NOT NULL,
-    "tickId" TEXT NOT NULL,
-    "required" JSONB NOT NULL,
-    "actual" JSONB NOT NULL,
-    "isDormant" BOOLEAN NOT NULL,
-
-    CONSTRAINT "BuildingUpkeepLog_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Player_username_key" ON "Player"("username");
-
--- CreateIndex
 CREATE UNIQUE INDEX "Player_email_key" ON "Player"("email");
+CREATE UNIQUE INDEX "Player_googleId_key" ON "Player"("googleId");
 
--- CreateIndex
 CREATE UNIQUE INDEX "RefreshToken_token_key" ON "RefreshToken"("token");
-
--- CreateIndex
 CREATE INDEX "RefreshToken_playerId_idx" ON "RefreshToken"("playerId");
 
--- CreateIndex
+CREATE UNIQUE INDEX "District_q_r_key" ON "District"("q", "r");
 CREATE INDEX "District_regionId_idx" ON "District"("regionId");
 
--- CreateIndex
-CREATE UNIQUE INDEX "District_q_r_key" ON "District"("q", "r");
-
--- CreateIndex
 CREATE INDEX "Plot_districtId_idx" ON "Plot"("districtId");
 
--- CreateIndex
+CREATE UNIQUE INDEX "PlotTrait_plotId_traitType_key" ON "PlotTrait"("plotId", "traitType");
+CREATE INDEX "PlotTrait_plotId_idx" ON "PlotTrait"("plotId");
+
+CREATE INDEX "Warehouse_empireId_idx" ON "Warehouse"("empireId");
+CREATE INDEX "Warehouse_empireId_regionId_idx" ON "Warehouse"("empireId", "regionId");
+
+CREATE UNIQUE INDEX "WarehouseItem_warehouseId_resourceType_key" ON "WarehouseItem"("warehouseId", "resourceType");
+CREATE INDEX "WarehouseItem_warehouseId_idx" ON "WarehouseItem"("warehouseId");
+
 CREATE UNIQUE INDEX "Empire_playerId_key" ON "Empire"("playerId");
 
--- CreateIndex
+CREATE UNIQUE INDEX "Keep_warehouseId_key" ON "Keep"("warehouseId");
 CREATE INDEX "Keep_empireId_idx" ON "Keep"("empireId");
 
--- CreateIndex
+CREATE UNIQUE INDEX "Building_keepId_slotIndex_key" ON "Building"("keepId", "slotIndex");
 CREATE INDEX "Building_keepId_idx" ON "Building"("keepId");
 
--- CreateIndex
-CREATE UNIQUE INDEX "Building_keepId_slotIndex_key" ON "Building"("keepId", "slotIndex");
-
--- CreateIndex
-CREATE UNIQUE INDEX "ResourceLedger_keepId_resourceType_key" ON "ResourceLedger"("keepId", "resourceType");
-
--- CreateIndex
 CREATE INDEX "ProductionOrder_keepId_buildingType_position_idx" ON "ProductionOrder"("keepId", "buildingType", "position");
 
--- CreateIndex
-CREATE INDEX "WorkerConsumptionLog_empireId_tickId_idx" ON "WorkerConsumptionLog"("empireId", "tickId");
+CREATE UNIQUE INDEX "ProductionTask_buildingId_key" ON "ProductionTask"("buildingId");
+CREATE INDEX "ProductionTask_completesAt_idx" ON "ProductionTask"("completesAt");
+CREATE INDEX "ProductionTask_keepId_idx" ON "ProductionTask"("keepId");
 
--- CreateIndex
+CREATE UNIQUE INDEX "Caravan_warehouseId_key" ON "Caravan"("warehouseId");
 CREATE INDEX "Caravan_empireId_idx" ON "Caravan"("empireId");
-
--- CreateIndex
 CREATE INDEX "Caravan_status_arrivesAt_idx" ON "Caravan"("status", "arrivesAt");
 
--- CreateIndex
-CREATE INDEX "CaravanCargo_caravanId_idx" ON "CaravanCargo"("caravanId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "CaravanCargo_caravanId_resourceType_key" ON "CaravanCargo"("caravanId", "resourceType");
-
--- CreateIndex
-CREATE INDEX "ExchangeStorage_empireId_idx" ON "ExchangeStorage"("empireId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "ExchangeStorage_empireId_regionId_resourceType_key" ON "ExchangeStorage"("empireId", "regionId", "resourceType");
-
--- CreateIndex
 CREATE INDEX "MarketOrder_regionId_resourceType_status_idx" ON "MarketOrder"("regionId", "resourceType", "status");
-
--- CreateIndex
 CREATE INDEX "MarketOrder_empireId_idx" ON "MarketOrder"("empireId");
 
--- CreateIndex
-CREATE INDEX "MarketTrade_tradedAt_idx" ON "MarketTrade"("tradedAt");
+CREATE INDEX "MarketTrade_listingId_idx" ON "MarketTrade"("listingId");
+CREATE INDEX "MarketTrade_buyerEmpireId_idx" ON "MarketTrade"("buyerEmpireId");
+CREATE INDEX "MarketTrade_executedAt_idx" ON "MarketTrade"("executedAt");
 
--- CreateIndex
 CREATE UNIQUE INDEX "Guild_name_key" ON "Guild"("name");
 
--- CreateIndex
 CREATE UNIQUE INDEX "GuildMember_playerId_key" ON "GuildMember"("playerId");
-
--- CreateIndex
 CREATE INDEX "GuildMember_guildId_idx" ON "GuildMember"("guildId");
 
--- CreateIndex
-CREATE INDEX "RegionControl_guildId_idx" ON "RegionControl"("guildId");
+CREATE UNIQUE INDEX "DistrictControl_districtId_weekNumber_key" ON "DistrictControl"("districtId", "weekNumber");
+CREATE INDEX "DistrictControl_guildId_idx" ON "DistrictControl"("guildId");
 
--- CreateIndex
-CREATE UNIQUE INDEX "RegionControl_regionId_weekNumber_key" ON "RegionControl"("regionId", "weekNumber");
-
--- CreateIndex
-CREATE UNIQUE INDEX "SpecialisationTree_name_key" ON "SpecialisationTree"("name");
-
--- CreateIndex
-CREATE UNIQUE INDEX "SpecialisationNode_treeId_level_key" ON "SpecialisationNode"("treeId", "level");
-
--- CreateIndex
-CREATE UNIQUE INDEX "EmpireSpecialisation_empireId_nodeId_key" ON "EmpireSpecialisation"("empireId", "nodeId");
-
--- CreateIndex
 CREATE INDEX "ChatMessage_channelType_channelId_sentAt_idx" ON "ChatMessage"("channelType", "channelId", "sentAt");
 
--- CreateIndex
 CREATE UNIQUE INDEX "GameTick_tickNumber_key" ON "GameTick"("tickNumber");
-
--- CreateIndex
-CREATE INDEX "BuildingUpkeepLog_buildingId_idx" ON "BuildingUpkeepLog"("buildingId");
 
 -- AddForeignKey
 ALTER TABLE "RefreshToken" ADD CONSTRAINT "RefreshToken_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "Player"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "District" ADD CONSTRAINT "District_regionId_fkey" FOREIGN KEY ("regionId") REFERENCES "Region"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "Plot" ADD CONSTRAINT "Plot_districtId_fkey" FOREIGN KEY ("districtId") REFERENCES "District"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
+ALTER TABLE "PlotTrait" ADD CONSTRAINT "PlotTrait_plotId_fkey" FOREIGN KEY ("plotId") REFERENCES "Plot"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Warehouse" ADD CONSTRAINT "Warehouse_empireId_fkey" FOREIGN KEY ("empireId") REFERENCES "Empire"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "WarehouseItem" ADD CONSTRAINT "WarehouseItem_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "Empire" ADD CONSTRAINT "Empire_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "Player"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "Keep" ADD CONSTRAINT "Keep_empireId_fkey" FOREIGN KEY ("empireId") REFERENCES "Empire"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "Keep" ADD CONSTRAINT "Keep_plotId_fkey" FOREIGN KEY ("plotId") REFERENCES "Plot"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
+ALTER TABLE "Keep" ADD CONSTRAINT "Keep_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "Building" ADD CONSTRAINT "Building_keepId_fkey" FOREIGN KEY ("keepId") REFERENCES "Keep"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ResourceLedger" ADD CONSTRAINT "ResourceLedger_keepId_fkey" FOREIGN KEY ("keepId") REFERENCES "Keep"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "ProductionOrder" ADD CONSTRAINT "ProductionOrder_keepId_fkey" FOREIGN KEY ("keepId") REFERENCES "Keep"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "WorkerConsumptionLog" ADD CONSTRAINT "WorkerConsumptionLog_empireId_fkey" FOREIGN KEY ("empireId") REFERENCES "Empire"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "WorkerConsumptionLog" ADD CONSTRAINT "WorkerConsumptionLog_tickId_fkey" FOREIGN KEY ("tickId") REFERENCES "GameTick"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
+ALTER TABLE "ProductionTask" ADD CONSTRAINT "ProductionTask_buildingId_fkey" FOREIGN KEY ("buildingId") REFERENCES "Building"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ProductionTask" ADD CONSTRAINT "ProductionTask_keepId_fkey" FOREIGN KEY ("keepId") REFERENCES "Keep"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "Caravan" ADD CONSTRAINT "Caravan_empireId_fkey" FOREIGN KEY ("empireId") REFERENCES "Empire"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "CaravanCargo" ADD CONSTRAINT "CaravanCargo_caravanId_fkey" FOREIGN KEY ("caravanId") REFERENCES "Caravan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ExchangeStorage" ADD CONSTRAINT "ExchangeStorage_empireId_fkey" FOREIGN KEY ("empireId") REFERENCES "Empire"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
+ALTER TABLE "Caravan" ADD CONSTRAINT "Caravan_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "MarketOrder" ADD CONSTRAINT "MarketOrder_empireId_fkey" FOREIGN KEY ("empireId") REFERENCES "Empire"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "MarketOrder" ADD CONSTRAINT "MarketOrder_regionId_fkey" FOREIGN KEY ("regionId") REFERENCES "Region"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "MarketTrade" ADD CONSTRAINT "MarketTrade_buyOrderId_fkey" FOREIGN KEY ("buyOrderId") REFERENCES "MarketOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "MarketTrade" ADD CONSTRAINT "MarketTrade_sellOrderId_fkey" FOREIGN KEY ("sellOrderId") REFERENCES "MarketOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
+ALTER TABLE "MarketTrade" ADD CONSTRAINT "MarketTrade_listingId_fkey" FOREIGN KEY ("listingId") REFERENCES "MarketOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "MarketTrade" ADD CONSTRAINT "MarketTrade_sellerEmpireId_fkey" FOREIGN KEY ("sellerEmpireId") REFERENCES "Empire"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "MarketTrade" ADD CONSTRAINT "MarketTrade_buyerEmpireId_fkey" FOREIGN KEY ("buyerEmpireId") REFERENCES "Empire"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "Guild" ADD CONSTRAINT "Guild_leaderId_fkey" FOREIGN KEY ("leaderId") REFERENCES "Player"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "GuildMember" ADD CONSTRAINT "GuildMember_guildId_fkey" FOREIGN KEY ("guildId") REFERENCES "Guild"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "GuildMember" ADD CONSTRAINT "GuildMember_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "Player"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "RegionControl" ADD CONSTRAINT "RegionControl_guildId_fkey" FOREIGN KEY ("guildId") REFERENCES "Guild"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "RegionControl" ADD CONSTRAINT "RegionControl_regionId_fkey" FOREIGN KEY ("regionId") REFERENCES "Region"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "SpecialisationNode" ADD CONSTRAINT "SpecialisationNode_treeId_fkey" FOREIGN KEY ("treeId") REFERENCES "SpecialisationTree"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "EmpireSpecialisation" ADD CONSTRAINT "EmpireSpecialisation_empireId_fkey" FOREIGN KEY ("empireId") REFERENCES "Empire"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "EmpireSpecialisation" ADD CONSTRAINT "EmpireSpecialisation_nodeId_fkey" FOREIGN KEY ("nodeId") REFERENCES "SpecialisationNode"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
+ALTER TABLE "DistrictControl" ADD CONSTRAINT "DistrictControl_guildId_fkey" FOREIGN KEY ("guildId") REFERENCES "Guild"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "DistrictControl" ADD CONSTRAINT "DistrictControl_districtId_fkey" FOREIGN KEY ("districtId") REFERENCES "District"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "ChatMessage" ADD CONSTRAINT "ChatMessage_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "Player"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "TaxCollection" ADD CONSTRAINT "TaxCollection_regionId_fkey" FOREIGN KEY ("regionId") REFERENCES "Region"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "TaxCollection" ADD CONSTRAINT "TaxCollection_tickId_fkey" FOREIGN KEY ("tickId") REFERENCES "GameTick"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "BuildingUpkeepLog" ADD CONSTRAINT "BuildingUpkeepLog_buildingId_fkey" FOREIGN KEY ("buildingId") REFERENCES "Building"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "BuildingUpkeepLog" ADD CONSTRAINT "BuildingUpkeepLog_keepId_fkey" FOREIGN KEY ("keepId") REFERENCES "Keep"("id") ON DELETE CASCADE ON UPDATE CASCADE;

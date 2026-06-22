@@ -29,7 +29,7 @@ regionRouter.get('/districts', async (_req, res, next) => {
 regionRouter.get('/:regionId/districts', async (req, res, next) => {
   try {
     const districts = await db.district.findMany({
-      where: { regionId: req.params['regionId'] },
+      where: { regionId: parseInt(req.params['regionId']!) },
       include: {
         plots: {
           include: {

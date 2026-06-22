@@ -3,7 +3,7 @@ import type { RegionId, ResourceType, BuildingType, VehicleType, CaravanStatus, 
 // ── Core entities ──────────────────────────────────────────────────────────
 
 export interface Player {
-  id: string;
+  id: number;
   username: string;
   email: string;
   createdAt: Date;
@@ -11,23 +11,23 @@ export interface Player {
 }
 
 export interface Empire {
-  id: string;
-  playerId: string;
+  id: number;
+  playerId: number;
   name: string;
   goldBalance: number;
   createdAt: Date;
 }
 
 export interface Region {
-  id: RegionId;
+  id: number;
   name: string;
   bonusType: string;
   guildControllable: boolean;
 }
 
 export interface District {
-  id: string;
-  regionId: RegionId;
+  id: number;
+  regionId: number;
   name: string;
   bonusDescription: string;
   tier: number;
@@ -38,8 +38,8 @@ export interface District {
 }
 
 export interface Plot {
-  id: string;
-  districtId: string;
+  id: number;
+  districtId: number;
   name: string;
   bonusDescription: string;
   tier: number;
@@ -48,25 +48,25 @@ export interface Plot {
 }
 
 export interface Keep {
-  id: string;
-  empireId: string;
-  plotId: string;
+  id: number;
+  empireId: number;
+  plotId: number;
   name: string;
   buildingSlotCount: number;
   createdAt: Date;
 }
 
 export interface BuildingSlot {
-  id: string;
-  keepId: string;
+  id: number;
+  keepId: number;
   slotIndex: number;
-  buildingId: string | null;
+  buildingId: number | null;
 }
 
 export interface Building {
-  id: string;
-  keepId: string;
-  slotId: string;
+  id: number;
+  keepId: number;
+  slotId: number;
   buildingType: BuildingType;
   level: number;
   isActive: boolean;
@@ -74,24 +74,24 @@ export interface Building {
 }
 
 export interface Housing {
-  id: string;
-  keepId: string;
+  id: number;
+  keepId: number;
   tier: WorkerTier;
   capacity: number;
   workerCount: number;
 }
 
 export interface Worker {
-  id: string;
-  keepId: string;
-  housingId: string;
+  id: number;
+  keepId: number;
+  housingId: number;
   tier: WorkerTier;
-  assignedBuildingId: string | null;
+  assignedBuildingId: number | null;
 }
 
 export interface ResourceLedgerEntry {
-  id: string;
-  keepId: string;
+  id: number;
+  keepId: number;
   resourceType: ResourceType;
   quantity: number;
   updatedAt: Date;
@@ -100,20 +100,20 @@ export interface ResourceLedgerEntry {
 // ── Transport ──────────────────────────────────────────────────────────────
 
 export interface Vehicle {
-  id: string;
-  empireId: string;
+  id: number;
+  empireId: number;
   vehicleType: VehicleType;
   fuelLevel: number;
   durability: number;
 }
 
 export interface Caravan {
-  id: string;
-  vehicleId: string;
+  id: number;
+  vehicleId: number;
   originType: CaravanLocationType;
-  originId: string;
+  originId: number;
   destType: CaravanLocationType;
-  destId: string;
+  destId: number;
   resourceType: ResourceType;
   quantity: number;
   departedAt: Date;
@@ -127,9 +127,9 @@ export type OrderType = 'BUY' | 'SELL';
 export type OrderStatus = 'OPEN' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELLED';
 
 export interface MarketOrder {
-  id: string;
-  empireId: string | null; // null = NPC order
-  regionId: RegionId;
+  id: number;
+  empireId: number | null; // null = NPC order
+  regionId: number;
   orderType: OrderType;
   resourceType: ResourceType;
   quantity: number;
@@ -140,9 +140,9 @@ export interface MarketOrder {
 }
 
 export interface MarketTrade {
-  id: string;
-  buyOrderId: string;
-  sellOrderId: string;
+  id: number;
+  buyOrderId: number;
+  sellOrderId: number;
   quantity: number;
   pricePerUnit: number;
   tradedAt: Date;
@@ -153,26 +153,26 @@ export interface MarketTrade {
 export type GuildRole = 'LEADER' | 'OFFICER' | 'MEMBER';
 
 export interface Guild {
-  id: string;
+  id: number;
   name: string;
-  leaderId: string;
+  leaderId: number;
   level: number;
   goldBalance: number;
   createdAt: Date;
 }
 
 export interface GuildMember {
-  id: string;
-  guildId: string;
-  playerId: string;
+  id: number;
+  guildId: number;
+  playerId: number;
   role: GuildRole;
   joinedAt: Date;
 }
 
 export interface RegionControl {
-  id: string;
-  guildId: string;
-  regionId: RegionId;
+  id: number;
+  guildId: number;
+  regionId: number;
   weekNumber: number;
   controlStart: Date;
   controlEnd: Date;
@@ -183,11 +183,11 @@ export interface RegionControl {
 export type ChatChannelType = 'GLOBAL' | 'GUILD' | 'REGION';
 
 export interface ChatMessage {
-  id: string;
-  senderId: string;
+  id: number;
+  senderId: number;
   senderUsername: string;
   channelType: ChatChannelType;
-  channelId: string | null;
+  channelId: number | null;
   content: string;
   sentAt: Date;
 }
@@ -195,7 +195,7 @@ export interface ChatMessage {
 // ── Tick ───────────────────────────────────────────────────────────────────
 
 export interface GameTick {
-  id: string;
+  id: number;
   tickNumber: number;
   processedAt: Date;
   durationMs: number;

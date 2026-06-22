@@ -9,8 +9,8 @@ export const inventoryRouter = Router();
 inventoryRouter.use(requireAuth);
 
 const TransferSchema = z.object({
-  fromWarehouseId: z.string(),
-  toWarehouseId:   z.string(),
+  fromWarehouseId: z.number().int(),
+  toWarehouseId:   z.number().int(),
   resourceType:    z.string(),
   quantity:        z.number().positive(),
 });
@@ -97,7 +97,7 @@ inventoryRouter.post('/transfer', async (req, res, next) => {
       ...dst,
       items: dstItem
         ? dst.items.map((x) => x.resourceType === resourceType ? { ...x, quantity: x.quantity + quantity } : x)
-        : [...dst.items, { id: 'new', warehouseId: toWarehouseId, resourceType, quantity, updatedAt: new Date() }],
+        : [...dst.items, { id: 0, warehouseId: toWarehouseId, resourceType, quantity, updatedAt: new Date() }],
     };
 
     res.json({ ok: true, fromWarehouse: updatedSrc, toWarehouse: updatedDst });

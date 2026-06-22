@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SQRT3, hexToPixel, hexDistance, pixelToHex, axialRound } from '../utils/hex.js';
 import { api } from '../services/api.js';
 import { useAuthStore } from '../stores/auth.js';
+import { REGION_IDS } from '@merchant-realms/shared';
 
 interface Camera { x: number; y: number; zoom: number; }
 
@@ -68,8 +69,8 @@ const EXCHANGE_REGION_NAME: Record<string, string> = {
   '6,0':  'Southeast Exchange',
 };
 
-const EXCHANGE_HEX_TO_REGION_ID: Record<string, string> = {
-  '0,0': 'CENTRAL', '6,-6': 'NE', '-6,0': 'NW', '-6,6': 'SW', '6,0': 'SE',
+const EXCHANGE_HEX_TO_REGION_ID: Record<string, number> = {
+  '0,0': REGION_IDS.CENTRAL, '6,-6': REGION_IDS.NE, '-6,0': REGION_IDS.NW, '-6,6': REGION_IDS.SW, '6,0': REGION_IDS.SE,
 };
 
 // ── Visual constants ──────────────────────────────────────────────────────────
@@ -144,9 +145,10 @@ const BORDER_SEGS: [number, number, number, number][] = (() => {
 })();
 
 // ── Plot dot helpers ──────────────────────────────────────────────────────────
-function dotHash(s: string): number {
+function dotHash(s: string | number): number {
+  const str = String(s);
   let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
   return Math.abs(h);
 }
 
@@ -161,12 +163,12 @@ const DISTRICT_NAME_ZOOM_FULL = 2.3;
 // Y offset to the bottom flat edge of the hex interior (textBaseline = 'bottom')
 const DISTRICT_NAME_Y = INNER_R * Math.sin(Math.PI / 3) - 2; // ~31.8 world units
 
-type PlotKeep = { id: string; name: string; empireId: string };
+type PlotKeep = { id: number; name: string; empireId: number };
 
 type PlotDot = {
   worldX: number; worldY: number;
   type: 'plot' | 'exchange' | 'center';
-  plotId: string; plotName: string;
+  plotId: string | number; plotName: string;
   districtName: string;
   keeps: PlotKeep[];
   occupied: boolean;
@@ -182,7 +184,7 @@ function draw(
   canvas: HTMLCanvasElement,
   cam: Camera,
   hoveredHex: [number, number] | null,
-  hoveredPlotId: string | null,
+  hoveredPlotId: string | number | null,
   plotDots: PlotDot[],
   districtInfo: Map<string, DistrictEntry>,
 ) {
@@ -307,7 +309,7 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
   });
 
   const dispatchMut = useMutation({
-    mutationFn: (caravanId: string) => api.caravanDispatch(caravanId, 'PLOT', dot.plotId),
+    mutationFn: (caravanId: number) => api.caravanDispatch(caravanId, 'PLOT', dot.plotId as number),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['empire'] });
       onClose();
@@ -317,8 +319,8 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
   const idleCaravans = (empireData?.empire.caravans ?? []).filter((c) => c.status === 'IDLE');
 
   if (dot.type === 'exchange') {
-    const hexKey  = dot.plotId.replace('exchange-', '');
-    const regionId = EXCHANGE_HEX_TO_REGION_ID[hexKey] ?? 'CENTRAL';
+    const hexKey  = (dot.plotId as string).replace('exchange-', '');
+    const regionId = EXCHANGE_HEX_TO_REGION_ID[hexKey] ?? REGION_IDS.CENTRAL;
     return (
       <Overlay onClose={onClose}>
         <PanelHeader title={dot.plotName} subtitle="Regional Exchange" onClose={onClose} />

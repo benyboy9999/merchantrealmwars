@@ -64,7 +64,7 @@ enum ChatChannelType {
 // ── Auth ───────────────────────────────────────────────────────────────────
 
 model Player {
-  id           String   @id @default(cuid())
+  id           Int      @id @default(autoincrement())
   username     String   @unique
   email        String   @unique
   passwordHash String?
@@ -81,8 +81,8 @@ model Player {
 }
 
 model RefreshToken {
-  id        String   @id @default(cuid())
-  playerId  String
+  id        Int      @id @default(autoincrement())
+  playerId  Int
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
@@ -94,8 +94,10 @@ model RefreshToken {
 
 // ── World ──────────────────────────────────────────────────────────────────
 
+// Region IDs are manually assigned in seed: 1=CENTRAL 2=NE 3=NW 4=SW 5=SE
+// Use REGION_IDS from @merchant-realms/shared for all references.
 model Region {
-  id                String  @id
+  id                Int     @id
   name              String
   guildControllable Boolean
 
@@ -105,8 +107,8 @@ model Region {
 }
 
 model District {
-  id               String @id
-  regionId         String
+  id               Int    @id @default(autoincrement())
+  regionId         Int
   name             String
   bonusDescription String
   tier             Int    @default(1)
@@ -124,8 +126,8 @@ model District {
 }
 
 model Plot {
-  id               String  @id
-  districtId       String
+  id               Int     @id @default(autoincrement())
+  districtId       Int
   name             String
   bonusDescription String
   tier             Int     @default(1)
@@ -141,8 +143,8 @@ model Plot {
 }
 
 model PlotTrait {
-  id        String @id @default(cuid())
-  plotId    String
+  id        Int    @id @default(autoincrement())
+  plotId    Int
   traitType String
   baseValue Float
 
@@ -154,15 +156,12 @@ model PlotTrait {
 
 // ── Warehouse ──────────────────────────────────────────────────────────────
 
-// Universal storage container. Every Keep, Caravan, and empire×region exchange
-// slot is backed by exactly one Warehouse row. Capacity is stored and updated
-// transactionally when buildings or caravan animals change.
 model Warehouse {
-  id       String        @id @default(cuid())
+  id       Int           @id @default(autoincrement())
   type     WarehouseType
-  empireId String
+  empireId Int
   // Set only for EXCHANGE warehouses — identifies which region's exchange this is.
-  regionId String?
+  regionId Int?
   // Capacity in kg. Use 1e9 for effectively unlimited (exchange warehouses).
   cap      Float
 
@@ -175,11 +174,9 @@ model Warehouse {
   @@index([empireId, regionId])
 }
 
-// Single resource-type slot inside a Warehouse. Replaces ResourceLedger,
-// CaravanCargo, and ExchangeStorage.
 model WarehouseItem {
-  id           String   @id @default(cuid())
-  warehouseId  String
+  id           Int      @id @default(autoincrement())
+  warehouseId  Int
   resourceType String
   quantity     Float    @default(0)
   updatedAt    DateTime @updatedAt
@@ -193,8 +190,8 @@ model WarehouseItem {
 // ── Player Economy ─────────────────────────────────────────────────────────
 
 model Empire {
-  id          String   @id @default(cuid())
-  playerId    String   @unique
+  id          Int      @id @default(autoincrement())
+  playerId    Int      @unique
   name        String
   goldBalance Float    @default(0)
   createdAt   DateTime @default(now())
@@ -209,14 +206,14 @@ model Empire {
 }
 
 model Keep {
-  id                String   @id @default(cuid())
-  empireId          String
-  plotId            String
+  id                Int      @id @default(autoincrement())
+  empireId          Int
+  plotId            Int
   name              String
   buildingSlotCount Int      @default(7)
   createdAt         DateTime @default(now())
   // Nullable during migration only — always set on keeps created after migration.
-  warehouseId       String?  @unique
+  warehouseId       Int?     @unique
 
   empire           Empire           @relation(fields: [empireId], references: [id], onDelete: Cascade)
   plot             Plot             @relation(fields: [plotId], references: [id])
@@ -229,8 +226,8 @@ model Keep {
 }
 
 model Building {
-  id                 String  @id @default(cuid())
-  keepId             String
+  id                 Int     @id @default(autoincrement())
+  keepId             Int
   buildingType       String
   level              Int     @default(1)
   slotIndex          Int
@@ -250,8 +247,8 @@ model Building {
 // ── Production Queue ───────────────────────────────────────────────────────
 
 model ProductionOrder {
-  id               String              @id @default(cuid())
-  keepId           String
+  id               Int                 @id @default(autoincrement())
+  keepId           Int
   buildingType     String
   recipeKey        String
   orderType        ProductionOrderType
@@ -265,14 +262,10 @@ model ProductionOrder {
   @@index([keepId, buildingType, position])
 }
 
-// Tracks a single active production cycle for one building. Created when a
-// production order is activated; deleted when the cycle completes. The server
-// uses `completesAt` to schedule a timer instead of accumulating progress
-// per-tick — clients derive live progress from `progressAtUpdate + elapsed`.
 model ProductionTask {
-  id               String   @id @default(cuid())
-  buildingId       String   @unique
-  keepId           String
+  id               Int      @id @default(autoincrement())
+  buildingId       Int      @unique
+  keepId           Int
   recipeKey        String
   startedAt        DateTime
   completesAt      DateTime
@@ -290,23 +283,23 @@ model ProductionTask {
 // ── Transport ──────────────────────────────────────────────────────────────
 
 model Caravan {
-  id          String              @id @default(cuid())
-  empireId    String
+  id          Int                 @id @default(autoincrement())
+  empireId    Int
   name        String              @default("Caravan")
   animalType  String              @default("MULE")
   animalCount Int                 @default(1)
 
   locationType CaravanLocationType
-  locationId   String
+  locationId   Int
 
   status    CaravanStatus        @default(IDLE)
   destType  CaravanLocationType?
-  destId    String?
+  destId    Int?
   departedAt DateTime?
   arrivesAt  DateTime?
 
   // Nullable during migration only — always set on caravans created after migration.
-  warehouseId String?  @unique
+  warehouseId Int?  @unique
 
   empire    Empire     @relation(fields: [empireId], references: [id], onDelete: Cascade)
   warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
@@ -318,9 +311,9 @@ model Caravan {
 // ── Exchange ───────────────────────────────────────────────────────────────
 
 model MarketOrder {
-  id           String      @id @default(cuid())
-  empireId     String?
-  regionId     String
+  id           Int         @id @default(autoincrement())
+  empireId     Int?
+  regionId     Int
   orderType    OrderType
   resourceType String
   quantity     Float
@@ -338,10 +331,10 @@ model MarketOrder {
 }
 
 model MarketTrade {
-  id             String   @id @default(cuid())
-  listingId      String
-  sellerEmpireId String?
-  buyerEmpireId  String
+  id             Int      @id @default(autoincrement())
+  listingId      Int
+  sellerEmpireId Int?
+  buyerEmpireId  Int
   resourceType   String
   quantity       Float
   pricePerUnit   Float
@@ -360,9 +353,9 @@ model MarketTrade {
 // ── Guilds ─────────────────────────────────────────────────────────────────
 
 model Guild {
-  id          String   @id @default(cuid())
+  id          Int      @id @default(autoincrement())
   name        String   @unique
-  leaderId    String
+  leaderId    Int
   level       Int      @default(1)
   goldBalance Float    @default(0)
   createdAt   DateTime @default(now())
@@ -373,9 +366,9 @@ model Guild {
 }
 
 model GuildMember {
-  id       String    @id @default(cuid())
-  guildId  String
-  playerId String    @unique
+  id       Int       @id @default(autoincrement())
+  guildId  Int
+  playerId Int       @unique
   role     GuildRole @default(MEMBER)
   joinedAt DateTime  @default(now())
 
@@ -386,9 +379,9 @@ model GuildMember {
 }
 
 model DistrictControl {
-  id           String   @id @default(cuid())
-  guildId      String
-  districtId   String
+  id           Int      @id @default(autoincrement())
+  guildId      Int
+  districtId   Int
   weekNumber   Int
   controlStart DateTime
   controlEnd   DateTime
@@ -403,10 +396,10 @@ model DistrictControl {
 // ── Chat ───────────────────────────────────────────────────────────────────
 
 model ChatMessage {
-  id          String          @id @default(cuid())
-  senderId    String
+  id          Int             @id @default(autoincrement())
+  senderId    Int
   channelType ChatChannelType
-  channelId   String?
+  channelId   Int?
   content     String          @db.VarChar(500)
   sentAt      DateTime        @default(now())
 
@@ -418,7 +411,7 @@ model ChatMessage {
 // ── System ─────────────────────────────────────────────────────────────────
 
 model GameTick {
-  id          String   @id @default(cuid())
+  id          Int      @id @default(autoincrement())
   tickNumber  Int      @unique
   processedAt DateTime
   durationMs  Int
@@ -427,9 +420,9 @@ model GameTick {
 }
 
 model TaxCollection {
-  id            String   @id @default(cuid())
-  regionId      String
-  tickId        String
+  id            Int      @id @default(autoincrement())
+  regionId      Int
+  tickId        Int
   totalAmount   Float
   guildShare    Float
   treasuryShare Float

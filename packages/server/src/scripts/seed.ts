@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { ResourceType, KEEP_DEFAULT_BUILDING_SLOTS, KEEP_BASE_STORAGE, MULE_CAPACITY_KG } from '@merchant-realms/shared';
+import { ResourceType, KEEP_DEFAULT_BUILDING_SLOTS, KEEP_BASE_STORAGE, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
+
+type MapRegionCode = 'CENTRAL' | 'NE' | 'NW' | 'SW' | 'SE';
 
 const db = new PrismaClient();
 
@@ -34,12 +36,12 @@ function hexesInMap(): [number, number][] {
   return results;
 }
 
-const REGION_OVERRIDES: Record<string, string> = {
+const REGION_OVERRIDES: Record<string, MapRegionCode> = {
   '0,-3': 'NW', '0,-5': 'NW',
   '0,4':  'SW', '0,6':  'SW',
 };
 
-function getRegionId(q: number, r: number): string {
+function getRegionCode(q: number, r: number): MapRegionCode {
   if (hexDist(q, r) <= CENTRAL_RADIUS) return 'CENTRAL';
   const key = `${q},${r}`;
   if (REGION_OVERRIDES[key]) return REGION_OVERRIDES[key]!;
@@ -65,7 +67,7 @@ const PLOT_OFFSETS: [number, number][] = [
 // Counts calibrated to actual district counts per region:
 //   CENTRAL=18, NE(Reach)=68, NW(Wold)=68, SW(Vale)=64, SE(Mere)=64
 
-const DISTRICT_NAMES: Record<string, string[]> = {
+const DISTRICT_NAMES: Record<MapRegionCode, string[]> = {
   // the Crown — -gate / -stow / -wick
   CENTRAL: [
     'Goldgate',     'Silvergate',   'Irongate',     'Coppergate',
@@ -165,12 +167,12 @@ const DISTRICT_NAMES: Record<string, string[]> = {
 async function main() {
   console.log('🌱 Seeding dev database...');
 
-  // ── Regions ──────────────────────────────────────────────────────────────
-  await db.region.upsert({ where: { id: 'CENTRAL' }, create: { id: 'CENTRAL', name: 'the Crown', guildControllable: false }, update: { name: 'the Crown' } });
-  await db.region.upsert({ where: { id: 'NE' },      create: { id: 'NE',      name: 'the Reach', guildControllable: true  }, update: { name: 'the Reach' } });
-  await db.region.upsert({ where: { id: 'NW' },      create: { id: 'NW',      name: 'the Wold',  guildControllable: true  }, update: { name: 'the Wold'  } });
-  await db.region.upsert({ where: { id: 'SW' },      create: { id: 'SW',      name: 'the Vale',  guildControllable: true  }, update: { name: 'the Vale'  } });
-  await db.region.upsert({ where: { id: 'SE' },      create: { id: 'SE',      name: 'the Mere',  guildControllable: true  }, update: { name: 'the Mere'  } });
+  // ── Regions — manually assigned integer IDs per REGION_IDS ───────────────
+  await db.region.upsert({ where: { id: REGION_IDS.CENTRAL }, create: { id: REGION_IDS.CENTRAL, name: 'the Crown', guildControllable: false }, update: { name: 'the Crown' } });
+  await db.region.upsert({ where: { id: REGION_IDS.NE },      create: { id: REGION_IDS.NE,      name: 'the Reach', guildControllable: true  }, update: { name: 'the Reach' } });
+  await db.region.upsert({ where: { id: REGION_IDS.NW },      create: { id: REGION_IDS.NW,      name: 'the Wold',  guildControllable: true  }, update: { name: 'the Wold'  } });
+  await db.region.upsert({ where: { id: REGION_IDS.SW },      create: { id: REGION_IDS.SW,      name: 'the Vale',  guildControllable: true  }, update: { name: 'the Vale'  } });
+  await db.region.upsert({ where: { id: REGION_IDS.SE },      create: { id: REGION_IDS.SE,      name: 'the Mere',  guildControllable: true  }, update: { name: 'the Mere'  } });
   console.log('  ✓ Regions (the Crown / Reach / Wold / Vale / Mere)');
 
   // ── Clean slate ───────────────────────────────────────────────────────────
@@ -186,63 +188,68 @@ async function main() {
     .filter(([q, r]) => !EXCHANGE_HEXES.has(`${q},${r}`))
     .map(([q, r]) => {
       const [x, y] = hexToAbsolute(q, r);
-      return { q, r, regionId: getRegionId(q, r), x, y };
+      const regionCode = getRegionCode(q, r);
+      return { q, r, regionCode, regionId: REGION_IDS[regionCode], x, y };
     });
 
   // ── Assign district names (sort by q then r within each region) ───────────
-  const byRegion: Record<string, typeof rawDistricts> = {};
+  const byRegion: Record<MapRegionCode, typeof rawDistricts> = { CENTRAL: [], NE: [], NW: [], SW: [], SE: [] };
   for (const d of rawDistricts) {
-    (byRegion[d.regionId] ??= []).push(d);
+    byRegion[d.regionCode].push(d);
   }
   for (const list of Object.values(byRegion)) {
     list.sort((a, b) => a.q - b.q || a.r - b.r);
   }
   const nameMap = new Map<string, string>();
-  for (const [rid, list] of Object.entries(byRegion)) {
-    const pool = DISTRICT_NAMES[rid] ?? [];
+  for (const [code, list] of Object.entries(byRegion) as [MapRegionCode, typeof rawDistricts][]) {
+    const pool = DISTRICT_NAMES[code] ?? [];
     list.forEach((d, i) => {
-      nameMap.set(`${d.q},${d.r}`, pool[i] ?? `${rid} District ${i + 1}`);
+      nameMap.set(`${d.q},${d.r}`, pool[i] ?? `${code} District ${i + 1}`);
     });
   }
 
-  // ── Create districts ──────────────────────────────────────────────────────
-  const districtRows = rawDistricts.map((d) => ({
-    id:               `district-${d.q}-${d.r}`,
-    regionId:         d.regionId,
-    name:             nameMap.get(`${d.q},${d.r}`)!,
-    bonusDescription: 'No special bonus',
-    q: d.q, r: d.r, x: d.x, y: d.y,
-  }));
+  // ── Create districts (IDs auto-assigned by DB) ────────────────────────────
+  await db.district.createMany({
+    data: rawDistricts.map((d) => ({
+      regionId:         d.regionId,
+      name:             nameMap.get(`${d.q},${d.r}`)!,
+      bonusDescription: 'No special bonus',
+      q: d.q, r: d.r, x: d.x, y: d.y,
+    })),
+  });
 
-  await db.district.createMany({ data: districtRows });
+  // Fetch back with auto-generated IDs, indexed by q,r for plot creation
+  const createdDistricts = await db.district.findMany({ select: { id: true, q: true, r: true, name: true } });
+  const districtByQR = new Map(createdDistricts.map((d) => [`${d.q},${d.r}`, d]));
 
   // ── Create plots (center + ring) ──────────────────────────────────────────
   type PlotRow = {
-    id: string; districtId: string; name: string;
+    districtId: number; name: string;
     bonusDescription: string; isCenter: boolean; x: number; y: number;
   };
   const plotRows: PlotRow[] = [];
 
-  for (const d of districtRows) {
-    // District center — sits at hex center, visually distinct later
+  for (const d of rawDistricts) {
+    const district = districtByQR.get(`${d.q},${d.r}`)!;
+    const districtName = district.name;
+
+    // District center
     plotRows.push({
-      id:               `plot-${d.id}-center`,
-      districtId:       d.id,
-      name:             `${d.name} District`,
+      districtId:       district.id,
+      name:             `${districtName} District`,
       bonusDescription: 'District center',
       isCenter:         true,
       x:                d.x,
       y:                d.y,
     });
 
-    // Ring plots — offset from center
+    // Ring plots
     const num = plotCount(d.q, d.r);
     for (let i = 0; i < num; i++) {
       const [ox, oy] = PLOT_OFFSETS[i]!;
       plotRows.push({
-        id:               `plot-${d.id}-${i + 1}`,
-        districtId:       d.id,
-        name:             `${d.name} ${i + 1}`,
+        districtId:       district.id,
+        name:             `${districtName} ${i + 1}`,
         bonusDescription: 'No special bonus',
         isCenter:         false,
         x:                Math.round((d.x + ox) * 100) / 100,
@@ -254,7 +261,7 @@ async function main() {
   await db.plot.createMany({ data: plotRows });
   const centerCount  = plotRows.filter((p) => p.isCenter).length;
   const regularCount = plotRows.filter((p) => !p.isCenter).length;
-  console.log(`  ✓ ${districtRows.length} districts, ${centerCount} district centers, ${regularCount} ring plots`);
+  console.log(`  ✓ ${createdDistricts.length} districts, ${centerCount} district centers, ${regularCount} ring plots`);
 
   // ── Admin player + empire ─────────────────────────────────────────────────
   const hash = await bcrypt.hash('admin', 12);
@@ -271,13 +278,19 @@ async function main() {
   console.log('  ✓ Admin player + empire (admin@merchantrealms.dev)');
 
   // ── Admin starting Keep ───────────────────────────────────────────────────
-  const startingPlotId = 'plot-district-1-0-1';
+  // First non-center plot in the district at q=1, r=0 (the Reach, closest to centre)
+  const startingPlot = await db.plot.findFirst({
+    where:   { district: { q: 1, r: 0 }, isCenter: false },
+    orderBy: { id: 'asc' },
+  });
+  if (!startingPlot) throw new Error('Starting plot not found — check district q=1, r=0 exists');
+
   const adminKeep = await db.$transaction(async (tx) => {
     const wh = await tx.warehouse.create({
       data: { type: 'KEEP', empireId: adminEmpire.id, cap: KEEP_BASE_STORAGE },
     });
     const k = await tx.keep.create({
-      data: { empireId: adminEmpire.id, plotId: startingPlotId, name: 'Highwatch Keep', buildingSlotCount: KEEP_DEFAULT_BUILDING_SLOTS, warehouseId: wh.id },
+      data: { empireId: adminEmpire.id, plotId: startingPlot.id, name: 'Highwatch Keep', buildingSlotCount: KEEP_DEFAULT_BUILDING_SLOTS, warehouseId: wh.id },
     });
     await tx.warehouseItem.createMany({
       data: [
@@ -310,11 +323,11 @@ async function main() {
   console.log('  ✓ Starting caravan (1 mule, idle at Highwatch Keep)');
 
   // ── NPC Exchange sell orders — unlimited T1 at 1 gold ────────────────────
-  await db.marketOrder.deleteMany({ where: { empireId: null, regionId: 'CENTRAL' } });
+  await db.marketOrder.deleteMany({ where: { empireId: null, regionId: REGION_IDS.CENTRAL } });
   await db.marketOrder.createMany({
     data: Object.values(ResourceType).map((resourceType) => ({
       empireId:     null,
-      regionId:     'CENTRAL',
+      regionId:     REGION_IDS.CENTRAL,
       orderType:    'SELL' as const,
       resourceType,
       quantity:     999999,

@@ -4,8 +4,8 @@ import { config } from '../config/index.js';
 import { db } from '../db/client.js';
 
 export interface AuthPayload {
-  playerId: string;
-  empireId: string | null;
+  playerId: number;
+  empireId: number | null;
 }
 
 declare global {

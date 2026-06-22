@@ -69,7 +69,7 @@ export const CancelCaravanSchema = z.object({
 
 export const SendChatMessageSchema = z.object({
   channelType: z.enum(['GLOBAL', 'GUILD', 'REGION']),
-  channelId: z.string().nullable(),
+  channelId: z.number().int().nullable(),
   content: z.string().min(1).max(500),
 });
 

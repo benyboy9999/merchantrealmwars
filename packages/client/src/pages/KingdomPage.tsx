@@ -17,7 +17,8 @@ import WarehousePanel from '../components/WarehousePanel.js';
 type Tab = 'keep' | 'buildings' | 'warehouse' | 'production' | 'workers';
 
 export default function KingdomPage() {
-  const { keepId, tab } = useParams<{ keepId?: string; tab?: string }>();
+  const { keepId: keepIdStr, tab } = useParams<{ keepId?: string; tab?: string }>();
+  const keepId = keepIdStr ? parseInt(keepIdStr) : undefined;
   const navigate = useNavigate();
   const qc = useQueryClient();
   const currentTab = (tab as Tab) ?? 'buildings';
@@ -96,7 +97,7 @@ export default function KingdomPage() {
 // ── Keep detail ───────────────────────────────────────────────────────────────
 
 function KeepDetail({ keepId, currentTab, onTabChange, qc }: {
-  keepId: string;
+  keepId: number;
   currentTab: Tab;
   onTabChange: (tab: Tab) => void;
   qc: ReturnType<typeof useQueryClient>;
@@ -171,7 +172,7 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc }: {
           <WarehousePanel
             locationType="KEEP"
             locationId={keepId}
-            warehouseId={keep.warehouseId ?? ''}
+            warehouseId={keep.warehouseId ?? 0}
             locationLabel={`${keep.name} — Resources`}
             inventory={(keep.warehouse?.items ?? []).filter((e) => e.quantity > 0)}
             onInventoryChange={() => qc.invalidateQueries({ queryKey: ['keep', keepId] })}
@@ -187,7 +188,7 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc }: {
 
 // ── Keep tab ──────────────────────────────────────────────────────────────────
 
-interface KeepTabKeep { id: string; name: string; plot?: { name: string; x: number; y: number } | null }
+interface KeepTabKeep { id: number; name: string; plot?: { name: string; x: number; y: number } | null }
 function KeepTab({ keep, qc }: { keep: KeepTabKeep; qc: ReturnType<typeof useQueryClient> }) {
   const [name, setName] = useState(keep.name);
   const rename = useMutation({
@@ -239,8 +240,8 @@ function KeepTab({ keep, qc }: { keep: KeepTabKeep; qc: ReturnType<typeof useQue
 // ── Buildings tab ─────────────────────────────────────────────────────────────
 
 function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
-  keep: { id: string; buildingSlotCount: number; buildings: Array<{ id: string; buildingType: string; level: number; slotIndex: number; isActive: boolean; isDormant: boolean; health: number }> };
-  keepId: string;
+  keep: { id: number; buildingSlotCount: number; buildings: Array<{ id: number; buildingType: string; level: number; slotIndex: number; isActive: boolean; isDormant: boolean; health: number }> };
+  keepId: number;
   ledgerMap: Map<string, number>;
   qc: ReturnType<typeof useQueryClient>;
   navigate: ReturnType<typeof useNavigate>;
@@ -479,9 +480,9 @@ function EfficiencyBar({ keep, ledgerMap }: {
 function ProductionTab({ keep, keepId, ledgerMap, qc }: {
   keep: {
     buildings: Array<{ buildingType: string; level: number; isActive: boolean; productionProgress: number; productionTask: ProductionTask | null }>;
-    productionOrders: Array<{ id: string; buildingType: string; recipeKey: string; orderType: string; targetQuantity: number | null; producedQuantity: number }>;
+    productionOrders: Array<{ id: number; buildingType: string; recipeKey: string; orderType: string; targetQuantity: number | null; producedQuantity: number }>;
   };
-  keepId: string;
+  keepId: number;
   ledgerMap: Map<string, number>;
   qc: ReturnType<typeof useQueryClient>;
 }) {
@@ -501,7 +502,7 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
     onSuccess: () => { invalidate(); setRecipeKey(''); setTargetQty(''); },
   });
   const removeOrder = useMutation({
-    mutationFn: (orderId: string) => api.removeOrder(keepId, orderId),
+    mutationFn: (orderId: number) => api.removeOrder(keepId, orderId),
     onSuccess: invalidate,
   });
 

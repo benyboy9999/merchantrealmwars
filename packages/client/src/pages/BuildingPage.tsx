@@ -4,17 +4,19 @@ import { api } from '../services/api.js';
 import { BUILDING_NAMES, WORKERS_PER_LEVEL } from '@merchant-realms/shared';
 
 export default function BuildingPage() {
-  const { keepId, buildingId } = useParams<{ keepId: string; buildingId: string }>();
+  const { keepId: keepIdStr, buildingId: buildingIdStr } = useParams<{ keepId: string; buildingId: string }>();
+  const keepId     = parseInt(keepIdStr!);
+  const buildingId = parseInt(buildingIdStr!);
   const qc = useQueryClient();
   const navigate = useNavigate();
 
   const { data: keepData } = useQuery({
     queryKey: ['keep', keepId],
-    queryFn: () => api.keep(keepId!),
+    queryFn: () => api.keep(keepId),
   });
 
   const demolish = useMutation({
-    mutationFn: () => api.demolish(keepId!, buildingId!),
+    mutationFn: () => api.demolish(keepId, buildingId),
     onSuccess: () => navigate(`/kingdom/${keepId}/buildings`),
   });
 

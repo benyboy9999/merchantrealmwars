@@ -6,7 +6,7 @@ type Tab = 'controls' | 'players';
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('controls');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   return (
     <div className="p-6 max-w-5xl">
@@ -125,7 +125,7 @@ function ControlsTab() {
 
 // ── Players tab ──────────────────────────────────────────────────────────────
 
-function PlayersTab({ selectedId, onSelect }: { selectedId: string | null; onSelect: (id: string | null) => void }) {
+function PlayersTab({ selectedId, onSelect }: { selectedId: number | null; onSelect: (id: number | null) => void }) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['admin-players'],
     queryFn:  () => api.adminPlayers(),
@@ -179,7 +179,7 @@ function PlayersTab({ selectedId, onSelect }: { selectedId: string | null; onSel
 
 // ── Player detail panel ──────────────────────────────────────────────────────
 
-function PlayerDetail({ playerId, summary, onDelete }: { playerId: string; summary: AdminPlayer | null; onDelete: () => void }) {
+function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summary: AdminPlayer | null; onDelete: () => void }) {
   const qc = useQueryClient();
   const [goldInput, setGoldInput]   = useState('');
   const [goldOp, setGoldOp]         = useState<'set' | 'add'>('add');
@@ -206,7 +206,7 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: string; summa
   });
 
   const grantResources = useMutation({
-    mutationFn: () => api.adminGrantResources(playerId, resKeep, resType, Number(resQty)),
+    mutationFn: () => api.adminGrantResources(playerId, parseInt(resKeep), resType, Number(resQty)),
     onSuccess: () => { setMsg(`Granted ${resQty}× ${resType}`); invalidate(); },
     onError: (e: Error) => setMsg(`Error: ${e.message}`),
   });

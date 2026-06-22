@@ -17,7 +17,7 @@ export function createSocketServer(httpServer: HttpServer): Server {
       return;
     }
     try {
-      const payload = jwt.verify(token, config.JWT_SECRET) as { playerId: string };
+      const payload = jwt.verify(token, config.JWT_SECRET) as { playerId: number };
       socket.data = { playerId: payload.playerId };
       next();
     } catch {
@@ -26,7 +26,7 @@ export function createSocketServer(httpServer: HttpServer): Server {
   });
 
   io.on('connection', (socket) => {
-    const { playerId } = socket.data as { playerId: string };
+    const { playerId } = socket.data as { playerId: number };
     void socket.join(`player:${playerId}`);
     void socket.join('global');
 

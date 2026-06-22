@@ -11,7 +11,7 @@ caravanRouter.use(requireAuth);
 
 const TRAVEL_SECONDS = 60;
 
-function empireGuard(empireId: string | null | undefined, res: import('express').Response): empireId is string {
+function empireGuard(empireId: number | null | undefined, res: import('express').Response): empireId is number {
   if (!empireId) { res.status(403).json({ error: 'Create an empire first' }); return false; }
   return true;
 }
@@ -37,7 +37,7 @@ caravanRouter.get('/:id', async (req, res, next) => {
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
     const caravan = await db.caravan.findUnique({
-      where:   { id: req.params['id'], empireId },
+      where:   { id: parseInt(req.params['id']!), empireId },
       include: { warehouse: { include: { items: true } } },
     });
     if (!caravan) { res.status(404).json({ error: 'Caravan not found' }); return; }
@@ -57,13 +57,13 @@ caravanRouter.post('/:id/dispatch', async (req, res, next) => {
   try {
     const { destType, destId } = z.object({
       destType: z.enum(['KEEP', 'EXCHANGE', 'PLOT']),
-      destId:   z.string(),
+      destId:   z.number().int(),
     }).parse(req.body);
 
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
     const caravan = await db.caravan.findUnique({
-      where:   { id: req.params['id'], empireId },
+      where:   { id: parseInt(req.params['id']!), empireId },
       include: { empire: { select: { createdAt: true } } },
     });
     if (!caravan) { res.status(404).json({ error: 'Caravan not found' }); return; }
@@ -76,6 +76,7 @@ caravanRouter.post('/:id/dispatch', async (req, res, next) => {
       const plot = await db.plot.findUnique({ where: { id: destId } });
       if (!plot) { res.status(404).json({ error: 'Destination plot not found' }); return; }
     }
+    // EXCHANGE: destId is the integer region ID (e.g. REGION_IDS.CENTRAL = 1)
 
     const now             = new Date();
     const empireAgeDays   = (now.getTime() - caravan.empire.createdAt.getTime()) / 86_400_000;
@@ -99,7 +100,7 @@ caravanRouter.post('/:id/dispatch', async (req, res, next) => {
 caravanRouter.post('/found', async (req, res, next) => {
   try {
     const { plotId, keepName } = z.object({
-      plotId:   z.string(),
+      plotId:   z.number().int(),
       keepName: z.string().min(1).max(40),
     }).parse(req.body);
 

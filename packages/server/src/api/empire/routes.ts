@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { CreateEmpireSchema, KEEP_FOUNDING_COST, MULE_CAPACITY_KG } from '@merchant-realms/shared';
+import { CreateEmpireSchema, KEEP_FOUNDING_COST, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
 import { db } from '../../db/client.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { issueTokens, saveRefreshToken } from '../../utils/tokens.js';
@@ -67,7 +67,7 @@ empireRouter.post('/', async (req, res, next) => {
           animalType:   'MULE',
           animalCount:  1,
           locationType: 'EXCHANGE',
-          locationId:   'CENTRAL',
+          locationId:   REGION_IDS.CENTRAL,
           status:       'IDLE',
           warehouseId:  warehouse.id,
         },

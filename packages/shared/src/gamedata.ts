@@ -157,6 +157,21 @@ export const REGION_METADATA = Object.fromEntries(
   Object.entries(gamedata.regions).map(([k, v]) => [k, { bonusType: v.bonusType as RegionBonusType, guildControllable: v.guildControllable }])
 ) as Record<RegionId, { bonusType: RegionBonusType; guildControllable: boolean }>;
 
+// ── Region DB IDs — single source of truth for integer PK assignment ─────────
+// Region.id in the database is an integer. These constants map region codes to
+// their assigned IDs. The seed uses these to create Region rows with explicit IDs.
+export const REGION_IDS = {
+  CENTRAL: 1,
+  NE:      2,
+  NW:      3,
+  SW:      4,
+  SE:      5,
+} as const;
+
+export const REGION_CODE_BY_ID: Record<number, RegionId> = Object.fromEntries(
+  Object.entries(REGION_IDS).map(([code, id]) => [id, code as RegionId])
+);
+
 export const WORKER_TIER_NAMES = Object.fromEntries(
   Object.entries(gamedata.workerTiers).map(([k, v]) => [k, v.name])
 ) as Record<WorkerTier, string>;

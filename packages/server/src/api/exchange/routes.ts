@@ -6,12 +6,12 @@ import { requireAuth } from '../../middleware/auth.js';
 export const exchangeRouter = Router();
 exchangeRouter.use(requireAuth);
 
-function empireGuard(empireId: string | null | undefined, res: import('express').Response): empireId is string {
+function empireGuard(empireId: number | null | undefined, res: import('express').Response): empireId is number {
   if (!empireId) { res.status(403).json({ error: 'Create an empire first' }); return false; }
   return true;
 }
 
-async function findOrCreateExchangeWarehouse(empireId: string, regionId: string): Promise<string> {
+async function findOrCreateExchangeWarehouse(empireId: number, regionId: number): Promise<number> {
   const existing = await db.warehouse.findFirst({ where: { empireId, regionId, type: 'EXCHANGE' } });
   if (existing) return existing.id;
   const created = await db.warehouse.create({
@@ -26,7 +26,7 @@ exchangeRouter.get('/warehouse', async (req, res, next) => {
   try {
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
-    const regionId = (req.query['regionId'] as string) ?? 'CENTRAL';
+    const regionId = parseInt(req.query['regionId'] as string) || 1;
     const [warehouse, empire] = await Promise.all([
       db.warehouse.findFirst({
         where:   { empireId, regionId, type: 'EXCHANGE' },
@@ -42,10 +42,11 @@ exchangeRouter.get('/warehouse', async (req, res, next) => {
 
 exchangeRouter.get('/:regionId/listings', async (req, res, next) => {
   try {
+    const regionId     = parseInt(req.params['regionId']!);
     const { resourceType } = z.object({ resourceType: z.string().optional() }).parse(req.query);
     const listings = await db.marketOrder.findMany({
       where: {
-        regionId:  req.params['regionId'],
+        regionId,
         orderType: 'SELL',
         status:    { in: ['OPEN', 'PARTIALLY_FILLED'] },
         ...(resourceType ? { resourceType } : {}),
@@ -67,7 +68,7 @@ exchangeRouter.post('/:regionId/listings', async (req, res, next) => {
       pricePerUnit: z.number().positive(),
     }).parse(req.body);
 
-    const regionId = req.params['regionId']!;
+    const regionId = parseInt(req.params['regionId']!);
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
 
@@ -102,7 +103,7 @@ exchangeRouter.post('/:regionId/listings', async (req, res, next) => {
 exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
   try {
     const { quantity }   = z.object({ quantity: z.number().positive() }).parse(req.body);
-    const listingId      = req.params['id']!;
+    const listingId      = parseInt(req.params['id']!);
     const buyerEmpireId  = req.auth!.empireId;
     if (!empireGuard(buyerEmpireId, res)) return;
 
@@ -183,7 +184,7 @@ exchangeRouter.delete('/listings/:id', async (req, res, next) => {
   try {
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
-    const listing = await db.marketOrder.findUnique({ where: { id: req.params['id'] } });
+    const listing = await db.marketOrder.findUnique({ where: { id: parseInt(req.params['id']!) } });
 
     if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
     if (listing.empireId !== empireId) { res.status(403).json({ error: 'Not your listing' }); return; }
@@ -212,7 +213,7 @@ exchangeRouter.delete('/listings/:id', async (req, res, next) => {
 exchangeRouter.post('/sell', async (req, res, next) => {
   try {
     const { regionId, resourceType, quantity } = z.object({
-      regionId:     z.string(),
+      regionId:     z.number().int(),
       resourceType: z.string(),
       quantity:     z.number().positive(),
     }).parse(req.body);

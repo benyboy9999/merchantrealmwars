@@ -5,7 +5,7 @@ import { adminState } from '../../admin-bypass.js';
 import { runTick } from '../../jobs/tick-job.js';
 import { config } from '../../config/index.js';
 import { requireAdmin } from '../../middleware/auth.js';
-import { RECIPE_BY_KEY, KEEP_FOUNDING_COST, MULE_CAPACITY_KG } from '@merchant-realms/shared';
+import { RECIPE_BY_KEY, KEEP_FOUNDING_COST, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
 import type { ResourceType } from '@merchant-realms/shared';
 
 export const adminRouter = Router();
@@ -187,7 +187,7 @@ adminRouter.get('/players', async (_req, res, next) => {
 adminRouter.get('/players/:id', async (req, res, next) => {
   try {
     const player = await db.player.findUnique({
-      where: { id: req.params['id'] },
+      where: { id: parseInt(req.params['id']!) },
       select: {
         id: true,
         email: true,
@@ -224,7 +224,7 @@ adminRouter.patch('/players/:id/gold', async (req, res, next) => {
     }).parse(req.body);
 
     const player = await db.player.findUnique({
-      where:  { id: req.params['id'] },
+      where:  { id: parseInt(req.params['id']!) },
       select: { empire: { select: { id: true } } },
     });
     if (!player?.empire) { res.status(404).json({ error: 'Player has no empire' }); return; }
@@ -244,7 +244,7 @@ adminRouter.patch('/players/:id/gold', async (req, res, next) => {
 adminRouter.post('/players/:id/resources', async (req, res, next) => {
   try {
     const { keepId, resourceType, quantity } = z.object({
-      keepId:       z.string(),
+      keepId:       z.number().int(),
       resourceType: z.string(),
       quantity:     z.number().positive(),
     }).parse(req.body);
@@ -253,7 +253,7 @@ adminRouter.post('/players/:id/resources', async (req, res, next) => {
       where:  { id: keepId },
       select: { warehouseId: true, empire: { select: { player: { select: { id: true } } } } },
     });
-    if (!keep || keep.empire.player.id !== req.params['id']) {
+    if (!keep || keep.empire.player.id !== parseInt(req.params['id']!)) {
       res.status(404).json({ error: 'Keep not found for this player' }); return;
     }
 
@@ -271,13 +271,13 @@ adminRouter.post('/players/:id/resources', async (req, res, next) => {
 adminRouter.post('/players/:id/exchange-resources', async (req, res, next) => {
   try {
     const { regionId, resourceType, quantity } = z.object({
-      regionId:     z.string(),
+      regionId:     z.number().int(),
       resourceType: z.string(),
       quantity:     z.number().positive(),
     }).parse(req.body);
 
     const player = await db.player.findUnique({
-      where:  { id: req.params['id'] },
+      where:  { id: parseInt(req.params['id']!) },
       select: { empire: { select: { id: true } } },
     });
     if (!player?.empire) { res.status(404).json({ error: 'Player has no empire' }); return; }
@@ -303,7 +303,7 @@ adminRouter.post('/players/:id/exchange-resources', async (req, res, next) => {
 adminRouter.post('/players/:id/starter-caravan', async (req, res, next) => {
   try {
     const player = await db.player.findUnique({
-      where:  { id: req.params['id'] },
+      where:  { id: parseInt(req.params['id']!) },
       select: { empire: { select: { id: true } } },
     });
     if (!player?.empire) { res.status(404).json({ error: 'Player has no empire' }); return; }
@@ -319,7 +319,7 @@ adminRouter.post('/players/:id/starter-caravan', async (req, res, next) => {
           animalType:   'MULE',
           animalCount:  1,
           locationType: 'EXCHANGE',
-          locationId:   'CENTRAL',
+          locationId:   REGION_IDS.CENTRAL,
           status:       'IDLE',
           warehouseId:  warehouse.id,
         },
@@ -343,7 +343,7 @@ adminRouter.patch('/players/:id/admin', async (req, res, next) => {
   try {
     const { isAdmin } = z.object({ isAdmin: z.boolean() }).parse(req.body);
     const player = await db.player.update({
-      where:  { id: req.params['id'] },
+      where:  { id: parseInt(req.params['id']!) },
       data:   { isAdmin },
       select: { id: true, email: true, isAdmin: true },
     });
@@ -354,7 +354,7 @@ adminRouter.patch('/players/:id/admin', async (req, res, next) => {
 // Delete a player and all their data
 adminRouter.delete('/players/:id', async (req, res, next) => {
   try {
-    await db.player.delete({ where: { id: req.params['id'] } });
+    await db.player.delete({ where: { id: parseInt(req.params['id']!) } });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

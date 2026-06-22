@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { api } from '../services/api.js';
 import type { CaravanWithCargo, Warehouse, WarehouseItem, Keep, EmpireBootstrap } from '../services/api.js';
-import { RESOURCE_NAMES, RESOURCE_WEIGHT } from '@merchant-realms/shared';
+import { RESOURCE_NAMES, RESOURCE_WEIGHT, REGION_IDS } from '@merchant-realms/shared';
 import { useLivePercent } from '../hooks/useLivePercent.js';
 import ProgressBar from './ProgressBar.js';
 
@@ -11,19 +11,19 @@ const rKgPer = (rt: string) => RESOURCE_WEIGHT[rt as keyof typeof RESOURCE_WEIGH
 const MULE_KG = 100;
 
 const EXCHANGE_REGIONS = [
-  { id: 'CENTRAL', name: 'Central'   },
-  { id: 'NE',      name: 'Northeast' },
-  { id: 'NW',      name: 'Northwest' },
-  { id: 'SW',      name: 'Southwest' },
-  { id: 'SE',      name: 'Southeast' },
+  { id: REGION_IDS.CENTRAL, name: 'Central'   },
+  { id: REGION_IDS.NE,      name: 'Northeast' },
+  { id: REGION_IDS.NW,      name: 'Northwest' },
+  { id: REGION_IDS.SW,      name: 'Southwest' },
+  { id: REGION_IDS.SE,      name: 'Southeast' },
 ] as const;
 
 interface InventoryItem { resourceType: string; quantity: number }
 
 interface WarehousePanelProps {
   locationType:  'KEEP' | 'EXCHANGE';
-  locationId:    string;
-  warehouseId:   string;
+  locationId:    number;
+  warehouseId:   number;
   locationLabel: string;
   inventory:     InventoryItem[];
   goldBalance?:  number;
@@ -35,17 +35,17 @@ interface WarehousePanelProps {
 
 // ── Destination picker ────────────────────────────────────────────────────────
 
-type DestOption = { type: 'EXCHANGE' | 'KEEP' | 'PLOT'; id: string; label: string; group: string };
+type DestOption = { type: 'EXCHANGE' | 'KEEP' | 'PLOT'; id: number; label: string; group: string };
 
 function DestinationPicker({
   value, onChange, allKeeps, plotsByRegion, excludeKeepId, excludeExchangeId,
 }: {
-  value: { type: string; id: string } | null;
-  onChange: (dest: { type: string; id: string } | null) => void;
-  allKeeps: Array<{ id: string; name: string }>;
-  plotsByRegion: Map<string, Array<{ id: string; name: string; hasKeep: boolean }>>;
-  excludeKeepId?: string | undefined;
-  excludeExchangeId?: string | undefined;
+  value: { type: string; id: number } | null;
+  onChange: (dest: { type: string; id: number } | null) => void;
+  allKeeps: Array<{ id: number; name: string }>;
+  plotsByRegion: Map<number, Array<{ id: number; name: string; hasKeep: boolean }>>;
+  excludeKeepId?: number | undefined;
+  excludeExchangeId?: number | undefined;
 }) {
   const [search, setSearch] = useState('');
   const [open,   setOpen]   = useState(false);
@@ -172,20 +172,20 @@ export default function WarehousePanel({
 }: WarehousePanelProps) {
   const qc = useQueryClient();
 
-  const [loadPopup,         setLoadPopup]         = useState<{ rt: string; caravanId: string } | null>(null);
-  const [unloadPopup,       setUnloadPopup]        = useState<{ caravanId: string; rt: string } | null>(null);
+  const [loadPopup,         setLoadPopup]         = useState<{ rt: string; caravanId: number } | null>(null);
+  const [unloadPopup,       setUnloadPopup]        = useState<{ caravanId: number; rt: string } | null>(null);
   const [sellPopup,         setSellPopup]          = useState<string | null>(null);
-  const [selectedCaravanId, setSelectedCaravanId]  = useState<string | null>(null);
-  const [expandedCaravanId, setExpandedCaravanId]  = useState<string | null>(null);
+  const [selectedCaravanId, setSelectedCaravanId]  = useState<number | null>(null);
+  const [expandedCaravanId, setExpandedCaravanId]  = useState<number | null>(null);
 
   // Single destination per caravan (replaces the old 3-field destType/destId/plotRegion)
-  const [dest, setDest] = useState<Record<string, { type: string; id: string } | null>>({});
+  const [dest, setDest] = useState<Record<number, { type: string; id: number } | null>>({});
 
   const { data: empireData, isError: caravansError, error: caravansErr } = useQuery({ queryKey: ['empire'], queryFn: api.empireBootstrap });
   const { data: allDistrictsData } = useQuery({ queryKey: ['all-districts'], queryFn: api.allDistricts, staleTime: 60_000 });
 
   const plotsByRegion = useMemo(() => {
-    const map = new Map<string, Array<{ id: string; name: string; hasKeep: boolean }>>();
+    const map = new Map<number, Array<{ id: number; name: string; hasKeep: boolean }>>();
     for (const d of allDistrictsData?.districts ?? []) {
       if (!map.has(d.regionId)) map.set(d.regionId, []);
       for (const p of d.plots) {
@@ -209,10 +209,10 @@ export default function WarehousePanel({
 
   // Immediately reflect a resource transfer in/out of the current location's inventory cache.
   function patchInventory(rt: string, delta: number) {
-    const patchItems = (items: WarehouseItem[], wid: string): WarehouseItem[] => {
+    const patchItems = (items: WarehouseItem[], wid: number): WarehouseItem[] => {
       const exists = items.some((e) => e.resourceType === rt);
       if (exists) return items.map((e) => e.resourceType === rt ? { ...e, quantity: Math.max(0, e.quantity + delta) } : e);
-      return [...items, { id: 'optimistic', warehouseId: wid, resourceType: rt, quantity: Math.max(0, delta), updatedAt: new Date().toISOString() }];
+      return [...items, { id: 0, warehouseId: wid, resourceType: rt, quantity: Math.max(0, delta), updatedAt: new Date().toISOString() }];
     };
 
     if (locationType === 'KEEP') {
@@ -235,8 +235,8 @@ export default function WarehousePanel({
   }
 
   type TransferParams = {
-    fromWarehouseId: string;
-    toWarehouseId:   string;
+    fromWarehouseId: number;
+    toWarehouseId:   number;
     resourceType:    string;
     quantity:        number;
   };
@@ -270,7 +270,7 @@ export default function WarehousePanel({
                   ? items.filter((x) => x.resourceType !== resourceType)
                   : existing
                     ? items.map((x) => x.resourceType === resourceType ? { ...x, quantity: newQty } : x)
-                    : [...items, { id: 'opt', warehouseId: c.warehouseId ?? '', resourceType, quantity: newQty, updatedAt: new Date().toISOString() }];
+                    : [...items, { id: 0, warehouseId: c.warehouseId ?? 0, resourceType, quantity: newQty, updatedAt: new Date().toISOString() }];
                 return { ...c, warehouse: c.warehouse ? { ...c.warehouse, items: newItems } : null };
               }),
             },
@@ -282,7 +282,7 @@ export default function WarehousePanel({
     onError:   () => invalidate(),
   });
   const caravanDispatch = useMutation({
-    mutationFn: ({ id, dt, di }: { id: string; dt: string; di: string }) => api.caravanDispatch(id, dt, di),
+    mutationFn: ({ id, dt, di }: { id: number; dt: string; di: number }) => api.caravanDispatch(id, dt, di),
     onSuccess: (data, vars) => {
       qc.setQueryData(['empire'], (old: { empire: EmpireBootstrap } | undefined) => {
         if (!old) return old;
@@ -303,10 +303,10 @@ export default function WarehousePanel({
   );
   const inTransitCaravans    = allCaravans.filter((c) => c.status === 'IN_TRANSIT');
 
-  function caravanLocationName(c: { locationType: string; locationId: string }): string {
+  function caravanLocationName(c: { locationType: string; locationId: number }): string {
     if (c.locationType === 'EXCHANGE') {
       const r = EXCHANGE_REGIONS.find((r) => r.id === c.locationId);
-      return r ? `${r.name} Exchange` : c.locationId;
+      return r ? `${r.name} Exchange` : `Region ${c.locationId}`;
     }
     if (c.locationType === 'KEEP') {
       return allKeeps.find((k) => k.id === c.locationId)?.name ?? 'Keep';
@@ -317,7 +317,7 @@ export default function WarehousePanel({
   const allKeeps    = empireData?.empire.keeps ?? [];
   const totalWeight = inventory.reduce((s, e) => s + e.quantity * rKgPer(e.resourceType), 0);
 
-  function maxLoadable(rt: string, caravanId: string): number {
+  function maxLoadable(rt: string, caravanId: number): number {
     const caravan = hereCaravans.find((c) => c.id === caravanId);
     if (!caravan) return 0;
     const items      = caravan.warehouse?.items ?? [];
@@ -330,18 +330,18 @@ export default function WarehousePanel({
   }
 
   function openLoadPopup(rt: string) {
-    const targetId = selectedCaravanId ?? hereCaravans[0]?.id ?? '';
+    const targetId = selectedCaravanId ?? hereCaravans[0]?.id;
     if (!targetId) return;
     setUnloadPopup(null); setSellPopup(null);
     setLoadPopup({ rt, caravanId: targetId });
   }
 
-  function openUnloadPopup(caravanId: string, rt: string) {
+  function openUnloadPopup(caravanId: number, rt: string) {
     setLoadPopup(null); setSellPopup(null);
     setUnloadPopup({ caravanId, rt });
   }
 
-  function toggleExpand(caravanId: string) {
+  function toggleExpand(caravanId: number) {
     setExpandedCaravanId((prev) => prev === caravanId ? null : caravanId);
     setLoadPopup(null); setUnloadPopup(null);
   }
@@ -364,7 +364,7 @@ export default function WarehousePanel({
               {inventory.filter((e) => e.quantity > 0).sort((a, b) => b.quantity - a.quantity).map((e) => {
                 const isLoadOpen = loadPopup?.rt === e.resourceType;
                 const isSellOpen = sellPopup === e.resourceType;
-                const activeCaravanId = loadPopup?.caravanId ?? selectedCaravanId ?? hereCaravans[0]?.id ?? '';
+                const activeCaravanId = loadPopup?.caravanId ?? selectedCaravanId ?? hereCaravans[0]?.id ?? 0;
                 const canLoad = hereCaravans.length > 0 && maxLoadable(e.resourceType, activeCaravanId) > 0;
 
                 return (
@@ -396,7 +396,11 @@ export default function WarehousePanel({
                             <select
                               className="bg-stone-800 border border-stone-700 rounded px-2 py-0.5 text-parchment-100 text-xs focus:outline-none"
                               value={loadPopup.caravanId}
-                              onChange={(ev) => { setLoadPopup({ rt: e.resourceType, caravanId: ev.target.value }); setSelectedCaravanId(ev.target.value); }}
+                              onChange={(ev) => {
+                                const cId = parseInt(ev.target.value);
+                                setLoadPopup({ rt: e.resourceType, caravanId: cId });
+                                setSelectedCaravanId(cId);
+                              }}
                             >
                               {hereCaravans.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
@@ -666,9 +670,9 @@ export default function WarehousePanel({
 
 function AwayCaravan({ caravan: c, onArrived }: {
   caravan: {
-    id: string; name: string; status: string;
-    locationType: string; locationId: string;
-    destType: string | null; destId: string | null;
+    id: number; name: string; status: string;
+    locationType: string; locationId: number;
+    destType: string | null; destId: number | null;
     arrivesAt: string | null; departedAt: string | null;
   };
   onArrived: () => void;
