@@ -7,7 +7,7 @@ STAGING_DIR="/var/www/merchant-realms-staging"
 cd "$STAGING_DIR"
 
 echo "▶ Pulling latest code..."
-git pull origin main
+git pull origin dev
 
 echo "▶ Installing dependencies..."
 pnpm install --frozen-lockfile
