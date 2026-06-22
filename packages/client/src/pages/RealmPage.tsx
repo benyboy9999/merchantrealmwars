@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SQRT3, hexToPixel, hexDistance, pixelToHex, axialRound } from '../utils/hex.js';
 import { api } from '../services/api.js';
 import { useAuthStore } from '../stores/auth.js';
-import { REGION_IDS } from '@merchant-realms/shared';
+import { REGION_IDS, KEEP_FOUNDING_COST, RESOURCE_NAMES } from '@merchant-realms/shared';
 
 interface Camera { x: number; y: number; zoom: number; }
 
@@ -301,6 +301,7 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
   const navigate   = useNavigate();
   const qc         = useQueryClient();
   const myEmpireId = useAuthStore((s) => s.empireId);
+  const [keepName, setKeepName] = useState('');
 
   const { data: empireData } = useQuery({
     queryKey: ['empire'],
@@ -308,15 +309,28 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
     staleTime: 30_000,
   });
 
+  const plotId = dot.plotId as number;
+
   const dispatchMut = useMutation({
-    mutationFn: (caravanId: number) => api.caravanDispatch(caravanId, 'PLOT', dot.plotId as number),
+    mutationFn: (caravanId: number) => api.caravanDispatch(caravanId, 'PLOT', plotId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['empire'] });
       onClose();
     },
   });
 
-  const idleCaravans = (empireData?.empire.caravans ?? []).filter((c) => c.status === 'IDLE');
+  const settleMut = useMutation({
+    mutationFn: () => api.foundKeep(plotId, keepName.trim() || dot.plotName),
+    onSuccess: (data) => {
+      void qc.invalidateQueries({ queryKey: ['empire'] });
+      void qc.invalidateQueries({ queryKey: ['all-districts'] });
+      navigate(`/kingdom/${data.keep.id}`);
+      onClose();
+    },
+  });
+
+  const allCaravans  = empireData?.empire.caravans ?? [];
+  const idleCaravans = allCaravans.filter((c) => c.status === 'IDLE');
 
   if (dot.type === 'exchange') {
     const hexKey  = (dot.plotId as string).replace('exchange-', '');
@@ -366,6 +380,22 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
   const otherKeeps = dot.keeps.filter((k) => k.empireId !== myEmpireId);
   const isEmpty    = dot.keeps.length === 0;
 
+  // Caravans idle at this specific plot
+  const caravansHere = allCaravans.filter(
+    (c) => c.status === 'IDLE' && c.locationType === 'PLOT' && c.locationId === plotId
+  );
+
+  // Combined materials across all caravans at this plot
+  const combined = new Map<string, number>();
+  for (const c of caravansHere) {
+    for (const item of c.warehouse?.items ?? []) {
+      combined.set(item.resourceType, (combined.get(item.resourceType) ?? 0) + item.quantity);
+    }
+  }
+  const canSettle = isEmpty && caravansHere.length > 0 && KEEP_FOUNDING_COST.every(
+    (cost) => (combined.get(cost.resource) ?? 0) >= cost.quantity
+  );
+
   return (
     <Overlay onClose={onClose}>
       <PanelHeader title={dot.plotName} subtitle={dot.districtName} onClose={onClose} />
@@ -376,18 +406,86 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
             View Keep — {k.name}
           </ActionButton>
         ))}
-        {isEmpty && (
-          <p className="text-stone-600 text-xs text-center py-1">Empty plot — no keep founded here yet</p>
+        {isEmpty && caravansHere.length === 0 && (
+          <p className="text-stone-600 text-xs text-center py-1">Empty plot — send a caravan here to settle</p>
         )}
       </PanelActions>
 
-      <PanelSection label="Send Caravan Here">
-        {dispatchMut.isError && (
-          <p className="text-red-400 text-xs mb-2">{(dispatchMut.error as Error).message}</p>
-        )}
-        {idleCaravans.length === 0 ? (
-          <p className="text-stone-600 text-xs italic">No idle caravans available</p>
-        ) : (
+      {isEmpty && caravansHere.length > 0 && (
+        <PanelSection label="Settle a Keep">
+          <div className="mb-3 space-y-1">
+            {KEEP_FOUNDING_COST.map((cost) => {
+              const have = combined.get(cost.resource) ?? 0;
+              const met  = have >= cost.quantity;
+              return (
+                <div key={cost.resource} className="flex items-center justify-between text-xs">
+                  <span className="text-stone-400">
+                    {RESOURCE_NAMES[cost.resource as keyof typeof RESOURCE_NAMES] ?? cost.resource}
+                  </span>
+                  <span className={met ? 'text-parchment-200' : 'text-red-400'}>
+                    {Math.floor(have)} / {cost.quantity}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {canSettle && (
+            <>
+              <input
+                className="w-full bg-stone-900 border border-stone-700 rounded px-3 py-2 text-parchment-100 text-sm mb-2 focus:outline-none focus:border-stone-500"
+                placeholder={dot.plotName}
+                value={keepName}
+                maxLength={40}
+                onChange={(e) => setKeepName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !settleMut.isPending && settleMut.mutate()}
+              />
+              {settleMut.isError && (
+                <p className="text-red-400 text-xs mb-2">{(settleMut.error as Error).message}</p>
+              )}
+              <ActionButton
+                variant="gold"
+                disabled={settleMut.isPending}
+                onClick={() => settleMut.mutate()}
+              >
+                {settleMut.isPending ? 'Founding…' : 'Found Keep Here'}
+              </ActionButton>
+            </>
+          )}
+          {!canSettle && (
+            <p className="text-stone-600 text-xs italic">Not enough materials to settle here</p>
+          )}
+        </PanelSection>
+      )}
+
+      {!isEmpty && (
+        <PanelSection label="Send Caravan Here">
+          {dispatchMut.isError && (
+            <p className="text-red-400 text-xs mb-2">{(dispatchMut.error as Error).message}</p>
+          )}
+          {idleCaravans.length === 0 ? (
+            <p className="text-stone-600 text-xs italic">No idle caravans available</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {idleCaravans.map((c) => (
+                <button
+                  key={c.id}
+                  disabled={dispatchMut.isPending}
+                  onClick={() => dispatchMut.mutate(c.id)}
+                  className="w-full text-left text-sm px-3 py-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-parchment-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {dispatchMut.isPending ? 'Sending…' : `Send ${c.name} →`}
+                </button>
+              ))}
+            </div>
+          )}
+        </PanelSection>
+      )}
+
+      {isEmpty && caravansHere.length === 0 && idleCaravans.length > 0 && (
+        <PanelSection label="Send Caravan Here">
+          {dispatchMut.isError && (
+            <p className="text-red-400 text-xs mb-2">{(dispatchMut.error as Error).message}</p>
+          )}
           <div className="flex flex-col gap-1.5">
             {idleCaravans.map((c) => (
               <button
@@ -400,8 +498,8 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
               </button>
             ))}
           </div>
-        )}
-      </PanelSection>
+        </PanelSection>
+      )}
 
       {otherKeeps.length > 0 && (
         <PanelSection label="Occupied by">

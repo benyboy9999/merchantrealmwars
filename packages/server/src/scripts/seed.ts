@@ -270,6 +270,14 @@ async function main() {
     create: { username: 'Admin', email: 'admin@merchantrealms.dev', passwordHash: hash, isAdmin: true },
     update: { isAdmin: true },
   });
+
+  // Google account — linked on first OAuth sign-in by email match
+  await db.player.upsert({
+    where:  { email: 'kieran.benson10@gmail.com' },
+    create: { username: 'Kieran', email: 'kieran.benson10@gmail.com', isAdmin: true },
+    update: { isAdmin: true },
+  });
+  console.log('  ✓ Kieran Google account (kieran.benson10@gmail.com) — admin');
   const adminEmpire = await db.empire.upsert({
     where:  { playerId: admin.id },
     create: { playerId: admin.id, name: 'Admin Empire', goldBalance: 0 },
