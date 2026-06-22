@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import NavBar from './components/NavBar.js';
 import KingdomPage from './pages/KingdomPage.js';
 import RealmPage from './pages/RealmPage.js';
@@ -9,6 +11,50 @@ import EncyclopediaPage from './pages/EncyclopediaPage.js';
 import LoginPage from './pages/LoginPage.js';
 import CreateEmpirePage from './pages/CreateEmpirePage.js';
 import { useAuthStore } from './stores/auth.js';
+import { useServerStatus } from './stores/server-status.js';
+import { useGameSocket } from './hooks/useGameSocket.js';
+
+function ReconnectOverlay() {
+  const { isDown, markOnline } = useServerStatus();
+  const qc = useQueryClient();
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!isDown) return;
+
+    intervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch('/health', { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          markOnline();
+          void qc.invalidateQueries();
+        }
+      } catch {
+        // still down — keep polling
+      }
+    }, 2000);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isDown, markOnline, qc]);
+
+  if (!isDown) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/90 backdrop-blur-sm">
+      <div className="text-center space-y-3">
+        <div className="text-parchment-100 text-xl font-semibold">Server offline</div>
+        <div className="text-stone-400 text-sm">Waiting for server to come back up…</div>
+        <div className="flex justify-center gap-1 pt-1">
+          <span className="w-2 h-2 rounded-full bg-stone-600 animate-bounce [animation-delay:-0.3s]" />
+          <span className="w-2 h-2 rounded-full bg-stone-600 animate-bounce [animation-delay:-0.15s]" />
+          <span className="w-2 h-2 rounded-full bg-stone-600 animate-bounce" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -23,35 +69,39 @@ function RequireEmpire({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  useGameSocket();
 
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/create-empire" element={
-        <RequireAuth><CreateEmpirePage /></RequireAuth>
-      } />
-      <Route path="/*" element={
-        <RequireAuth>
-          <RequireEmpire>
-            <div className="min-h-screen bg-zinc-950 text-zinc-100">
-              <NavBar />
-              <main>
-                <Routes>
-                  <Route path="/"                                               element={<Navigate to="/kingdom" replace />} />
-                  <Route path="/kingdom"                                        element={<KingdomPage />} />
-                  <Route path="/kingdom/:keepId"                                element={<KingdomPage />} />
-                  <Route path="/kingdom/:keepId/:tab"                          element={<KingdomPage />} />
-                  <Route path="/kingdom/:keepId/buildings/:buildingId"          element={<BuildingPage />} />
-                  <Route path="/realm"                                          element={<RealmPage />} />
-                  <Route path="/exchange"                                       element={<ExchangePage />} />
-                  <Route path="/admin"                                          element={<AdminPage />} />
-                  <Route path="/encyclopedia"                                   element={<EncyclopediaPage />} />
-                </Routes>
-              </main>
-            </div>
-          </RequireEmpire>
-        </RequireAuth>
-      } />
-    </Routes>
+    <>
+      <ReconnectOverlay />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/create-empire" element={
+          <RequireAuth><CreateEmpirePage /></RequireAuth>
+        } />
+        <Route path="/*" element={
+          <RequireAuth>
+            <RequireEmpire>
+              <div className="min-h-screen bg-zinc-950 text-zinc-100">
+                <NavBar />
+                <main>
+                  <Routes>
+                    <Route path="/"                                               element={<Navigate to="/kingdom" replace />} />
+                    <Route path="/kingdom"                                        element={<KingdomPage />} />
+                    <Route path="/kingdom/:keepId"                                element={<KingdomPage />} />
+                    <Route path="/kingdom/:keepId/:tab"                          element={<KingdomPage />} />
+                    <Route path="/kingdom/:keepId/buildings/:buildingId"          element={<BuildingPage />} />
+                    <Route path="/realm"                                          element={<RealmPage />} />
+                    <Route path="/exchange"                                       element={<ExchangePage />} />
+                    <Route path="/admin"                                          element={<AdminPage />} />
+                    <Route path="/encyclopedia"                                   element={<EncyclopediaPage />} />
+                  </Routes>
+                </main>
+              </div>
+            </RequireEmpire>
+          </RequireAuth>
+        } />
+      </Routes>
+    </>
   );
 }

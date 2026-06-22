@@ -27,15 +27,14 @@ export default function NavBar() {
   const { data } = useQuery({
     queryKey: ['admin-status'],
     queryFn:  api.adminStatus,
-    refetchInterval: 10000,
   });
 
   // Resolve the best Kingdom URL: if we already know the first keep from cache,
   // link directly to it so KingdomPage can fire both requests in parallel
-  // instead of waiting for /api/keeps before it can start /api/keeps/:id.
+  // instead of waiting for the empire bootstrap before it can start /api/keeps/:id.
   function kingdomHref(): string {
-    const cached = qc.getQueryData<{ keeps: Array<{ id: string }> }>(['keeps']);
-    const firstId = cached?.keeps[0]?.id;
+    const cached = qc.getQueryData<{ empire: { keeps: Array<{ id: string }> } }>(['empire']);
+    const firstId = cached?.empire.keeps[0]?.id;
     if (firstId) return `/kingdom/${firstId}`;
     return '/kingdom';
   }

@@ -31,14 +31,12 @@ export default function ExchangePage() {
 
   const { data: storageData, isError: storageError, error: storageErr } = useQuery({
     queryKey: ['exchange-storage', regionId],
-    queryFn:  () => api.exchangeStorage(regionId),
-    refetchInterval: 30_000,
+    queryFn:  () => api.exchangeWarehouse(regionId),
   });
 
   const { data: listingsData, isError: listingsError, error: listingsErr } = useQuery({
     queryKey: ['exchange-listings', regionId],
     queryFn:  () => api.listings(regionId),
-    refetchInterval: 30_000,
   });
 
   const sellNpc = useMutation({
@@ -61,9 +59,9 @@ export default function ExchangePage() {
     onSuccess: invalidate,
   });
 
-  const storageMap  = new Map((storageData?.storage ?? []).map((e) => [e.resourceType, e.quantity]));
+  const storageMap  = new Map((storageData?.warehouse?.items ?? []).map((e) => [e.resourceType, e.quantity]));
   const goldBalance = storageData?.goldBalance ?? 0;
-  const inventory   = storageData?.storage.filter((e) => e.quantity > 0) ?? [];
+  const inventory   = (storageData?.warehouse?.items ?? []).filter((e) => e.quantity > 0);
   const allListings = listingsData?.listings ?? [];
 
   // Resources to show in left panel: anything in warehouse OR with active listings
@@ -123,6 +121,7 @@ export default function ExchangePage() {
       <WarehousePanel
         locationType="EXCHANGE"
         locationId={regionId}
+        warehouseId={storageData?.warehouse?.id ?? ''}
         locationLabel={`${REGIONS.find((r) => r.id === regionId)?.name ?? regionId} Warehouse`}
         inventory={inventory}
         goldBalance={goldBalance}

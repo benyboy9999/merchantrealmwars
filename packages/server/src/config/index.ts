@@ -15,7 +15,7 @@ const ConfigSchema = z.object({
   ADMIN_EMAILS: z.string().default(''),
   GOOGLE_CLIENT_ID: z.string().min(1),
 
-  TICK_INTERVAL_SECONDS: z.coerce.number().int().positive().default(10),
+  TICK_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
   ENABLE_DEBUG_ENDPOINTS: z
     .string()
     .transform((v) => v === 'true')

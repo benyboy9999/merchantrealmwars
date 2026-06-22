@@ -37,6 +37,7 @@ if [ ! -f .env.staging ]; then
   PROD_DB_URL=$(grep '^DATABASE_URL=' "$PROD_DIR/.env.production" | cut -d'=' -f2-)
   STAGING_DB_URL=$(echo "$PROD_DB_URL" | sed 's|/[^/?]*\(\?.*\)\?$|/merchant_realms_staging|')
   PROD_JWT=$(grep '^JWT_SECRET=' "$PROD_DIR/.env.production" | cut -d'=' -f2-)
+  PROD_GOOGLE=$(grep '^GOOGLE_CLIENT_ID=' "$PROD_DIR/.env.production" | cut -d'=' -f2-)
 
   cat > .env.staging <<EOF
 NODE_ENV=production
@@ -44,6 +45,7 @@ PORT=3001
 HOST=0.0.0.0
 DATABASE_URL=${STAGING_DB_URL}
 JWT_SECRET=${PROD_JWT}-staging
+GOOGLE_CLIENT_ID=${PROD_GOOGLE}
 TICK_INTERVAL_SECONDS=30
 ENABLE_DEBUG_ENDPOINTS=true
 EOF

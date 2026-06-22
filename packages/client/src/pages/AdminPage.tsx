@@ -44,7 +44,6 @@ function ControlsTab() {
   const { data: status } = useQuery({
     queryKey: ['admin-status'],
     queryFn:  () => api.adminStatus(),
-    refetchInterval: 10000,
   });
 
   const tick             = useMutation({ mutationFn: () => api.adminTick(),             onSuccess: () => qc.invalidateQueries() });
@@ -130,7 +129,6 @@ function PlayersTab({ selectedId, onSelect }: { selectedId: string | null; onSel
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['admin-players'],
     queryFn:  () => api.adminPlayers(),
-    refetchInterval: 30_000,
   });
 
   if (isLoading) return <div className="text-stone-500 text-sm">Loading players…</div>;
@@ -351,10 +349,10 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: string; summa
                   <div className="text-xs text-stone-500 mt-0.5">{k.plot.district?.name}</div>
                 )}
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2">
-                  {k.resourceLedger.length === 0 && (
+                  {(k.warehouse?.items.length ?? 0) === 0 && (
                     <span className="text-xs text-stone-600">Empty storage</span>
                   )}
-                  {k.resourceLedger.map((r) => (
+                  {(k.warehouse?.items ?? []).map((r) => (
                     <span key={r.id} className="text-xs text-stone-300 font-mono">
                       {r.resourceType}: {Number(r.quantity).toLocaleString()}
                     </span>
@@ -376,9 +374,9 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: string; summa
                 <span className={`text-xs px-1.5 py-0.5 rounded ${c.status === 'IN_TRANSIT' ? 'bg-amber-900/50 text-amber-400' : 'bg-stone-700 text-stone-400'}`}>
                   {c.status === 'IN_TRANSIT' ? 'In transit' : `${c.locationType.toLowerCase()} · idle`}
                 </span>
-                {c.cargo.length > 0 && (
+                {(c.warehouse?.items.length ?? 0) > 0 && (
                   <span className="text-xs text-stone-500 ml-auto">
-                    {c.cargo.map((x) => `${x.resourceType}×${x.quantity}`).join(', ')}
+                    {(c.warehouse?.items ?? []).map((x) => `${x.resourceType}×${x.quantity}`).join(', ')}
                   </span>
                 )}
               </div>

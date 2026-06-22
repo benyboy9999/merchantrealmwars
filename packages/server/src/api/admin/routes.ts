@@ -5,7 +5,7 @@ import { adminState } from '../../admin-bypass.js';
 import { runTick } from '../../jobs/tick-job.js';
 import { config } from '../../config/index.js';
 import { requireAdmin } from '../../middleware/auth.js';
-import { RECIPE_BY_KEY, KEEP_FOUNDING_COST } from '@merchant-realms/shared';
+import { RECIPE_BY_KEY, KEEP_FOUNDING_COST, MULE_CAPACITY_KG } from '@merchant-realms/shared';
 import type { ResourceType } from '@merchant-realms/shared';
 
 export const adminRouter = Router();
@@ -20,9 +20,9 @@ adminRouter.get('/status', async (req, res) => {
     empireId ? db.empire.findUnique({ where: { id: empireId }, select: { goldBalance: true } }) : null,
   ]);
   res.json({
-    bypassEnabled: adminState.bypassEnabled,
+    bypassEnabled:       adminState.bypassEnabled,
     lastTick,
-    goldBalance: empire?.goldBalance ?? 0,
+    goldBalance:         empire?.goldBalance ?? 0,
     tickIntervalSeconds: config.TICK_INTERVAL_SECONDS,
   });
 });
@@ -64,8 +64,8 @@ adminRouter.post('/complete-caravans', async (_req, res) => {
 adminRouter.post('/complete-production', async (_req, res) => {
   const keeps = await db.keep.findMany({
     include: {
-      buildings: true,
-      resourceLedger: true,
+      buildings:        true,
+      warehouse:        { include: { items: true } },
       productionOrders: { orderBy: [{ orderType: 'asc' }, { position: 'asc' }] },
     },
   });
@@ -73,7 +73,7 @@ adminRouter.post('/complete-production', async (_req, res) => {
   let completed = 0;
 
   for (const keep of keeps) {
-    const ledgerMap = new Map(keep.resourceLedger.map((e) => [e.resourceType, e.quantity]));
+    const ledgerMap = new Map((keep.warehouse?.items ?? []).map((e) => [e.resourceType, e.quantity]));
 
     const byType = new Map<string, typeof keep.buildings>();
     for (const b of keep.buildings) {
@@ -129,10 +129,11 @@ adminRouter.post('/complete-production', async (_req, res) => {
       }
     }
 
+    const warehouseId = keep.warehouseId!;
     for (const [resourceType, quantity] of ledgerMap) {
-      await db.resourceLedger.upsert({
-        where:  { keepId_resourceType: { keepId: keep.id, resourceType } },
-        create: { keepId: keep.id, resourceType, quantity: Math.max(0, quantity) },
+      await db.warehouseItem.upsert({
+        where:  { warehouseId_resourceType: { warehouseId, resourceType } },
+        create: { warehouseId, resourceType, quantity: Math.max(0, quantity) },
         update: { quantity: Math.max(0, quantity) },
       });
     }
@@ -143,7 +144,13 @@ adminRouter.post('/complete-production', async (_req, res) => {
 
 adminRouter.get('/world', async (_req, res) => {
   const [keeps, caravans, orders] = await Promise.all([
-    db.keep.findMany({ include: { buildings: true, resourceLedger: true, plot: { include: { district: true } } } }),
+    db.keep.findMany({
+      include: {
+        buildings: true,
+        warehouse: { include: { items: true } },
+        plot:      { include: { district: true } },
+      },
+    }),
     db.caravan.findMany({ where: { status: 'IN_TRANSIT' } }),
     db.marketOrder.findMany({ where: { status: { in: ['OPEN', 'PARTIALLY_FILLED'] } }, take: 50 }),
   ]);
@@ -192,13 +199,13 @@ adminRouter.get('/players/:id', async (req, res, next) => {
           include: {
             keeps: {
               include: {
-                resourceLedger: true,
+                warehouse: { include: { items: true } },
                 buildings: true,
-                plot: { include: { district: true } },
+                plot:      { include: { district: true } },
               },
             },
-            caravans: { include: { cargo: true } },
-            exchangeStorages: true,
+            caravans:   { include: { warehouse: { include: { items: true } } } },
+            warehouses: { where: { type: 'EXCHANGE' }, include: { items: true } },
           },
         },
       },
@@ -213,11 +220,11 @@ adminRouter.patch('/players/:id/gold', async (req, res, next) => {
   try {
     const { amount, op } = z.object({
       amount: z.number(),
-      op: z.enum(['set', 'add']),
+      op:     z.enum(['set', 'add']),
     }).parse(req.body);
 
     const player = await db.player.findUnique({
-      where: { id: req.params['id'] },
+      where:  { id: req.params['id'] },
       select: { empire: { select: { id: true } } },
     });
     if (!player?.empire) { res.status(404).json({ error: 'Player has no empire' }); return; }
@@ -233,7 +240,7 @@ adminRouter.patch('/players/:id/gold', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Grant resources to a keep's storage
+// Grant resources to a keep's warehouse
 adminRouter.post('/players/:id/resources', async (req, res, next) => {
   try {
     const { keepId, resourceType, quantity } = z.object({
@@ -243,23 +250,24 @@ adminRouter.post('/players/:id/resources', async (req, res, next) => {
     }).parse(req.body);
 
     const keep = await db.keep.findUnique({
-      where: { id: keepId },
-      select: { empire: { select: { player: { select: { id: true } } } } },
+      where:  { id: keepId },
+      select: { warehouseId: true, empire: { select: { player: { select: { id: true } } } } },
     });
     if (!keep || keep.empire.player.id !== req.params['id']) {
       res.status(404).json({ error: 'Keep not found for this player' }); return;
     }
 
-    const ledger = await db.resourceLedger.upsert({
-      where:  { keepId_resourceType: { keepId, resourceType } },
-      create: { keepId, resourceType, quantity },
+    const warehouseId = keep.warehouseId!;
+    const item = await db.warehouseItem.upsert({
+      where:  { warehouseId_resourceType: { warehouseId, resourceType } },
+      create: { warehouseId, resourceType, quantity },
       update: { quantity: { increment: quantity } },
     });
-    res.json({ ledger });
+    res.json({ item });
   } catch (err) { next(err); }
 });
 
-// Grant gold to exchange storage
+// Grant resources to exchange warehouse
 adminRouter.post('/players/:id/exchange-resources', async (req, res, next) => {
   try {
     const { regionId, resourceType, quantity } = z.object({
@@ -269,17 +277,25 @@ adminRouter.post('/players/:id/exchange-resources', async (req, res, next) => {
     }).parse(req.body);
 
     const player = await db.player.findUnique({
-      where: { id: req.params['id'] },
+      where:  { id: req.params['id'] },
       select: { empire: { select: { id: true } } },
     });
     if (!player?.empire) { res.status(404).json({ error: 'Player has no empire' }); return; }
 
-    const storage = await db.exchangeStorage.upsert({
-      where:  { empireId_regionId_resourceType: { empireId: player.empire.id, regionId, resourceType } },
-      create: { empireId: player.empire.id, regionId, resourceType, quantity },
+    const empireId = player.empire.id;
+    let warehouse = await db.warehouse.findFirst({ where: { empireId, regionId, type: 'EXCHANGE' } });
+    if (!warehouse) {
+      warehouse = await db.warehouse.create({
+        data: { type: 'EXCHANGE', empireId, regionId, cap: 1_000_000_000 },
+      });
+    }
+
+    const item = await db.warehouseItem.upsert({
+      where:  { warehouseId_resourceType: { warehouseId: warehouse.id, resourceType } },
+      create: { warehouseId: warehouse.id, resourceType, quantity },
       update: { quantity: { increment: quantity } },
     });
-    res.json({ storage });
+    res.json({ item });
   } catch (err) { next(err); }
 });
 
@@ -287,29 +303,35 @@ adminRouter.post('/players/:id/exchange-resources', async (req, res, next) => {
 adminRouter.post('/players/:id/starter-caravan', async (req, res, next) => {
   try {
     const player = await db.player.findUnique({
-      where: { id: req.params['id'] },
+      where:  { id: req.params['id'] },
       select: { empire: { select: { id: true } } },
     });
     if (!player?.empire) { res.status(404).json({ error: 'Player has no empire' }); return; }
 
-    const caravan = await db.caravan.create({
-      data: {
-        empireId:     player.empire.id,
-        name:         'Starter Caravan',
-        animalType:   'MULE',
-        animalCount:  1,
-        locationType: 'EXCHANGE',
-        locationId:   'CENTRAL',
-        status:       'IDLE',
-      },
-    });
-
-    await db.caravanCargo.createMany({
-      data: KEEP_FOUNDING_COST.map((cost) => ({
-        caravanId:    caravan.id,
-        resourceType: cost.resource,
-        quantity:     cost.quantity,
-      })),
+    const caravan = await db.$transaction(async (tx) => {
+      const warehouse = await tx.warehouse.create({
+        data: { type: 'CARAVAN', empireId: player.empire!.id, cap: MULE_CAPACITY_KG },
+      });
+      const c = await tx.caravan.create({
+        data: {
+          empireId:     player.empire!.id,
+          name:         'Starter Caravan',
+          animalType:   'MULE',
+          animalCount:  1,
+          locationType: 'EXCHANGE',
+          locationId:   'CENTRAL',
+          status:       'IDLE',
+          warehouseId:  warehouse.id,
+        },
+      });
+      await tx.warehouseItem.createMany({
+        data: KEEP_FOUNDING_COST.map((cost) => ({
+          warehouseId:  warehouse.id,
+          resourceType: cost.resource,
+          quantity:     cost.quantity,
+        })),
+      });
+      return c;
     });
 
     res.json({ caravan });
@@ -321,8 +343,8 @@ adminRouter.patch('/players/:id/admin', async (req, res, next) => {
   try {
     const { isAdmin } = z.object({ isAdmin: z.boolean() }).parse(req.body);
     const player = await db.player.update({
-      where: { id: req.params['id'] },
-      data:  { isAdmin },
+      where:  { id: req.params['id'] },
+      data:   { isAdmin },
       select: { id: true, email: true, isAdmin: true },
     });
     res.json({ player });

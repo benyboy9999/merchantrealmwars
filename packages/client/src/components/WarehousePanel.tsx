@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { api } from '../services/api.js';
-import type { CaravanWithCargo, LedgerEntry, ExchangeStorageEntry } from '../services/api.js';
+import type { CaravanWithCargo, Warehouse, WarehouseItem, Keep, EmpireBootstrap } from '../services/api.js';
 import { RESOURCE_NAMES, RESOURCE_WEIGHT } from '@merchant-realms/shared';
 import { useLivePercent } from '../hooks/useLivePercent.js';
 import ProgressBar from './ProgressBar.js';
@@ -23,6 +23,7 @@ interface InventoryItem { resourceType: string; quantity: number }
 interface WarehousePanelProps {
   locationType:  'KEEP' | 'EXCHANGE';
   locationId:    string;
+  warehouseId:   string;
   locationLabel: string;
   inventory:     InventoryItem[];
   goldBalance?:  number;
@@ -165,7 +166,7 @@ function TransferPopup({ label, maxQty, onConfirm, onClose, isPending = false }:
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function WarehousePanel({
-  locationType, locationId, locationLabel,
+  locationType, locationId, warehouseId, locationLabel,
   inventory, goldBalance, showSell, onSell,
   onInventoryChange, className = '',
 }: WarehousePanelProps) {
@@ -180,8 +181,7 @@ export default function WarehousePanel({
   // Single destination per caravan (replaces the old 3-field destType/destId/plotRegion)
   const [dest, setDest] = useState<Record<string, { type: string; id: string } | null>>({});
 
-  const { data: caravanData, isError: caravansError, error: caravansErr } = useQuery({ queryKey: ['caravans'], queryFn: api.caravans, refetchInterval: 15_000 });
-  const { data: keepData }         = useQuery({ queryKey: ['keeps'],          queryFn: api.keeps });
+  const { data: empireData, isError: caravansError, error: caravansErr } = useQuery({ queryKey: ['empire'], queryFn: api.empireBootstrap });
   const { data: allDistrictsData } = useQuery({ queryKey: ['all-districts'], queryFn: api.allDistricts, staleTime: 60_000 });
 
   const plotsByRegion = useMemo(() => {
@@ -196,100 +196,105 @@ export default function WarehousePanel({
   }, [allDistrictsData]);
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['caravans'] });
+    qc.invalidateQueries({ queryKey: ['empire'] });
     qc.invalidateQueries({ queryKey: ['keep', locationId] });
-    qc.invalidateQueries({ queryKey: ['exchange-storage'] });
+    qc.invalidateQueries({ queryKey: ['exchange-storage', locationId] });
     onInventoryChange?.();
   };
 
   // Stable reference so AwayCaravan's arrival timer isn't reset on every render
   const useCaravanArrived = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['caravans'] });
+    qc.invalidateQueries({ queryKey: ['empire'] });
   }, [qc]);
 
-  // Update caravan in cache immediately from server response
-  function patchCaravan(updated: CaravanWithCargo | null) {
-    if (!updated) return;
-    qc.setQueryData(['caravans'], (old: { caravans: CaravanWithCargo[] } | undefined) => {
-      if (!old) return old;
-      return { caravans: old.caravans.map((c) => c.id === updated.id ? updated : c) };
-    });
-  }
-
-  // Immediately reflect a resource transfer in/out of the current location's inventory cache,
-  // so the warehouse side updates at the same time as the caravan cargo side.
+  // Immediately reflect a resource transfer in/out of the current location's inventory cache.
   function patchInventory(rt: string, delta: number) {
+    const patchItems = (items: WarehouseItem[], wid: string): WarehouseItem[] => {
+      const exists = items.some((e) => e.resourceType === rt);
+      if (exists) return items.map((e) => e.resourceType === rt ? { ...e, quantity: Math.max(0, e.quantity + delta) } : e);
+      return [...items, { id: 'optimistic', warehouseId: wid, resourceType: rt, quantity: Math.max(0, delta), updatedAt: new Date().toISOString() }];
+    };
+
     if (locationType === 'KEEP') {
       qc.setQueryData(
         ['keep', locationId],
-        (old: { keep: { resourceLedger: LedgerEntry[] } } | undefined) => {
-          if (!old) return old;
-          const exists = old.keep.resourceLedger.some((e) => e.resourceType === rt);
-          return {
-            ...old,
-            keep: {
-              ...old.keep,
-              resourceLedger: exists
-                ? old.keep.resourceLedger.map((e) =>
-                    e.resourceType === rt
-                      ? { ...e, quantity: Math.max(0, e.quantity + delta) }
-                      : e
-                  )
-                : [...old.keep.resourceLedger, { id: 'optimistic', keepId: locationId, resourceType: rt, quantity: Math.max(0, delta) }],
-            },
-          };
+        (old: { keep: Keep } | undefined) => {
+          if (!old || !old.keep.warehouse) return old;
+          return { ...old, keep: { ...old.keep, warehouse: { ...old.keep.warehouse, items: patchItems(old.keep.warehouse.items, old.keep.warehouse.id) } } };
         },
       );
     } else {
       qc.setQueryData(
         ['exchange-storage', locationId],
-        (old: { storage: ExchangeStorageEntry[] } | undefined) => {
-          if (!old) return old;
-          const exists = old.storage.some((e) => e.resourceType === rt);
-          return {
-            ...old,
-            storage: exists
-              ? old.storage.map((e) =>
-                  e.resourceType === rt
-                    ? { ...e, quantity: Math.max(0, e.quantity + delta) }
-                    : e
-                )
-              : [...old.storage, { id: 'optimistic', empireId: '', regionId: locationId, resourceType: rt, quantity: Math.max(0, delta) }],
-          };
+        (old: { warehouse: Warehouse | null } | undefined) => {
+          if (!old || !old.warehouse) return old;
+          return { ...old, warehouse: { ...old.warehouse, items: patchItems(old.warehouse.items, old.warehouse.id) } };
         },
       );
     }
   }
 
-  const caravanLoad = useMutation({
-    mutationFn: ({ id, rt, qty }: { id: string; rt: string; qty: number }) => api.caravanLoad(id, rt, qty),
-    onSuccess: (data, { rt, qty }) => {
-      patchCaravan(data.caravan);
-      patchInventory(rt, -qty);
+  type TransferParams = {
+    fromWarehouseId: string;
+    toWarehouseId:   string;
+    resourceType:    string;
+    quantity:        number;
+  };
+
+  const transfer = useMutation({
+    mutationFn: (p: TransferParams) => api.transfer(p),
+    onMutate: ({ fromWarehouseId, toWarehouseId, resourceType, quantity }) => {
+      if (fromWarehouseId === warehouseId) patchInventory(resourceType, -quantity);
+      if (toWarehouseId   === warehouseId) patchInventory(resourceType, +quantity);
       setLoadPopup(null);
-      invalidate();
-    },
-  });
-  const caravanUnload = useMutation({
-    mutationFn: ({ id, rt, qty }: { id: string; rt: string; qty: number }) => api.caravanUnload(id, rt, qty),
-    onSuccess: (data, { rt, qty }) => {
-      patchCaravan(data.caravan);
-      patchInventory(rt, +qty);
       setUnloadPopup(null);
-      invalidate();
+
+      const empireCache  = qc.getQueryData<{ empire: EmpireBootstrap }>(['empire']);
+      const fromCaravan  = empireCache?.empire.caravans.find((c) => c.warehouseId === fromWarehouseId);
+      const toCaravan    = empireCache?.empire.caravans.find((c) => c.warehouseId === toWarehouseId);
+      const caravan      = fromCaravan ?? toCaravan;
+      if (caravan) {
+        const delta = fromCaravan ? -quantity : +quantity;
+        qc.setQueryData(['empire'], (old: { empire: EmpireBootstrap } | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            empire: {
+              ...old.empire,
+              caravans: old.empire.caravans.map((c) => {
+                if (c.id !== caravan.id) return c;
+                const items = c.warehouse?.items ?? [];
+                const existing = items.find((x) => x.resourceType === resourceType);
+                const newQty   = (existing?.quantity ?? 0) + delta;
+                const newItems = newQty <= 0
+                  ? items.filter((x) => x.resourceType !== resourceType)
+                  : existing
+                    ? items.map((x) => x.resourceType === resourceType ? { ...x, quantity: newQty } : x)
+                    : [...items, { id: 'opt', warehouseId: c.warehouseId ?? '', resourceType, quantity: newQty, updatedAt: new Date().toISOString() }];
+                return { ...c, warehouse: c.warehouse ? { ...c.warehouse, items: newItems } : null };
+              }),
+            },
+          };
+        });
+      }
     },
+    onSuccess: () => invalidate(),
+    onError:   () => invalidate(),
   });
   const caravanDispatch = useMutation({
     mutationFn: ({ id, dt, di }: { id: string; dt: string; di: string }) => api.caravanDispatch(id, dt, di),
     onSuccess: (data, vars) => {
-      patchCaravan(data.caravan);
+      qc.setQueryData(['empire'], (old: { empire: EmpireBootstrap } | undefined) => {
+        if (!old) return old;
+        return { ...old, empire: { ...old.empire, caravans: old.empire.caravans.map((c) => c.id === data.caravan.id ? data.caravan : c) } };
+      });
       setExpandedCaravanId(null);
       setDest((p) => { const n = { ...p }; delete n[vars.id]; return n; });
       invalidate();
     },
   });
 
-  const allCaravans          = caravanData?.caravans ?? [];
+  const allCaravans          = empireData?.empire.caravans ?? [];
   const hereCaravans         = allCaravans.filter(
     (c) => c.status === 'IDLE' && c.locationType === locationType && c.locationId === locationId,
   );
@@ -309,14 +314,16 @@ export default function WarehousePanel({
     return 'Plot';
   }
 
-  const allKeeps    = keepData?.keeps ?? [];
+  const allKeeps    = empireData?.empire.keeps ?? [];
   const totalWeight = inventory.reduce((s, e) => s + e.quantity * rKgPer(e.resourceType), 0);
 
   function maxLoadable(rt: string, caravanId: string): number {
     const caravan = hereCaravans.find((c) => c.id === caravanId);
     if (!caravan) return 0;
-    const usedKg     = caravan.cargo.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
-    const freeKg     = caravan.animalCount * MULE_KG - usedKg;
+    const items      = caravan.warehouse?.items ?? [];
+    const maxKg      = caravan.warehouse?.cap ?? caravan.animalCount * MULE_KG;
+    const usedKg     = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
+    const freeKg     = maxKg - usedKg;
     const byCapacity = Math.floor(freeKg / rKgPer(rt));
     const inWarehouse = inventory.find((e) => e.resourceType === rt)?.quantity ?? 0;
     return Math.min(inWarehouse, byCapacity);
@@ -400,12 +407,16 @@ export default function WarehousePanel({
                         <TransferPopup
                           label={`Transfer to caravan (max ${Math.floor(maxLoadable(e.resourceType, loadPopup.caravanId))})`}
                           maxQty={maxLoadable(e.resourceType, loadPopup.caravanId)}
-                          onConfirm={(qty) => caravanLoad.mutate({ id: loadPopup.caravanId, rt: e.resourceType, qty })}
+                          onConfirm={(qty) => {
+                            const targetCaravan = hereCaravans.find((c) => c.id === loadPopup.caravanId);
+                            if (!targetCaravan?.warehouseId) return;
+                            transfer.mutate({ fromWarehouseId: warehouseId, toWarehouseId: targetCaravan.warehouseId, resourceType: e.resourceType, quantity: qty });
+                          }}
                           onClose={() => setLoadPopup(null)}
-                          isPending={caravanLoad.isPending}
+                          isPending={transfer.isPending}
                         />
-                        {caravanLoad.isError && (
-                          <p className="text-red-400 text-xs mt-1">{(caravanLoad.error as Error).message}</p>
+                        {transfer.isError && loadPopup?.rt === e.resourceType && (
+                          <p className="text-red-400 text-xs mt-1">{(transfer.error as Error).message}</p>
                         )}
                       </div>
                     )}
@@ -453,8 +464,9 @@ export default function WarehousePanel({
 
           {/* Here caravans — idle at this location */}
           {hereCaravans.map((c) => {
-            const cargoKg    = c.cargo.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
-            const maxKg      = c.animalCount * MULE_KG;
+            const items      = c.warehouse?.items ?? [];
+            const cargoKg    = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
+            const maxKg      = c.warehouse?.cap ?? c.animalCount * MULE_KG;
             const isExpanded = expandedCaravanId === c.id;
             const d          = dest[c.id] ?? null;
 
@@ -473,7 +485,7 @@ export default function WarehousePanel({
                     </div>
                   </div>
                   <div className="flex justify-between text-xs text-stone-600 mb-1">
-                    <span>{c.cargo.length === 0 ? 'Empty' : `${c.cargo.length} item${c.cargo.length !== 1 ? 's' : ''}`}</span>
+                    <span>{items.length === 0 ? 'Empty' : `${items.length} item${items.length !== 1 ? 's' : ''}`}</span>
                     <span>{cargoKg.toFixed(0)} / {maxKg} kg</span>
                   </div>
                   <div className="h-0.5 bg-stone-700 rounded">
@@ -485,9 +497,9 @@ export default function WarehousePanel({
                 {isExpanded && (
                   <div className="border-t border-stone-800/40">
                     {/* Cargo items */}
-                    {c.cargo.length > 0 && (
+                    {items.length > 0 && (
                       <div className="px-4 py-2 space-y-0.5">
-                        {c.cargo.map((cargo) => {
+                        {items.map((cargo) => {
                           const isUnloadOpen = unloadPopup?.caravanId === c.id && unloadPopup.rt === cargo.resourceType;
                           return (
                             <div key={cargo.resourceType}>
@@ -505,12 +517,15 @@ export default function WarehousePanel({
                                   <TransferPopup
                                     label={`Unload to ${locationLabel}`}
                                     maxQty={cargo.quantity}
-                                    onConfirm={(qty) => caravanUnload.mutate({ id: c.id, rt: cargo.resourceType, qty })}
+                                    onConfirm={(qty) => {
+                                      if (!c.warehouseId) return;
+                                      transfer.mutate({ fromWarehouseId: c.warehouseId, toWarehouseId: warehouseId, resourceType: cargo.resourceType, quantity: qty });
+                                    }}
                                     onClose={() => setUnloadPopup(null)}
-                                    isPending={caravanUnload.isPending}
+                                    isPending={transfer.isPending}
                                   />
-                                  {caravanUnload.isError && (
-                                    <p className="text-red-400 text-xs mt-1">{(caravanUnload.error as Error).message}</p>
+                                  {transfer.isError && unloadPopup?.caravanId === c.id && unloadPopup.rt === cargo.resourceType && (
+                                    <p className="text-red-400 text-xs mt-1">{(transfer.error as Error).message}</p>
                                   )}
                                 </div>
                               )}
@@ -557,8 +572,9 @@ export default function WarehousePanel({
                 <span className="text-xs text-stone-700 uppercase tracking-wider">Idle</span>
               </div>
               {idleElsewhereCaravans.map((c) => {
-                const cargoKg    = c.cargo.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
-                const maxKg      = c.animalCount * MULE_KG;
+                const elseItems  = c.warehouse?.items ?? [];
+                const cargoKg    = elseItems.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
+                const maxKg      = c.warehouse?.cap ?? c.animalCount * MULE_KG;
                 const isExpanded = expandedCaravanId === c.id;
                 const d          = dest[c.id] ?? null;
                 const atLabel    = caravanLocationName(c);
@@ -577,7 +593,7 @@ export default function WarehousePanel({
                         </div>
                       </div>
                       <div className="flex justify-between text-xs text-stone-600 mb-1">
-                        <span>{c.cargo.length === 0 ? 'Empty' : `${c.cargo.length} item${c.cargo.length !== 1 ? 's' : ''}`}</span>
+                        <span>{elseItems.length === 0 ? 'Empty' : `${elseItems.length} item${elseItems.length !== 1 ? 's' : ''}`}</span>
                         <span>{cargoKg.toFixed(0)} / {maxKg} kg</span>
                       </div>
                       <div className="h-0.5 bg-stone-700 rounded">
@@ -587,9 +603,9 @@ export default function WarehousePanel({
 
                     {isExpanded && (
                       <div className="border-t border-stone-800/40">
-                        {c.cargo.length > 0 && (
+                        {elseItems.length > 0 && (
                           <div className="px-4 py-2 space-y-0.5">
-                            {c.cargo.map((cargo) => (
+                            {elseItems.map((cargo) => (
                               <div key={cargo.resourceType} className="flex items-center gap-2 py-1">
                                 <span className="flex-1 text-xs text-stone-400">{rName(cargo.resourceType)}</span>
                                 <span className="text-parchment-200 font-mono text-xs w-10 text-right">{cargo.quantity.toFixed(0)}</span>

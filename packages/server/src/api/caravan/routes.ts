@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { db } from '../../db/client.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { adminState } from '../../admin-bypass.js';
-import { RESOURCE_WEIGHT, MULE_CAPACITY_KG, KEEP_FOUNDING_COST, KEEP_DEFAULT_BUILDING_SLOTS, getStarterSpeedMultiplier } from '@merchant-realms/shared';
+import { KEEP_FOUNDING_COST, KEEP_BASE_STORAGE, KEEP_DEFAULT_BUILDING_SLOTS, getStarterSpeedMultiplier } from '@merchant-realms/shared';
+import { scheduleArrival } from '../../services/caravan-timers.js';
 
 export const caravanRouter = Router();
 caravanRouter.use(requireAuth);
@@ -21,31 +22,9 @@ caravanRouter.get('/', async (req, res, next) => {
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
 
-    const arrived = await db.caravan.findMany({
-      where: { empireId, status: 'IN_TRANSIT', arrivesAt: { lte: new Date() } },
-    });
-    for (const c of arrived) {
-      try {
-        await db.caravan.update({
-          where: { id: c.id },
-          data: {
-            status:       'IDLE',
-            locationType: c.destType!,
-            locationId:   c.destId!,
-            destType:     null,
-            destId:       null,
-            departedAt:   null,
-            arrivesAt:    null,
-          },
-        });
-      } catch (deliveryErr) {
-        console.error(`[caravan] failed to deliver caravan ${c.id}:`, deliveryErr);
-      }
-    }
-
     const caravans = await db.caravan.findMany({
-      where: { empireId },
-      include: { cargo: true },
+      where:   { empireId },
+      include: { warehouse: { include: { items: true } } },
       orderBy: { name: 'asc' },
     });
     res.json({ caravans });
@@ -58,137 +37,18 @@ caravanRouter.get('/:id', async (req, res, next) => {
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
     const caravan = await db.caravan.findUnique({
-      where: { id: req.params['id'], empireId },
-      include: { cargo: true },
+      where:   { id: req.params['id'], empireId },
+      include: { warehouse: { include: { items: true } } },
     });
     if (!caravan) { res.status(404).json({ error: 'Caravan not found' }); return; }
 
-    const usedWeight = caravan.cargo.reduce((sum, c) => {
-      const w = RESOURCE_WEIGHT[c.resourceType as keyof typeof RESOURCE_WEIGHT] ?? 0.5;
-      return sum + c.quantity * w;
-    }, 0);
-    const maxWeight = caravan.animalCount * MULE_CAPACITY_KG;
+    const items      = caravan.warehouse?.items ?? [];
+    const usedWeight = Math.round(
+      items.reduce((s, e) => s + e.quantity * 0.5, 0) * 10,
+    ) / 10;
+    const maxWeight = caravan.warehouse?.cap ?? 0;
 
-    res.json({ caravan, capacity: { usedWeight: Math.round(usedWeight * 10) / 10, maxWeight } });
-  } catch (err) { next(err); }
-});
-
-// ── Load resource into caravan ────────────────────────────────────────────────
-caravanRouter.post('/:id/load', async (req, res, next) => {
-  try {
-    const { resourceType, quantity } = z.object({
-      resourceType: z.string(),
-      quantity:     z.number().positive(),
-    }).parse(req.body);
-
-    const empireId = req.auth!.empireId;
-    if (!empireGuard(empireId, res)) return;
-    const caravan = await db.caravan.findUnique({ where: { id: req.params['id'], empireId }, include: { cargo: true } });
-    if (!caravan) { res.status(404).json({ error: 'Caravan not found' }); return; }
-    if (caravan.status !== 'IDLE') { res.status(400).json({ error: 'Caravan is in transit' }); return; }
-    if (caravan.locationType !== 'KEEP' && caravan.locationType !== 'EXCHANGE') {
-      res.status(400).json({ error: 'Can only load at a Keep or Exchange' }); return;
-    }
-
-    const currentWeight = caravan.cargo.reduce((sum, c) =>
-      sum + c.quantity * (RESOURCE_WEIGHT[c.resourceType as keyof typeof RESOURCE_WEIGHT] ?? 0.5), 0);
-    const newItemWeight = quantity * (RESOURCE_WEIGHT[resourceType as keyof typeof RESOURCE_WEIGHT] ?? 0.5);
-    const maxWeight = caravan.animalCount * MULE_CAPACITY_KG;
-    if (!adminState.bypassEnabled && currentWeight + newItemWeight > maxWeight) {
-      res.status(400).json({ error: `Exceeds caravan capacity (${maxWeight} kg)` }); return;
-    }
-
-    if (caravan.locationType === 'KEEP') {
-      if (adminState.bypassEnabled) {
-        await db.resourceLedger.updateMany({
-          where: { keepId: caravan.locationId, resourceType },
-          data:  { quantity: { decrement: quantity } },
-        });
-      } else {
-        const deducted = await db.$executeRaw`
-          UPDATE "ResourceLedger"
-          SET    quantity = quantity - ${quantity}
-          WHERE  "keepId" = ${caravan.locationId}
-            AND  "resourceType" = ${resourceType}
-            AND  quantity >= ${quantity}
-        `;
-        if (deducted === 0) {
-          res.status(400).json({ error: 'Not enough resources in keep' }); return;
-        }
-      }
-    } else {
-      if (adminState.bypassEnabled) {
-        await db.exchangeStorage.updateMany({
-          where: { empireId, regionId: caravan.locationId, resourceType },
-          data:  { quantity: { decrement: quantity } },
-        });
-      } else {
-        const deducted = await db.$executeRaw`
-          UPDATE "ExchangeStorage"
-          SET    quantity = quantity - ${quantity}
-          WHERE  "empireId" = ${empireId}
-            AND  "regionId" = ${caravan.locationId}
-            AND  "resourceType" = ${resourceType}
-            AND  quantity >= ${quantity}
-        `;
-        if (deducted === 0) {
-          res.status(400).json({ error: 'Not enough resources in exchange storage' }); return;
-        }
-      }
-    }
-
-    await db.caravanCargo.upsert({
-      where:  { caravanId_resourceType: { caravanId: caravan.id, resourceType } },
-      create: { caravanId: caravan.id, resourceType, quantity },
-      update: { quantity: { increment: quantity } },
-    });
-
-    const updated = await db.caravan.findUnique({ where: { id: caravan.id }, include: { cargo: true } });
-    res.json({ caravan: updated });
-  } catch (err) { next(err); }
-});
-
-// ── Unload resource from caravan ──────────────────────────────────────────────
-caravanRouter.post('/:id/unload', async (req, res, next) => {
-  try {
-    const { resourceType, quantity } = z.object({
-      resourceType: z.string(),
-      quantity:     z.number().positive(),
-    }).parse(req.body);
-
-    const empireId = req.auth!.empireId;
-    if (!empireGuard(empireId, res)) return;
-    const caravan = await db.caravan.findUnique({ where: { id: req.params['id'], empireId }, include: { cargo: true } });
-    if (!caravan) { res.status(404).json({ error: 'Caravan not found' }); return; }
-    if (caravan.status !== 'IDLE') { res.status(400).json({ error: 'Caravan is in transit' }); return; }
-
-    const cargoEntry = caravan.cargo.find((c) => c.resourceType === resourceType);
-    if (!cargoEntry || cargoEntry.quantity < quantity) {
-      res.status(400).json({ error: 'Not enough cargo to unload' }); return;
-    }
-
-    if (cargoEntry.quantity - quantity < 0.001) {
-      await db.caravanCargo.delete({ where: { id: cargoEntry.id } });
-    } else {
-      await db.caravanCargo.update({ where: { id: cargoEntry.id }, data: { quantity: { decrement: quantity } } });
-    }
-
-    if (caravan.locationType === 'KEEP') {
-      await db.resourceLedger.upsert({
-        where:  { keepId_resourceType: { keepId: caravan.locationId, resourceType } },
-        create: { keepId: caravan.locationId, resourceType, quantity },
-        update: { quantity: { increment: quantity } },
-      });
-    } else if (caravan.locationType === 'EXCHANGE') {
-      await db.exchangeStorage.upsert({
-        where:  { empireId_regionId_resourceType: { empireId, regionId: caravan.locationId, resourceType } },
-        create: { empireId, regionId: caravan.locationId, resourceType, quantity },
-        update: { quantity: { increment: quantity } },
-      });
-    }
-
-    const updated = await db.caravan.findUnique({ where: { id: caravan.id }, include: { cargo: true } });
-    res.json({ caravan: updated });
+    res.json({ caravan, capacity: { usedWeight, maxWeight } });
   } catch (err) { next(err); }
 });
 
@@ -217,19 +77,20 @@ caravanRouter.post('/:id/dispatch', async (req, res, next) => {
       if (!plot) { res.status(404).json({ error: 'Destination plot not found' }); return; }
     }
 
-    const now = new Date();
-    const empireAgeDays = (now.getTime() - caravan.empire.createdAt.getTime()) / 86_400_000;
+    const now             = new Date();
+    const empireAgeDays   = (now.getTime() - caravan.empire.createdAt.getTime()) / 86_400_000;
     const starterMultiplier = getStarterSpeedMultiplier(empireAgeDays);
-    const arrivesAt = adminState.bypassEnabled
+    const arrivesAt       = adminState.bypassEnabled
       ? new Date(now.getTime() + 1000)
       : new Date(now.getTime() + (TRAVEL_SECONDS / starterMultiplier) * 1000);
 
     const updated = await db.caravan.update({
-      where: { id: caravan.id },
-      data:  { status: 'IN_TRANSIT', destType, destId, departedAt: now, arrivesAt },
-      include: { cargo: true },
+      where:   { id: caravan.id },
+      data:    { status: 'IN_TRANSIT', destType, destId, departedAt: now, arrivesAt },
+      include: { warehouse: { include: { items: true } } },
     });
 
+    scheduleArrival(updated.id, arrivesAt);
     res.json({ caravan: updated });
   } catch (err) { next(err); }
 });
@@ -249,15 +110,15 @@ caravanRouter.post('/found', async (req, res, next) => {
     if (existing) { res.status(409).json({ error: 'Plot already has a keep' }); return; }
 
     const caravans = await db.caravan.findMany({
-      where: { empireId, locationType: 'PLOT', locationId: plotId, status: 'IDLE' },
-      include: { cargo: true },
+      where:   { empireId, locationType: 'PLOT', locationId: plotId, status: 'IDLE' },
+      include: { warehouse: { include: { items: true } } },
     });
     if (caravans.length === 0) { res.status(400).json({ error: 'No caravans at this plot' }); return; }
 
     const combined = new Map<string, number>();
     for (const c of caravans) {
-      for (const cargo of c.cargo) {
-        combined.set(cargo.resourceType, (combined.get(cargo.resourceType) ?? 0) + cargo.quantity);
+      for (const item of c.warehouse?.items ?? []) {
+        combined.set(item.resourceType, (combined.get(item.resourceType) ?? 0) + item.quantity);
       }
     }
 
@@ -270,29 +131,43 @@ caravanRouter.post('/found', async (req, res, next) => {
       }
     }
 
+    // Deduct founding costs from caravan warehouses, spreading across multiple caravans
     for (const cost of KEEP_FOUNDING_COST) {
       let remaining = cost.quantity;
       for (const c of caravans) {
         if (remaining <= 0) break;
-        const entry = c.cargo.find((x) => x.resourceType === cost.resource);
-        if (!entry) continue;
-        const take = Math.min(entry.quantity, remaining);
-        if (entry.quantity - take < 0.001) {
-          await db.caravanCargo.delete({ where: { id: entry.id } });
+        const item = c.warehouse?.items.find((x) => x.resourceType === cost.resource);
+        if (!item || !c.warehouseId) continue;
+        const take   = Math.min(item.quantity, remaining);
+        const newQty = item.quantity - take;
+        if (newQty < 0.001) {
+          await db.warehouseItem.delete({
+            where: { warehouseId_resourceType: { warehouseId: c.warehouseId, resourceType: cost.resource } },
+          });
         } else {
-          await db.caravanCargo.update({ where: { id: entry.id }, data: { quantity: { decrement: take } } });
+          await db.warehouseItem.update({
+            where: { warehouseId_resourceType: { warehouseId: c.warehouseId, resourceType: cost.resource } },
+            data:  { quantity: newQty },
+          });
         }
         remaining -= take;
       }
     }
 
-    const keep = await db.keep.create({
-      data: { empireId, plotId, name: keepName, buildingSlotCount: KEEP_DEFAULT_BUILDING_SLOTS },
-    });
-
-    await db.caravan.updateMany({
-      where: { empireId, locationType: 'PLOT', locationId: plotId, status: 'IDLE' },
-      data:  { locationType: 'KEEP', locationId: keep.id },
+    // Create keep + warehouse atomically
+    const keep = await db.$transaction(async (tx) => {
+      const warehouse = await tx.warehouse.create({
+        data: { type: 'KEEP', empireId, cap: KEEP_BASE_STORAGE },
+      });
+      const k = await tx.keep.create({
+        data: { empireId, plotId, name: keepName, buildingSlotCount: KEEP_DEFAULT_BUILDING_SLOTS, warehouseId: warehouse.id },
+      });
+      // Move caravans from plot to the new keep
+      await tx.caravan.updateMany({
+        where: { empireId, locationType: 'PLOT', locationId: plotId, status: 'IDLE' },
+        data:  { locationType: 'KEEP', locationId: k.id },
+      });
+      return k;
     });
 
     res.status(201).json({ keep });

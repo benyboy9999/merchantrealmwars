@@ -9,6 +9,8 @@ export const WsEvent = {
   EXCHANGE_ORDER_MATCHED: 'exchange:order:matched',
   CHAT_MESSAGE: 'chat:message',
   REGION_CONTROL_CHANGED: 'region:control:changed',
+  PRODUCTION_COMPLETED: 'production:completed',
+  PRODUCTION_BLOCKED: 'production:blocked',
 
   // Client → Server
   CHAT_SEND: 'chat:send',

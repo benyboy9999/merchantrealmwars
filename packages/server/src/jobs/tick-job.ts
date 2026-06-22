@@ -33,7 +33,7 @@ export interface TickResult {
 
 export async function runTick(io?: SocketServer): Promise<TickResult> {
   if (tickRunning) {
-    console.warn(`[tick] Skipping tick ${tickNumber + 1} — previous still running`);
+    console.log(`[tick] Skipping tick ${tickNumber + 1} — previous still running`);
     return { tickNumber, durationMs: 0, produced: 0, delivered: 0 };
   }
   tickRunning = true;
@@ -48,26 +48,18 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
   const start = Date.now();
   tickNumber++;
   let totalProduced = 0;
-  let totalDelivered = 0;
 
-  // ── Read all data upfront in parallel ───────────────────────────────────────
-  const [keeps, arrivedCaravans] = await Promise.all([
-    db.keep.findMany({
-      include: {
-        empire:           { select: { createdAt: true } },
-        buildings:        true,
-        resourceLedger:   true,
-        productionOrders: { orderBy: [{ orderType: 'asc' }, { position: 'asc' }] },
-      },
-    }),
-    db.caravan.findMany({
-      where: { status: 'IN_TRANSIT', arrivesAt: { lte: new Date() } },
-    }),
-  ]);
+  // ── Read all data upfront ────────────────────────────────────────────────────
+  const keeps = await db.keep.findMany({
+    include: {
+      empire:           { select: { createdAt: true } },
+      buildings:        true,
+      warehouse:        { include: { items: true } },
+      productionOrders: { orderBy: [{ orderType: 'asc' }, { position: 'asc' }] },
+    },
+  });
 
   // Collect all DB writes — flushed as one transaction at the end.
-  // This means one DB round-trip instead of N sequential ones, and prevents
-  // lock contention between concurrent ticks if the guard is somehow bypassed.
   const writes: Prisma.PrismaPromise<unknown>[] = [];
 
   const decayThisTick = DURABILITY_CONSTANTS.decayPerCycle * (config.TICK_INTERVAL_SECONDS / BASE_CYCLE_SECONDS);
@@ -92,7 +84,7 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
 
   // ── Phase 1: Production ──────────────────────────────────────────────────────
   for (const keep of keeps) {
-    const ledgerMap = new Map(keep.resourceLedger.map((e) => [e.resourceType, e.quantity]));
+    const ledgerMap = new Map((keep.warehouse?.items ?? []).map((e) => [e.resourceType, e.quantity]));
 
     const tierHousingCap: Record<WorkerTier, number> = { T1: 0, T2: 0, T3: 0 };
     for (const b of keep.buildings) {
@@ -248,14 +240,12 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
 
         const newHealth = Math.max(DURABILITY_CONSTANTS.floor, building.health - decayThisTick);
 
-        // Queue write — collected for batch transaction below
         writes.push(db.building.update({
           where: { id: building.id },
           data:  { productionProgress: building.productionProgress, health: newHealth },
         }));
       }
 
-      // Queue production order completions/updates
       for (const order of numericalOrders) {
         if ((order.targetQuantity ?? 0) <= order.producedQuantity) {
           writes.push(db.productionOrder.delete({ where: { id: order.id } }));
@@ -268,45 +258,33 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
       }
     }
 
-    // Queue ledger flush
+    // Queue warehouse item writes — only for values that actually changed
+    const warehouseId   = keep.warehouseId!;
+    const originalItems = new Map((keep.warehouse?.items ?? []).map((e) => [e.resourceType, e.quantity]));
     for (const [resourceType, quantity] of ledgerMap) {
-      writes.push(db.resourceLedger.upsert({
-        where:  { keepId_resourceType: { keepId: keep.id, resourceType } },
-        create: { keepId: keep.id, resourceType, quantity: Math.max(0, quantity) },
-        update: { quantity: Math.max(0, quantity) },
-      }));
+      const clamped = Math.max(0, quantity);
+      if (Math.abs((originalItems.get(resourceType) ?? 0) - clamped) > 0.001) {
+        writes.push(db.warehouseItem.upsert({
+          where:  { warehouseId_resourceType: { warehouseId, resourceType } },
+          create: { warehouseId, resourceType, quantity: clamped },
+          update: { quantity: clamped },
+        }));
+      }
     }
   }
 
-  // ── Phase 2: Arrive caravans ─────────────────────────────────────────────────
-  for (const caravan of arrivedCaravans) {
-    writes.push(db.caravan.update({
-      where: { id: caravan.id },
-      data: {
-        status:       'IDLE',
-        locationType: caravan.destType!,
-        locationId:   caravan.destId!,
-        destType:     null,
-        destId:       null,
-        departedAt:   null,
-        arrivesAt:    null,
-      },
-    }));
-    totalDelivered++;
-  }
-
-  // ── Flush all writes in one transaction ──────────────────────────────────────
+  // ── Flush all writes in one transaction ─────────────────────────────────────
   if (writes.length > 0) {
     await db.$transaction(writes);
   }
 
-  // ── Record tick (after writes so duration includes transaction time) ──────────
+  // ── Record tick ──────────────────────────────────────────────────────────────
   const durationMs = Date.now() - start;
   await db.gameTick.create({ data: { tickNumber, processedAt: new Date(), durationMs } });
 
-  const result: TickResult = { tickNumber, durationMs, produced: totalProduced, delivered: totalDelivered };
+  const result: TickResult = { tickNumber, durationMs, produced: totalProduced, delivered: 0 };
   if (io) io.emit(WsEvent.TICK_COMPLETE, result);
-  console.warn(`⏱  Tick ${tickNumber} — ${durationMs}ms | produced: ${totalProduced} | delivered: ${totalDelivered}`);
+  console.log(`⏱  Tick ${tickNumber} — ${durationMs}ms | produced: ${totalProduced}`);
 
   return result;
 }
@@ -320,10 +298,10 @@ export async function startTickJob(io: SocketServer): Promise<void> {
 
   if (interval < 60) {
     setInterval(() => runTick(io).catch(onError), interval * 1000);
-    console.warn(`⏱  Tick job: every ${interval}s (resuming from tick ${tickNumber})`);
+    console.log(`⏱  Tick job: every ${interval}s (resuming from tick ${tickNumber})`);
   } else {
     const mins = Math.floor(interval / 60);
     cron.schedule(`*/${mins} * * * *`, () => runTick(io).catch(onError));
-    console.warn(`⏱  Tick job: every ${mins}min (resuming from tick ${tickNumber})`);
+    console.log(`⏱  Tick job: every ${mins}min (resuming from tick ${tickNumber})`);
   }
 }

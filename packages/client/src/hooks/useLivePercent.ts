@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ProductionTask } from '../services/api.js';
 
 /** Returns a 0–1 value that updates every second based on wall-clock progress between two timestamps. */
 export function useLivePercent(startAt: string | null | undefined, endAt: string | null | undefined): number {
@@ -30,9 +31,6 @@ export function useLivePercent(startAt: string | null | undefined, endAt: string
 export function useInterpolatedProgress(serverProgress: number, timeMinutes: number): number {
   const [pct, setPct] = useState(serverProgress);
 
-  // Snap to server value whenever a tick updates it
-  useState(() => { setPct(serverProgress); });
-
   useEffect(() => {
     setPct(serverProgress);
   }, [serverProgress]);
@@ -52,6 +50,34 @@ export function useInterpolatedProgress(serverProgress: number, timeMinutes: num
     }, 100);
     return () => clearInterval(id);
   }, [timeMinutes]);
+
+  return pct;
+}
+
+/**
+ * Timestamp-based production progress for a ProductionTask.
+ * Derives live 0–1 progress from `progressAtUpdate` + elapsed time since `updatedAt`.
+ * No server contact needed between task creation and completion.
+ */
+export function useProductionProgress(task: ProductionTask | null | undefined): number {
+  const [pct, setPct] = useState(0);
+
+  useEffect(() => {
+    if (!task) { setPct(0); return; }
+    const update = () => {
+      const now         = Date.now();
+      const updatedAt   = new Date(task.updatedAt).getTime();
+      const completesAt = new Date(task.completesAt).getTime();
+      const totalMs     = completesAt - updatedAt;
+      if (totalMs <= 0) { setPct(1); return; }
+      const elapsed = now - updatedAt;
+      const t       = Math.min(1, elapsed / totalMs);
+      setPct(task.progressAtUpdate + t * (1 - task.progressAtUpdate));
+    };
+    update();
+    const id = setInterval(update, 100);
+    return () => clearInterval(id);
+  }, [task?.id, task?.completesAt, task?.progressAtUpdate, task?.updatedAt]);
 
   return pct;
 }

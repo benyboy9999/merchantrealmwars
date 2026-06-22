@@ -11,21 +11,30 @@ function empireGuard(empireId: string | null | undefined, res: import('express')
   return true;
 }
 
-// ── Exchange storage ──────────────────────────────────────────────────────────
+async function findOrCreateExchangeWarehouse(empireId: string, regionId: string): Promise<string> {
+  const existing = await db.warehouse.findFirst({ where: { empireId, regionId, type: 'EXCHANGE' } });
+  if (existing) return existing.id;
+  const created = await db.warehouse.create({
+    data: { type: 'EXCHANGE', empireId, regionId, cap: 1_000_000_000 },
+  });
+  return created.id;
+}
 
-exchangeRouter.get('/storage', async (req, res, next) => {
+// ── Exchange warehouse ────────────────────────────────────────────────────────
+
+exchangeRouter.get('/warehouse', async (req, res, next) => {
   try {
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
     const regionId = (req.query['regionId'] as string) ?? 'CENTRAL';
-    const [storage, empire] = await Promise.all([
-      db.exchangeStorage.findMany({
-        where: { empireId, regionId },
-        orderBy: { resourceType: 'asc' },
+    const [warehouse, empire] = await Promise.all([
+      db.warehouse.findFirst({
+        where:   { empireId, regionId, type: 'EXCHANGE' },
+        include: { items: { orderBy: { resourceType: 'asc' } } },
       }),
       db.empire.findUnique({ where: { id: empireId }, select: { goldBalance: true } }),
     ]);
-    res.json({ storage, goldBalance: empire?.goldBalance ?? 0 });
+    res.json({ warehouse, goldBalance: empire?.goldBalance ?? 0 });
   } catch (err) { next(err); }
 });
 
@@ -36,9 +45,9 @@ exchangeRouter.get('/:regionId/listings', async (req, res, next) => {
     const { resourceType } = z.object({ resourceType: z.string().optional() }).parse(req.query);
     const listings = await db.marketOrder.findMany({
       where: {
-        regionId: req.params['regionId'],
+        regionId:  req.params['regionId'],
         orderType: 'SELL',
-        status: { in: ['OPEN', 'PARTIALLY_FILLED'] },
+        status:    { in: ['OPEN', 'PARTIALLY_FILLED'] },
         ...(resourceType ? { resourceType } : {}),
       },
       orderBy: [{ resourceType: 'asc' }, { pricePerUnit: 'asc' }],
@@ -62,17 +71,21 @@ exchangeRouter.post('/:regionId/listings', async (req, res, next) => {
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
 
-    const storage = await db.exchangeStorage.findUnique({
-      where: { empireId_regionId_resourceType: { empireId, regionId, resourceType } },
+    const warehouse = await db.warehouse.findFirst({ where: { empireId, regionId, type: 'EXCHANGE' } });
+    if (!warehouse) {
+      res.status(400).json({ error: 'No exchange warehouse for this region' }); return;
+    }
+
+    const item = await db.warehouseItem.findUnique({
+      where: { warehouseId_resourceType: { warehouseId: warehouse.id, resourceType } },
     });
-    if (!storage || storage.quantity < quantity) {
-      res.status(400).json({ error: 'Insufficient quantity in exchange storage' });
-      return;
+    if (!item || item.quantity < quantity) {
+      res.status(400).json({ error: 'Insufficient quantity in exchange storage' }); return;
     }
 
     const [, listing] = await db.$transaction([
-      db.exchangeStorage.update({
-        where: { empireId_regionId_resourceType: { empireId, regionId, resourceType } },
+      db.warehouseItem.update({
+        where: { warehouseId_resourceType: { warehouseId: warehouse.id, resourceType } },
         data:  { quantity: { decrement: quantity } },
       }),
       db.marketOrder.create({
@@ -88,9 +101,9 @@ exchangeRouter.post('/:regionId/listings', async (req, res, next) => {
 
 exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
   try {
-    const { quantity } = z.object({ quantity: z.number().positive() }).parse(req.body);
-    const listingId     = req.params['id']!;
-    const buyerEmpireId = req.auth!.empireId;
+    const { quantity }   = z.object({ quantity: z.number().positive() }).parse(req.body);
+    const listingId      = req.params['id']!;
+    const buyerEmpireId  = req.auth!.empireId;
     if (!empireGuard(buyerEmpireId, res)) return;
 
     const [listing, buyer] = await Promise.all([
@@ -99,8 +112,7 @@ exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
     ]);
 
     if (!listing || listing.status === 'CANCELLED' || listing.status === 'FILLED') {
-      res.status(409).json({ error: 'LISTING_EXPIRED' });
-      return;
+      res.status(409).json({ error: 'LISTING_EXPIRED' }); return;
     }
     if (!buyer) { res.status(404).json({ error: 'Empire not found' }); return; }
 
@@ -109,6 +121,9 @@ exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
       res.status(400).json({ error: `Insufficient gold — need ${totalGold.toFixed(0)}g, have ${buyer.goldBalance.toFixed(0)}g` });
       return;
     }
+
+    // Ensure buyer has an exchange warehouse for this region before entering transaction
+    const buyerWarehouseId = await findOrCreateExchangeWarehouse(buyer.id, listing.regionId);
 
     try {
       await db.$transaction(async (tx) => {
@@ -126,9 +141,9 @@ exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
           await tx.empire.update({ where: { id: listing.empireId }, data: { goldBalance: { increment: totalGold } } });
         }
 
-        await tx.exchangeStorage.upsert({
-          where:  { empireId_regionId_resourceType: { empireId: buyer.id, regionId: listing.regionId, resourceType: listing.resourceType } },
-          create: { empireId: buyer.id, regionId: listing.regionId, resourceType: listing.resourceType, quantity },
+        await tx.warehouseItem.upsert({
+          where:  { warehouseId_resourceType: { warehouseId: buyerWarehouseId, resourceType: listing.resourceType } },
+          create: { warehouseId: buyerWarehouseId, resourceType: listing.resourceType, quantity },
           update: { quantity: { increment: quantity } },
         });
 
@@ -153,8 +168,7 @@ exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
       });
     } catch (err: unknown) {
       if (err instanceof Error && err.message === 'LISTING_EXPIRED') {
-        res.status(409).json({ error: 'LISTING_EXPIRED' });
-        return;
+        res.status(409).json({ error: 'LISTING_EXPIRED' }); return;
       }
       throw err;
     }
@@ -177,12 +191,14 @@ exchangeRouter.delete('/listings/:id', async (req, res, next) => {
       res.status(400).json({ error: 'Listing cannot be cancelled' }); return;
     }
 
-    const remaining = listing.quantity - listing.fulfilledQty;
+    const remaining    = listing.quantity - listing.fulfilledQty;
+    const warehouseId  = await findOrCreateExchangeWarehouse(empireId, listing.regionId);
+
     await db.$transaction([
       db.marketOrder.update({ where: { id: listing.id }, data: { status: 'CANCELLED' } }),
-      db.exchangeStorage.upsert({
-        where:  { empireId_regionId_resourceType: { empireId, regionId: listing.regionId, resourceType: listing.resourceType } },
-        create: { empireId, regionId: listing.regionId, resourceType: listing.resourceType, quantity: remaining },
+      db.warehouseItem.upsert({
+        where:  { warehouseId_resourceType: { warehouseId, resourceType: listing.resourceType } },
+        create: { warehouseId, resourceType: listing.resourceType, quantity: remaining },
         update: { quantity: { increment: remaining } },
       }),
     ]);
@@ -203,19 +219,23 @@ exchangeRouter.post('/sell', async (req, res, next) => {
 
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
-    const entry = await db.exchangeStorage.findUnique({
-      where: { empireId_regionId_resourceType: { empireId, regionId, resourceType } },
-    });
-    if (!entry || entry.quantity < quantity) {
-      res.status(400).json({ error: 'Not enough in exchange storage' });
-      return;
+
+    const warehouse = await db.warehouse.findFirst({ where: { empireId, regionId, type: 'EXCHANGE' } });
+    const item = warehouse ? await db.warehouseItem.findUnique({
+      where: { warehouseId_resourceType: { warehouseId: warehouse.id, resourceType } },
+    }) : null;
+
+    if (!item || item.quantity < quantity) {
+      res.status(400).json({ error: 'Not enough in exchange storage' }); return;
     }
 
-    const gold = quantity;
+    const gold        = quantity;
+    const warehouseId = warehouse!.id;
+
     await db.$transaction([
-      entry.quantity - quantity < 0.001
-        ? db.exchangeStorage.delete({ where: { empireId_regionId_resourceType: { empireId, regionId, resourceType } } })
-        : db.exchangeStorage.update({ where: { empireId_regionId_resourceType: { empireId, regionId, resourceType } }, data: { quantity: { decrement: quantity } } }),
+      item.quantity - quantity < 0.001
+        ? db.warehouseItem.delete({ where: { warehouseId_resourceType: { warehouseId, resourceType } } })
+        : db.warehouseItem.update({ where: { warehouseId_resourceType: { warehouseId, resourceType } }, data: { quantity: { decrement: quantity } } }),
       db.empire.update({ where: { id: empireId }, data: { goldBalance: { increment: gold } } }),
     ]);
 

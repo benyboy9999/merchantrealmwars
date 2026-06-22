@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { ResourceType, KEEP_DEFAULT_BUILDING_SLOTS } from '@merchant-realms/shared';
+import { ResourceType, KEEP_DEFAULT_BUILDING_SLOTS, KEEP_BASE_STORAGE, MULE_CAPACITY_KG } from '@merchant-realms/shared';
 
 const db = new PrismaClient();
 
@@ -91,8 +91,9 @@ async function main() {
   // ── Clean slate: remove all existing game data so we can rebuild with
   //    coordinate-based IDs and correct region assignments across the full map.
   await db.caravan.deleteMany({});
-  await db.resourceLedger.deleteMany({});
   await db.keep.deleteMany({});
+  await db.warehouseItem.deleteMany({});
+  await db.warehouse.deleteMany({});
   await db.plot.deleteMany({});
   await db.district.deleteMany({});
 
@@ -148,27 +149,40 @@ async function main() {
 
   // ── Admin starting Keep — first plot of East Quarter (hex 1,0) ────────────
   const startingPlotId = 'plot-district-1-0-1';
-  const adminKeep = await db.keep.create({
-    data: { empireId: adminEmpire.id, plotId: startingPlotId, name: 'Highwatch Keep', buildingSlotCount: KEEP_DEFAULT_BUILDING_SLOTS },
-  });
-  for (const [resourceType, quantity] of [['OAK', 15], ['LIMESTONE', 15]] as const) {
-    await db.resourceLedger.create({
-      data: { keepId: adminKeep.id, resourceType, quantity },
+  const adminKeep = await db.$transaction(async (tx) => {
+    const wh = await tx.warehouse.create({
+      data: { type: 'KEEP', empireId: adminEmpire.id, cap: KEEP_BASE_STORAGE },
     });
-  }
-  console.log('  ✓ Admin starting Keep (Highwatch Keep, East Quarter [1]) + 15 WOOD + 15 LIMESTONE');
+    const k = await tx.keep.create({
+      data: { empireId: adminEmpire.id, plotId: startingPlotId, name: 'Highwatch Keep', buildingSlotCount: KEEP_DEFAULT_BUILDING_SLOTS, warehouseId: wh.id },
+    });
+    await tx.warehouseItem.createMany({
+      data: [
+        { warehouseId: wh.id, resourceType: 'OAK',       quantity: 15 },
+        { warehouseId: wh.id, resourceType: 'LIMESTONE',  quantity: 15 },
+      ],
+    });
+    return k;
+  });
+  console.log('  ✓ Admin starting Keep (Highwatch Keep, East Quarter [1]) + 15 OAK + 15 LIMESTONE');
 
   // ── Starting caravan ──────────────────────────────────────────────────────
-  await db.caravan.create({
-    data: {
-      empireId:     adminEmpire.id,
-      name:         'Caravan',
-      animalType:   'MULE',
-      animalCount:  1,
-      locationType: 'KEEP',
-      locationId:   adminKeep.id,
-      status:       'IDLE',
-    },
+  await db.$transaction(async (tx) => {
+    const wh = await tx.warehouse.create({
+      data: { type: 'CARAVAN', empireId: adminEmpire.id, cap: MULE_CAPACITY_KG },
+    });
+    await tx.caravan.create({
+      data: {
+        empireId:     adminEmpire.id,
+        name:         'Caravan',
+        animalType:   'MULE',
+        animalCount:  1,
+        locationType: 'KEEP',
+        locationId:   adminKeep.id,
+        status:       'IDLE',
+        warehouseId:  wh.id,
+      },
+    });
   });
   console.log('  ✓ Starting caravan (1 mule, idle at Highwatch Keep)');
 

@@ -9,6 +9,12 @@ datasource db {
 
 // ── Enums ──────────────────────────────────────────────────────────────────
 
+enum WarehouseType {
+  KEEP
+  CARAVAN
+  EXCHANGE
+}
+
 enum CaravanStatus {
   IDLE
   IN_TRANSIT
@@ -94,38 +100,22 @@ model Region {
   guildControllable Boolean
 
   districts      District[]
-  bonuses        RegionBonus[]
   marketOrders   MarketOrder[]
   taxCollections TaxCollection[]
 }
 
-// Blanket production bonus a region applies to a resource category.
-// category is a string key (e.g. "IRON_EXTRACTION") — enum deferred until item chains finalised.
-model RegionBonus {
-  id        String @id @default(cuid())
-  regionId  String
-  category  String // resource category this bonus applies to
-  magnitude Float  // additive multiplier, e.g. 0.15 = +15%
-
-  region Region @relation(fields: [regionId], references: [id], onDelete: Cascade)
-
-  @@unique([regionId, category])
-  @@index([regionId])
-}
-
-// A named hex tile on the visual map. Contains 4–6 Plots.
 model District {
   id               String @id
   regionId         String
   name             String
   bonusDescription String
-  tier             Int    @default(1) // 1–3; multiplies plot trait values within this district
-  q                Int    // hex axial q coordinate
-  r                Int    // hex axial r coordinate
-  x                Float  // absolute map x (1000x1000 grid, center = 500,500)
-  y                Float  // absolute map y
+  tier             Int    @default(1)
+  q                Int
+  r                Int
+  x                Float
+  y                Float
 
-  region           Region           @relation(fields: [regionId], references: [id])
+  region           Region            @relation(fields: [regionId], references: [id])
   plots            Plot[]
   districtControls DistrictControl[]
 
@@ -133,15 +123,14 @@ model District {
   @@index([regionId])
 }
 
-// An individual buildable location within a District where a Keep can be founded.
 model Plot {
   id               String @id
   districtId       String
   name             String
   bonusDescription String
-  tier             Int    @default(1) // 1–4; determines resource quality ceiling and permit build cost
-  x                Float  // absolute map x coordinate
-  y                Float  // absolute map y coordinate
+  tier             Int    @default(1)
+  x                Float
+  y                Float
 
   district District   @relation(fields: [districtId], references: [id])
   keeps    Keep[]
@@ -150,18 +139,54 @@ model Plot {
   @@index([districtId])
 }
 
-// A single trait on a plot (e.g. iron abundance, construction speed bonus).
-// traitType is a string key — enum deferred until item chains finalised.
 model PlotTrait {
   id        String @id @default(cuid())
   plotId    String
-  traitType String // e.g. "IRON_ABUNDANCE", "FERTILITY", "CONSTRUCTION_SPEED"
-  baseValue Float  // raw value before district tier multiplier is applied
+  traitType String
+  baseValue Float
 
   plot Plot @relation(fields: [plotId], references: [id], onDelete: Cascade)
 
   @@unique([plotId, traitType])
   @@index([plotId])
+}
+
+// ── Warehouse ──────────────────────────────────────────────────────────────
+
+// Universal storage container. Every Keep, Caravan, and empire×region exchange
+// slot is backed by exactly one Warehouse row. Capacity is stored and updated
+// transactionally when buildings or caravan animals change.
+model Warehouse {
+  id       String        @id @default(cuid())
+  type     WarehouseType
+  empireId String
+  // Set only for EXCHANGE warehouses — identifies which region's exchange this is.
+  regionId String?
+  // Capacity in kg. Use 1e9 for effectively unlimited (exchange warehouses).
+  cap      Float
+
+  items   WarehouseItem[]
+  empire  Empire          @relation(fields: [empireId], references: [id], onDelete: Cascade)
+  keep    Keep?
+  caravan Caravan?
+
+  @@index([empireId])
+  @@index([empireId, regionId])
+}
+
+// Single resource-type slot inside a Warehouse. Replaces ResourceLedger,
+// CaravanCargo, and ExchangeStorage.
+model WarehouseItem {
+  id           String   @id @default(cuid())
+  warehouseId  String
+  resourceType String
+  quantity     Float    @default(0)
+  updatedAt    DateTime @updatedAt
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, resourceType])
+  @@index([warehouseId])
 }
 
 // ── Player Economy ─────────────────────────────────────────────────────────
@@ -173,15 +198,13 @@ model Empire {
   goldBalance Float    @default(0)
   createdAt   DateTime @default(now())
 
-  player            Player                 @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  keeps             Keep[]
-  caravans          Caravan[]
-  exchangeStorages  ExchangeStorage[]
-  marketOrders      MarketOrder[]
-  soldTrades        MarketTrade[]          @relation("TradesSeller")
-  purchasedTrades   MarketTrade[]          @relation("TradesBuyer")
-  consumptionLogs   WorkerConsumptionLog[]
-  specialisations   EmpireSpecialisation[]
+  player          Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  keeps           Keep[]
+  caravans        Caravan[]
+  warehouses      Warehouse[]
+  marketOrders    MarketOrder[]
+  soldTrades      MarketTrade[] @relation("TradesSeller")
+  purchasedTrades MarketTrade[] @relation("TradesBuyer")
 }
 
 model Keep {
@@ -191,46 +214,36 @@ model Keep {
   name              String
   buildingSlotCount Int      @default(7)
   createdAt         DateTime @default(now())
+  // Nullable during migration only — always set on keeps created after migration.
+  warehouseId       String?  @unique
 
-  empire         Empire           @relation(fields: [empireId], references: [id], onDelete: Cascade)
-  plot           Plot             @relation(fields: [plotId], references: [id])
-  buildings      Building[]
-  resourceLedger ResourceLedger[]
-  upkeepLogs     BuildingUpkeepLog[]
+  empire           Empire           @relation(fields: [empireId], references: [id], onDelete: Cascade)
+  plot             Plot             @relation(fields: [plotId], references: [id])
+  warehouse        Warehouse?       @relation(fields: [warehouseId], references: [id])
+  buildings        Building[]
   productionOrders ProductionOrder[]
+  productionTasks  ProductionTask[]
 
   @@index([empireId])
 }
 
 model Building {
-  id               String  @id @default(cuid())
-  keepId           String
-  buildingType     String  // BuildingType enum value
-  level            Int     @default(1)
-  slotIndex        Int
-  isActive            Boolean @default(true)
-  isDormant           Boolean @default(false)
-  health              Float   @default(100)
-  workersAssigned     Int     @default(0)
-  productionProgress  Float   @default(0)
+  id                 String  @id @default(cuid())
+  keepId             String
+  buildingType       String
+  level              Int     @default(1)
+  slotIndex          Int
+  isActive           Boolean @default(true)
+  isDormant          Boolean @default(false)
+  health             Float   @default(100)
+  workersAssigned    Int     @default(0)
+  productionProgress Float   @default(0)
 
-  keep       Keep                @relation(fields: [keepId], references: [id], onDelete: Cascade)
-  upkeepLogs BuildingUpkeepLog[]
+  keep            Keep             @relation(fields: [keepId], references: [id], onDelete: Cascade)
+  productionTask  ProductionTask?
 
   @@unique([keepId, slotIndex])
   @@index([keepId])
-}
-
-model ResourceLedger {
-  id           String   @id @default(cuid())
-  keepId       String
-  resourceType String   // ResourceType enum value
-  quantity     Float    @default(0)
-  updatedAt    DateTime @updatedAt
-
-  keep Keep @relation(fields: [keepId], references: [id], onDelete: Cascade)
-
-  @@unique([keepId, resourceType])
 }
 
 // ── Production Queue ───────────────────────────────────────────────────────
@@ -238,12 +251,12 @@ model ResourceLedger {
 model ProductionOrder {
   id               String              @id @default(cuid())
   keepId           String
-  buildingType     String              // which building type's queue this belongs to
-  recipeKey        String              // matches Recipe.key in engine
+  buildingType     String
+  recipeKey        String
   orderType        ProductionOrderType
-  targetQuantity   Float?              // NUMERICAL only
+  targetQuantity   Float?
   producedQuantity Float               @default(0)
-  position         Int                 // lower = earlier in queue
+  position         Int
   createdAt        DateTime            @default(now())
 
   keep Keep @relation(fields: [keepId], references: [id], onDelete: Cascade)
@@ -251,84 +264,61 @@ model ProductionOrder {
   @@index([keepId, buildingType, position])
 }
 
-// ── Workers ────────────────────────────────────────────────────────────────
+// Tracks a single active production cycle for one building. Created when a
+// production order is activated; deleted when the cycle completes. The server
+// uses `completesAt` to schedule a timer instead of accumulating progress
+// per-tick — clients derive live progress from `progressAtUpdate + elapsed`.
+model ProductionTask {
+  id               String   @id @default(cuid())
+  buildingId       String   @unique
+  keepId           String
+  recipeKey        String
+  startedAt        DateTime
+  completesAt      DateTime
+  progressAtUpdate Float    @default(0)
+  updatedAt        DateTime @updatedAt
+  speedSnapshot    Float    @default(1.0)
 
-model WorkerConsumptionLog {
-  id             String   @id @default(cuid())
-  empireId       String
-  tickId         String
-  resourceType   String
-  required       Float
-  actual         Float
-  penaltyApplied Float
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  keep     Keep     @relation(fields: [keepId], references: [id], onDelete: Cascade)
 
-  empire Empire   @relation(fields: [empireId], references: [id], onDelete: Cascade)
-  tick   GameTick @relation(fields: [tickId], references: [id])
-
-  @@index([empireId, tickId])
+  @@index([completesAt])
+  @@index([keepId])
 }
 
 // ── Transport ──────────────────────────────────────────────────────────────
 
-// A persistent caravan vehicle owned by an empire. It lives at a location,
-// carries cargo, and travels between keeps, the exchange, and empty plots.
 model Caravan {
-  id           String               @id @default(cuid())
-  empireId     String
-  name         String               @default("Caravan")
-  animalType   String               @default("MULE")
-  animalCount  Int                  @default(1)
+  id          String              @id @default(cuid())
+  empireId    String
+  name        String              @default("Caravan")
+  animalType  String              @default("MULE")
+  animalCount Int                 @default(1)
 
-  // Current location (when IDLE) or departure point (when IN_TRANSIT)
   locationType CaravanLocationType
   locationId   String
 
-  // Travel state (null when IDLE)
-  status       CaravanStatus        @default(IDLE)
-  destType     CaravanLocationType?
-  destId       String?
-  departedAt   DateTime?
-  arrivesAt    DateTime?
+  status    CaravanStatus        @default(IDLE)
+  destType  CaravanLocationType?
+  destId    String?
+  departedAt DateTime?
+  arrivesAt  DateTime?
 
-  cargo  CaravanCargo[]
-  empire Empire @relation(fields: [empireId], references: [id], onDelete: Cascade)
+  // Nullable during migration only — always set on caravans created after migration.
+  warehouseId String?  @unique
+
+  empire    Empire     @relation(fields: [empireId], references: [id], onDelete: Cascade)
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
 
   @@index([empireId])
   @@index([status, arrivesAt])
-}
-
-// Items currently loaded onto a caravan
-model CaravanCargo {
-  id           String @id @default(cuid())
-  caravanId    String
-  resourceType String
-  quantity     Float
-
-  caravan Caravan @relation(fields: [caravanId], references: [id], onDelete: Cascade)
-
-  @@unique([caravanId, resourceType])
-  @@index([caravanId])
-}
-
-// Player's inventory held at an exchange (deposited by caravan, listed for sale)
-model ExchangeStorage {
-  id           String @id @default(cuid())
-  empireId     String
-  regionId     String
-  resourceType String
-  quantity     Float  @default(0)
-
-  empire Empire @relation(fields: [empireId], references: [id], onDelete: Cascade)
-
-  @@unique([empireId, regionId, resourceType])
-  @@index([empireId])
 }
 
 // ── Exchange ───────────────────────────────────────────────────────────────
 
 model MarketOrder {
   id           String      @id @default(cuid())
-  empireId     String?     // null = NPC order
+  empireId     String?
   regionId     String
   orderType    OrderType
   resourceType String
@@ -394,9 +384,6 @@ model GuildMember {
   @@index([guildId])
 }
 
-// Guild control of an individual contestable district.
-// Winning guild gets the abundance tier bonus for that district's zone (Inner +1, Outer +2).
-// Tax share is computed per-tick from how many districts a guild controls in each region.
 model DistrictControl {
   id           String   @id @default(cuid())
   guildId      String
@@ -410,41 +397,6 @@ model DistrictControl {
 
   @@unique([districtId, weekNumber])
   @@index([guildId])
-}
-
-// ── Specialisation ─────────────────────────────────────────────────────────
-
-model SpecialisationTree {
-  id          String @id @default(cuid())
-  name        String @unique
-  description String
-  nodes       SpecialisationNode[]
-}
-
-model SpecialisationNode {
-  id               String @id @default(cuid())
-  treeId           String
-  level            Int
-  bonusDescription String
-  recipeUnlocks    Json   @default("[]")
-  cost             Json
-
-  tree               SpecialisationTree     @relation(fields: [treeId], references: [id])
-  empireAcquisitions EmpireSpecialisation[]
-
-  @@unique([treeId, level])
-}
-
-model EmpireSpecialisation {
-  id         String   @id @default(cuid())
-  empireId   String
-  nodeId     String
-  acquiredAt DateTime @default(now())
-
-  empire Empire             @relation(fields: [empireId], references: [id], onDelete: Cascade)
-  node   SpecialisationNode @relation(fields: [nodeId], references: [id])
-
-  @@unique([empireId, nodeId])
 }
 
 // ── Chat ───────────────────────────────────────────────────────────────────
@@ -470,8 +422,7 @@ model GameTick {
   processedAt DateTime
   durationMs  Int
 
-  consumptionLogs WorkerConsumptionLog[]
-  taxCollections  TaxCollection[]
+  taxCollections TaxCollection[]
 }
 
 model TaxCollection {
@@ -485,19 +436,4 @@ model TaxCollection {
 
   region Region   @relation(fields: [regionId], references: [id])
   tick   GameTick @relation(fields: [tickId], references: [id])
-}
-
-model BuildingUpkeepLog {
-  id         String   @id @default(cuid())
-  buildingId String
-  keepId     String
-  tickId     String
-  required   Json
-  actual     Json
-  isDormant  Boolean
-
-  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  keep     Keep     @relation(fields: [keepId], references: [id], onDelete: Cascade)
-
-  @@index([buildingId])
 }

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { useInterpolatedProgress } from '../hooks/useLivePercent.js';
+import { useProductionProgress } from '../hooks/useLivePercent.js';
 import ProgressBar from '../components/ProgressBar.js';
 import { api } from '../services/api.js';
 import {
@@ -11,6 +11,7 @@ import {
   KEEP_MAX_BUILDING_SLOTS, KEEP_DEFAULT_BUILDING_SLOTS, KEEP_SLOT_UNLOCK_RESOURCE,
 } from '@merchant-realms/shared';
 import type { Recipe, RecipeInput } from '@merchant-realms/shared';
+import type { ProductionTask } from '../services/api.js';
 import WarehousePanel from '../components/WarehousePanel.js';
 
 type Tab = 'keep' | 'buildings' | 'warehouse' | 'production' | 'workers';
@@ -21,14 +22,11 @@ export default function KingdomPage() {
   const qc = useQueryClient();
   const currentTab = (tab as Tab) ?? 'buildings';
 
-  // Global keep list for sidebar — 60 s staleTime so navigating back shows cached data instantly
-  const { data: keepsData, isLoading: keepsLoading, isError: keepsError } = useQuery({
-    queryKey: ['keeps'],
-    queryFn: api.keeps,
-    refetchInterval: 30_000,
-    staleTime: 60_000,
+  const { data: empireData, isLoading: keepsLoading, isError: keepsError } = useQuery({
+    queryKey: ['empire'],
+    queryFn: api.empireBootstrap,
   });
-  const keeps = keepsData?.keeps ?? [];
+  const keeps = empireData?.empire.keeps ?? [];
 
   // Redirect to first keep as soon as we have one (works on cache hit too)
   if (!keepId && keeps.length > 0) {
@@ -108,15 +106,13 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc }: {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['keep', keepId],
     queryFn: () => api.keep(keepId),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
   });
 
   if (isError) return <div className="p-6 text-red-400 text-sm">Failed to load keep — check server connection.</div>;
   if (isLoading || !data) return <div className="p-6 text-stone-500 text-sm">Loading…</div>;
 
   const { keep, storage } = data;
-  const ledgerMap = new Map(keep.resourceLedger.map((e) => [e.resourceType, e.quantity]));
+  const ledgerMap = new Map((keep.warehouse?.items ?? []).map((e) => [e.resourceType, e.quantity]));
 
   const totalWorkers = keep.buildings
     .filter((b) => b.buildingType === 'HOUSING' && b.isActive)
@@ -175,8 +171,9 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc }: {
           <WarehousePanel
             locationType="KEEP"
             locationId={keepId}
+            warehouseId={keep.warehouseId ?? ''}
             locationLabel={`${keep.name} — Resources`}
-            inventory={keep.resourceLedger.filter((e) => e.quantity > 0)}
+            inventory={(keep.warehouse?.items ?? []).filter((e) => e.quantity > 0)}
             onInventoryChange={() => qc.invalidateQueries({ queryKey: ['keep', keepId] })}
             className="h-full"
           />
@@ -195,7 +192,7 @@ function KeepTab({ keep, qc }: { keep: KeepTabKeep; qc: ReturnType<typeof useQue
   const [name, setName] = useState(keep.name);
   const rename = useMutation({
     mutationFn: () => api.renameKeep(keep.id, name),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['keeps'] }); qc.invalidateQueries({ queryKey: ['keep', keep.id] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['empire'] }); qc.invalidateQueries({ queryKey: ['keep', keep.id] }); },
   });
   useEffect(() => { setName(keep.name); }, [keep.name]);
 
@@ -414,10 +411,12 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
 
 // ── Production tab ────────────────────────────────────────────────────────────
 
-// Per-building-type progress bar with client-side interpolation
-function BuildingProgressBar({ serverProgress, timeMinutes }: { serverProgress: number; timeMinutes: number }) {
-  const pct = useInterpolatedProgress(serverProgress, timeMinutes);
-  const secsRemaining = Math.max(0, Math.round((1 - pct) * timeMinutes * 60));
+// Per-building-type progress bar driven by ProductionTask timestamps
+function BuildingProgressBar({ task }: { task: ProductionTask | null | undefined }) {
+  const pct = useProductionProgress(task);
+  const secsRemaining = task
+    ? Math.max(0, Math.round((new Date(task.completesAt).getTime() - Date.now()) / 1000))
+    : 0;
   const label = secsRemaining >= 60
     ? `${Math.floor(secsRemaining / 60)}m ${secsRemaining % 60}s`
     : `${secsRemaining}s`;
@@ -426,7 +425,7 @@ function BuildingProgressBar({ serverProgress, timeMinutes }: { serverProgress: 
       <ProgressBar pct={pct} color="bg-gold-600/50" height="h-1" />
       <div className="flex justify-between text-xs text-stone-600 mt-0.5">
         <span>{(pct * 100).toFixed(0)}%</span>
-        <span>{label}</span>
+        {task && <span>{label}</span>}
       </div>
     </div>
   );
@@ -479,7 +478,7 @@ function EfficiencyBar({ keep, ledgerMap }: {
 
 function ProductionTab({ keep, keepId, ledgerMap, qc }: {
   keep: {
-    buildings: Array<{ buildingType: string; level: number; isActive: boolean; productionProgress: number }>;
+    buildings: Array<{ buildingType: string; level: number; isActive: boolean; productionProgress: number; productionTask: ProductionTask | null }>;
     productionOrders: Array<{ id: string; buildingType: string; recipeKey: string; orderType: string; targetQuantity: number | null; producedQuantity: number }>;
   };
   keepId: string;
@@ -533,11 +532,9 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
             ?? orders.find((o) => o.orderType === 'INFINITE');
           const activeRecipe = activeOrder ? RECIPE_BY_KEY[activeOrder.recipeKey] : null;
 
-          // Average progress across all buildings of this type
+          // Use the first active building's task for progress display
           const buildingsOfType = prodBuildings.filter((b) => b.buildingType === bType);
-          const avgProgress = buildingsOfType.length > 0
-            ? buildingsOfType.reduce((sum, b) => sum + b.productionProgress, 0) / buildingsOfType.length
-            : 0;
+          const activeTask      = buildingsOfType.find((b) => b.productionTask != null)?.productionTask ?? null;
 
           return (
             <div key={bType} className="border border-stone-700 rounded bg-stone-800">
@@ -553,7 +550,7 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
                   <span className="text-stone-600 text-xs">{isOpen ? '▲' : '▼'}</span>
                 </div>
                 {activeRecipe && (
-                  <BuildingProgressBar serverProgress={avgProgress} timeMinutes={activeRecipe.timeMinutes} />
+                  <BuildingProgressBar task={activeTask} />
                 )}
               </button>
 

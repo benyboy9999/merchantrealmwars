@@ -21,6 +21,7 @@
     "deploy": "ssh mr@merchantrealmwars.com 'bash /var/www/merchant-realms/scripts/server-deploy.sh'",
     "staging:setup": "ssh mr@merchantrealmwars.com 'bash /var/www/merchant-realms/scripts/setup-staging.sh'",
     "staging:deploy": "git push origin main && ssh mr@merchantrealmwars.com 'bash /var/www/merchant-realms-staging/scripts/server-staging.sh'",
+    "staging:restart": "ssh -4 mr@merchantrealmwars.com 'cd /var/www/merchant-realms-staging && set -a && source .env.staging && set +a && pm2 restart merchant-realms-staging --update-env'",
     "db:studio": "pnpm --filter server db:studio",
     "format": "prettier --write \"packages/**/*.{ts,tsx,json}\""
   },
