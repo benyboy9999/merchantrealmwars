@@ -8,7 +8,9 @@
   },
   "scripts": {
     "deps:build": "pnpm --filter @merchant-realms/shared build && pnpm --filter @merchant-realms/engine build",
-    "dev": "pnpm deps:build && concurrently \"pnpm --filter server dev\" \"pnpm --filter client dev\"",
+    "dev": "scripts/kill-dev.sh ; pnpm deps:build && concurrently --kill-others-on-fail \"pnpm --filter server dev\" \"pnpm --filter client dev\"",
+    "server:dev": "pnpm --filter server dev",
+    "client:dev": "pnpm --filter client dev",
     "build": "pnpm deps:build && pnpm --filter server build && pnpm --filter client build",
     "test": "pnpm --filter engine test && pnpm --filter server test",
     "typecheck": "pnpm -r typecheck",
@@ -17,6 +19,8 @@
     "db:migrate:prod": "pnpm --filter server db:migrate:prod",
     "db:seed": "pnpm deps:build && pnpm --filter server db:seed",
     "deploy": "ssh mr@merchantrealmwars.com 'bash /var/www/merchant-realms/scripts/server-deploy.sh'",
+    "staging:setup": "ssh mr@merchantrealmwars.com 'bash /var/www/merchant-realms/scripts/setup-staging.sh'",
+    "staging:deploy": "git push origin main && ssh mr@merchantrealmwars.com 'bash /var/www/merchant-realms-staging/scripts/server-staging.sh'",
     "db:studio": "pnpm --filter server db:studio",
     "format": "prettier --write \"packages/**/*.{ts,tsx,json}\""
   },
