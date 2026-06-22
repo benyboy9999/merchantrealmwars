@@ -138,7 +138,7 @@ CREATE TABLE "Keep" (
 CREATE TABLE "Building" (
     "id" SERIAL NOT NULL,
     "keepId" INTEGER NOT NULL,
-    "buildingType" TEXT NOT NULL,
+    "buildingTypeId" INTEGER NOT NULL,
     "level" INTEGER NOT NULL DEFAULT 1,
     "slotIndex" INTEGER NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
@@ -153,8 +153,8 @@ CREATE TABLE "Building" (
 CREATE TABLE "ProductionOrder" (
     "id" SERIAL NOT NULL,
     "keepId" INTEGER NOT NULL,
-    "buildingType" TEXT NOT NULL,
-    "recipeKey" TEXT NOT NULL,
+    "buildingTypeId" INTEGER NOT NULL,
+    "recipeId" INTEGER NOT NULL,
     "orderType" "ProductionOrderType" NOT NULL,
     "targetQuantity" DOUBLE PRECISION,
     "producedQuantity" DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -168,7 +168,7 @@ CREATE TABLE "ProductionTask" (
     "id" SERIAL NOT NULL,
     "buildingId" INTEGER NOT NULL,
     "keepId" INTEGER NOT NULL,
-    "recipeKey" TEXT NOT NULL,
+    "recipeId" INTEGER NOT NULL,
     "startedAt" TIMESTAMP(3) NOT NULL,
     "completesAt" TIMESTAMP(3) NOT NULL,
     "progressAtUpdate" DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -318,7 +318,8 @@ CREATE INDEX "Keep_empireId_idx" ON "Keep"("empireId");
 CREATE UNIQUE INDEX "Building_keepId_slotIndex_key" ON "Building"("keepId", "slotIndex");
 CREATE INDEX "Building_keepId_idx" ON "Building"("keepId");
 
-CREATE INDEX "ProductionOrder_keepId_buildingType_position_idx" ON "ProductionOrder"("keepId", "buildingType", "position");
+CREATE INDEX "ProductionOrder_keepId_buildingTypeId_position_idx" ON "ProductionOrder"("keepId", "buildingTypeId", "position");
+CREATE INDEX "Building_buildingTypeId_idx" ON "Building"("buildingTypeId");
 
 CREATE UNIQUE INDEX "ProductionTask_buildingId_key" ON "ProductionTask"("buildingId");
 CREATE INDEX "ProductionTask_completesAt_idx" ON "ProductionTask"("completesAt");

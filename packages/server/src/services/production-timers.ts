@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { WsEvent, RECIPE_BY_KEY } from '@merchant-realms/shared';
+import { WsEvent, RECIPE_BY_KEY, RECIPE_BY_ID } from '@merchant-realms/shared';
 import { db } from '../db/client.js';
 
 let io: Server | null = null;
@@ -40,7 +40,9 @@ async function complete(buildingId: number): Promise<void> {
   });
   if (!task) return;
 
-  const recipe = RECIPE_BY_KEY[task.recipeKey];
+  const recipeKey = RECIPE_BY_ID[task.recipeId];
+  if (!recipeKey) return;
+  const recipe = RECIPE_BY_KEY[recipeKey];
   if (!recipe) return;
 
   const warehouseId = task.keep.warehouseId;
@@ -58,7 +60,7 @@ async function complete(buildingId: number): Promise<void> {
       io?.to(`player:${task.keep.empire.playerId}`).emit(WsEvent.PRODUCTION_BLOCKED, {
         keepId:    task.keepId,
         buildingId,
-        recipeKey: task.recipeKey,
+        recipeId:  task.recipeId,
         missing:   recipe.inputs.filter((i) => (ledger.get(i.resource) ?? 0) < i.quantity).map((i) => i.resource),
       });
       return;
@@ -89,7 +91,9 @@ async function complete(buildingId: number): Promise<void> {
     await tx.productionTask.delete({ where: { buildingId } });
 
     // Update production order
-    const order = task.keep.productionOrders.find((o) => o.buildingType === task.building.buildingType && o.recipeKey === task.recipeKey);
+    const order = task.keep.productionOrders.find(
+      (o) => o.buildingTypeId === task.building.buildingTypeId && o.recipeId === task.recipeId
+    );
     if (order) {
       const newProduced = order.producedQuantity + recipe.outputQty;
       const isDone = order.orderType === 'NUMERICAL' && order.targetQuantity != null && newProduced >= order.targetQuantity;
@@ -105,38 +109,40 @@ async function complete(buildingId: number): Promise<void> {
   const updatedWarehouse = await db.warehouseItem.findMany({ where: { warehouseId } });
 
   io?.to(`player:${task.keep.empire.playerId}`).emit(WsEvent.PRODUCTION_COMPLETED, {
-    keepId:        task.keepId,
+    keepId:         task.keepId,
     buildingId,
-    recipeKey:     task.recipeKey,
+    recipeId:       task.recipeId,
     warehouseItems: updatedWarehouse,
   });
 
   // Try to start the next cycle
-  await scheduleNextCycle(buildingId, task.keepId, task.building.buildingType);
+  await scheduleNextCycle(buildingId, task.keepId, task.building.buildingTypeId);
 }
 
-async function scheduleNextCycle(buildingId: number, keepId: number, buildingType: string): Promise<void> {
+async function scheduleNextCycle(buildingId: number, keepId: number, buildingTypeId: number): Promise<void> {
   const nextOrder = await db.productionOrder.findFirst({
-    where:   { keepId, buildingType },
+    where:   { keepId, buildingTypeId },
     orderBy: { position: 'asc' },
   });
   if (!nextOrder) return;
 
-  const recipe = RECIPE_BY_KEY[nextOrder.recipeKey];
+  const recipeKey = RECIPE_BY_ID[nextOrder.recipeId];
+  if (!recipeKey) return;
+  const recipe = RECIPE_BY_KEY[recipeKey];
   if (!recipe) return;
 
-  const now        = new Date();
+  const now         = new Date();
   const completesAt = new Date(now.getTime() + recipe.timeMinutes * 60 * 1000);
 
   await db.productionTask.create({
     data: {
       buildingId,
       keepId,
-      recipeKey:       nextOrder.recipeKey,
-      startedAt:       now,
+      recipeId:         nextOrder.recipeId,
+      startedAt:        now,
       completesAt,
       progressAtUpdate: 0,
-      speedSnapshot:   1.0,
+      speedSnapshot:    1.0,
     },
   });
 
@@ -159,8 +165,10 @@ export async function rescheduleActiveTasks(): Promise<void> {
 export async function startTask(
   buildingId: number,
   keepId:     number,
-  recipeKey:  string,
+  recipeId:   number,
 ): Promise<void> {
+  const recipeKey = RECIPE_BY_ID[recipeId];
+  if (!recipeKey) return;
   const recipe = RECIPE_BY_KEY[recipeKey];
   if (!recipe) return;
 
@@ -175,11 +183,11 @@ export async function startTask(
     data: {
       buildingId,
       keepId,
-      recipeKey,
-      startedAt:       now,
+      recipeId,
+      startedAt:        now,
       completesAt,
       progressAtUpdate: 0,
-      speedSnapshot:   1.0,
+      speedSnapshot:    1.0,
     },
   });
 

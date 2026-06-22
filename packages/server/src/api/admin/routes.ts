@@ -5,8 +5,8 @@ import { adminState } from '../../admin-bypass.js';
 import { runTick } from '../../jobs/tick-job.js';
 import { config } from '../../config/index.js';
 import { requireAdmin } from '../../middleware/auth.js';
-import { RECIPE_BY_KEY, KEEP_FOUNDING_COST, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
-import type { ResourceType } from '@merchant-realms/shared';
+import { RECIPE_BY_KEY, RECIPE_BY_ID, BUILDING_TYPE_IDS, BUILDING_TYPE_BY_ID, KEEP_FOUNDING_COST, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
+import type { ResourceType, BuildingType } from '@merchant-realms/shared';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -75,14 +75,16 @@ adminRouter.post('/complete-production', async (_req, res) => {
   for (const keep of keeps) {
     const ledgerMap = new Map((keep.warehouse?.items ?? []).map((e) => [e.resourceType, e.quantity]));
 
-    const byType = new Map<string, typeof keep.buildings>();
+    const byTypeId = new Map<number, typeof keep.buildings>();
     for (const b of keep.buildings) {
-      if (!b.isActive || b.isDormant || b.buildingType === 'WAREHOUSE' || b.buildingType === 'HOUSING') continue;
-      (byType.get(b.buildingType) ?? byType.set(b.buildingType, []).get(b.buildingType)!).push(b);
+      if (!b.isActive || b.isDormant) continue;
+      const btCode = BUILDING_TYPE_BY_ID[b.buildingTypeId] as BuildingType | undefined;
+      if (!btCode || btCode === 'WAREHOUSE' || btCode === 'HOUSING' || btCode === 'TENEMENTS' || btCode === 'MANOR') continue;
+      (byTypeId.get(b.buildingTypeId) ?? byTypeId.set(b.buildingTypeId, []).get(b.buildingTypeId)!).push(b);
     }
 
-    for (const [buildingType, buildings] of byType) {
-      const orders = keep.productionOrders.filter((o) => o.buildingType === buildingType);
+    for (const [buildingTypeId, buildings] of byTypeId) {
+      const orders = keep.productionOrders.filter((o) => o.buildingTypeId === buildingTypeId);
       if (orders.length === 0) continue;
 
       const numericalOrders = orders.filter((o) => o.orderType === 'NUMERICAL' && (o.targetQuantity ?? 0) > o.producedQuantity);
@@ -90,7 +92,9 @@ adminRouter.post('/complete-production', async (_req, res) => {
       const activeOrder = numericalOrders[0] ?? infiniteOrders[0];
       if (!activeOrder) continue;
 
-      const recipe = RECIPE_BY_KEY[activeOrder.recipeKey];
+      const recipeKey = RECIPE_BY_ID[activeOrder.recipeId];
+      if (!recipeKey) continue;
+      const recipe = RECIPE_BY_KEY[recipeKey];
       if (!recipe) continue;
 
       for (const building of buildings) {

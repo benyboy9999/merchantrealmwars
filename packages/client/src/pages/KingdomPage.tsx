@@ -5,12 +5,13 @@ import { useProductionProgress } from '../hooks/useLivePercent.js';
 import ProgressBar from '../components/ProgressBar.js';
 import { api } from '../services/api.js';
 import {
-  BUILDING_NAMES, RESOURCE_NAMES, RECIPES_BY_BUILDING, RECIPE_BY_KEY,
-  BUILDING_CONSTRUCTION_COSTS, HOUSING_BASE_CAPACITY, WORKERS_PER_LEVEL,
+  BUILDING_NAMES, RESOURCE_NAMES, RECIPES_BY_BUILDING, RECIPE_BY_KEY, RECIPE_BY_ID,
+  BUILDING_CONSTRUCTION_COSTS, BUILDING_TYPE_IDS, BUILDING_TYPE_BY_ID,
+  HOUSING_BASE_CAPACITY, WORKERS_PER_LEVEL,
   T1_WORKER_NEEDS, BASE_CYCLE_SECONDS,
   KEEP_MAX_BUILDING_SLOTS, KEEP_DEFAULT_BUILDING_SLOTS, KEEP_SLOT_UNLOCK_RESOURCE,
 } from '@merchant-realms/shared';
-import type { Recipe, RecipeInput } from '@merchant-realms/shared';
+import type { BuildingType, Recipe, RecipeInput } from '@merchant-realms/shared';
 import type { ProductionTask } from '../services/api.js';
 import WarehousePanel from '../components/WarehousePanel.js';
 
@@ -116,10 +117,10 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc }: {
   const ledgerMap = new Map((keep.warehouse?.items ?? []).map((e) => [e.resourceType, e.quantity]));
 
   const totalWorkers = keep.buildings
-    .filter((b) => b.buildingType === 'HOUSING' && b.isActive)
+    .filter((b) => b.buildingTypeId === BUILDING_TYPE_IDS.HOUSING && b.isActive)
     .reduce((sum, b) => sum + b.level * HOUSING_BASE_CAPACITY, 0);
   const usedWorkers = keep.buildings
-    .filter((b) => b.buildingType !== 'HOUSING' && b.buildingType !== 'WAREHOUSE' && b.isActive)
+    .filter((b) => b.buildingTypeId !== BUILDING_TYPE_IDS.HOUSING && b.buildingTypeId !== BUILDING_TYPE_IDS.WAREHOUSE && b.isActive)
     .reduce((sum, b) => sum + b.level * WORKERS_PER_LEVEL, 0);
   const freeWorkers = Math.max(0, totalWorkers - usedWorkers);
 
@@ -240,7 +241,7 @@ function KeepTab({ keep, qc }: { keep: KeepTabKeep; qc: ReturnType<typeof useQue
 // ── Buildings tab ─────────────────────────────────────────────────────────────
 
 function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
-  keep: { id: number; buildingSlotCount: number; buildings: Array<{ id: number; buildingType: string; level: number; slotIndex: number; isActive: boolean; isDormant: boolean; health: number }> };
+  keep: { id: number; buildingSlotCount: number; buildings: Array<{ id: number; buildingTypeId: number; level: number; slotIndex: number; isActive: boolean; isDormant: boolean; health: number }> };
   keepId: number;
   ledgerMap: Map<string, number>;
   qc: ReturnType<typeof useQueryClient>;
@@ -322,7 +323,7 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
             >
               {building ? (
                 <>
-                  <div className="text-sm text-parchment-200 leading-tight">{BUILDING_NAMES[building.buildingType as keyof typeof BUILDING_NAMES] ?? building.buildingType}</div>
+                  <div className="text-sm text-parchment-200 leading-tight">{BUILDING_NAMES[BUILDING_TYPE_BY_ID[building.buildingTypeId] as keyof typeof BUILDING_NAMES] ?? String(building.buildingTypeId)}</div>
                   <div className="text-xs text-stone-500 mt-1">Lv.{building.level}</div>
                   {building.isDormant && <div className="text-xs text-red-500 mt-0.5">Dormant</div>}
                 </>
@@ -434,14 +435,14 @@ function BuildingProgressBar({ task }: { task: ProductionTask | null | undefined
 
 
 function EfficiencyBar({ keep, ledgerMap }: {
-  keep: { buildings: Array<{ buildingType: string; level: number; isActive: boolean }> };
+  keep: { buildings: Array<{ buildingTypeId: number; level: number; isActive: boolean }> };
   ledgerMap: Map<string, number>;
 }) {
   const totalWorkers = keep.buildings
-    .filter((b) => b.buildingType === 'HOUSING' && b.isActive)
+    .filter((b) => b.buildingTypeId === BUILDING_TYPE_IDS.HOUSING && b.isActive)
     .reduce((sum, b) => sum + b.level * HOUSING_BASE_CAPACITY, 0);
   const usedWorkers = keep.buildings
-    .filter((b) => b.buildingType !== 'HOUSING' && b.buildingType !== 'WAREHOUSE' && b.isActive)
+    .filter((b) => b.buildingTypeId !== BUILDING_TYPE_IDS.HOUSING && b.buildingTypeId !== BUILDING_TYPE_IDS.WAREHOUSE && b.isActive)
     .reduce((sum, b) => sum + b.level * WORKERS_PER_LEVEL, 0);
 
   const workerFactor = usedWorkers === 0 ? 1 : Math.min(1, totalWorkers / usedWorkers);
@@ -479,14 +480,14 @@ function EfficiencyBar({ keep, ledgerMap }: {
 
 function ProductionTab({ keep, keepId, ledgerMap, qc }: {
   keep: {
-    buildings: Array<{ buildingType: string; level: number; isActive: boolean; productionProgress: number; productionTask: ProductionTask | null }>;
-    productionOrders: Array<{ id: number; buildingType: string; recipeKey: string; orderType: string; targetQuantity: number | null; producedQuantity: number }>;
+    buildings: Array<{ buildingTypeId: number; level: number; isActive: boolean; productionProgress: number; productionTask: ProductionTask | null }>;
+    productionOrders: Array<{ id: number; buildingTypeId: number; recipeId: number; orderType: string; targetQuantity: number | null; producedQuantity: number }>;
   };
   keepId: number;
   ledgerMap: Map<string, number>;
   qc: ReturnType<typeof useQueryClient>;
 }) {
-  const [expandedType, setExpandedType] = useState<string | null>(null);
+  const [expandedType, setExpandedType] = useState<number | null>(null);
   const [recipeKey, setRecipeKey] = useState('');
   const [orderType, setOrderType] = useState<'INFINITE' | 'NUMERICAL'>('INFINITE');
   const [targetQty, setTargetQty] = useState('');
@@ -494,11 +495,14 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['keep', keepId] });
 
   const addOrder = useMutation({
-    mutationFn: (bType: string) => api.addOrder(keepId, bType, {
-      recipeKey,
-      orderType,
-      ...(orderType === 'NUMERICAL' ? { targetQuantity: Number(targetQty) } : {}),
-    }),
+    mutationFn: (bTypeId: number) => {
+      const bTypeCode = BUILDING_TYPE_BY_ID[bTypeId] as BuildingType;
+      return api.addOrder(keepId, bTypeCode, {
+        recipeKey,
+        orderType,
+        ...(orderType === 'NUMERICAL' ? { targetQuantity: Number(targetQty) } : {}),
+      });
+    },
     onSuccess: () => { invalidate(); setRecipeKey(''); setTargetQty(''); },
   });
   const removeOrder = useMutation({
@@ -506,12 +510,12 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
     onSuccess: invalidate,
   });
 
-  const prodBuildings = keep.buildings.filter((b) => b.buildingType !== 'HOUSING' && b.buildingType !== 'WAREHOUSE');
-  const prodTypes = [...new Set(prodBuildings.map((b) => b.buildingType))];
-  const ordersByType = new Map<string, typeof keep.productionOrders>();
+  const prodBuildings = keep.buildings.filter((b) => b.buildingTypeId !== BUILDING_TYPE_IDS.HOUSING && b.buildingTypeId !== BUILDING_TYPE_IDS.WAREHOUSE);
+  const prodTypes = [...new Set(prodBuildings.map((b) => b.buildingTypeId))];
+  const ordersByType = new Map<number, typeof keep.productionOrders>();
   for (const order of keep.productionOrders) {
-    if (!ordersByType.has(order.buildingType)) ordersByType.set(order.buildingType, []);
-    ordersByType.get(order.buildingType)!.push(order);
+    if (!ordersByType.has(order.buildingTypeId)) ordersByType.set(order.buildingTypeId, []);
+    ordersByType.get(order.buildingTypeId)!.push(order);
   }
 
   if (prodTypes.length === 0) {
@@ -522,30 +526,32 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
     <div className="p-6 max-w-xl">
       <EfficiencyBar keep={keep} ledgerMap={ledgerMap} />
       <div className="space-y-1">
-        {prodTypes.map((bType) => {
-          const recipes = RECIPES_BY_BUILDING[bType] ?? [];
+        {prodTypes.map((bTypeId) => {
+          const bTypeCode = BUILDING_TYPE_BY_ID[bTypeId] as BuildingType | undefined;
+          const recipes = bTypeCode ? (RECIPES_BY_BUILDING[bTypeCode] ?? []) : [];
           if (recipes.length === 0) return null;
-          const orders = ordersByType.get(bType) ?? [];
-          const isOpen = expandedType === bType;
+          const orders = ordersByType.get(bTypeId) ?? [];
+          const isOpen = expandedType === bTypeId;
 
           // Active recipe for progress display (first numerical, then first infinite)
           const activeOrder = orders.find((o) => o.orderType === 'NUMERICAL' && (o.targetQuantity ?? 0) > o.producedQuantity)
             ?? orders.find((o) => o.orderType === 'INFINITE');
-          const activeRecipe = activeOrder ? RECIPE_BY_KEY[activeOrder.recipeKey] : null;
+          const activeRecipeKey = activeOrder ? RECIPE_BY_ID[activeOrder.recipeId] : undefined;
+          const activeRecipe = activeRecipeKey ? RECIPE_BY_KEY[activeRecipeKey] : null;
 
           // Use the first active building's task for progress display
-          const buildingsOfType = prodBuildings.filter((b) => b.buildingType === bType);
+          const buildingsOfType = prodBuildings.filter((b) => b.buildingTypeId === bTypeId);
           const activeTask      = buildingsOfType.find((b) => b.productionTask != null)?.productionTask ?? null;
 
           return (
-            <div key={bType} className="border border-stone-700 rounded bg-stone-800">
+            <div key={bTypeId} className="border border-stone-700 rounded bg-stone-800">
               <button
                 className="w-full flex flex-col px-4 py-3 hover:bg-stone-700/30 transition-colors text-left"
-                onClick={() => { setExpandedType(isOpen ? null : bType); setRecipeKey(''); setTargetQty(''); setOrderType('INFINITE'); }}
+                onClick={() => { setExpandedType(isOpen ? null : bTypeId); setRecipeKey(''); setTargetQty(''); setOrderType('INFINITE'); }}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm text-parchment-200">{BUILDING_NAMES[bType as keyof typeof BUILDING_NAMES] ?? bType}</span>
+                    <span className="text-sm text-parchment-200">{bTypeCode ? (BUILDING_NAMES[bTypeCode as keyof typeof BUILDING_NAMES] ?? bTypeCode) : String(bTypeId)}</span>
                     {activeRecipe && <span className="text-xs text-stone-500">→ {RESOURCE_NAMES[activeRecipe.output as keyof typeof RESOURCE_NAMES] ?? activeRecipe.output}</span>}
                   </div>
                   <span className="text-stone-600 text-xs">{isOpen ? '▲' : '▼'}</span>
@@ -564,7 +570,7 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
                       {orders.map((order) => (
                         <div key={order.id} className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2">
-                            <span className="text-stone-400">{order.recipeKey}</span>
+                            <span className="text-stone-400">{RECIPE_BY_ID[order.recipeId] ?? String(order.recipeId)}</span>
                             <span className={`text-xs px-1.5 py-0.5 rounded bg-stone-700 ${order.orderType === 'INFINITE' ? 'text-stone-400' : 'text-amber-400'}`}>
                               {order.orderType === 'INFINITE' ? '∞' : `${order.producedQuantity.toFixed(0)}/${order.targetQuantity}`}
                             </span>
@@ -610,7 +616,7 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
                     <button
                       className="bg-gold-600 hover:bg-gold-500 disabled:opacity-40 text-stone-900 font-semibold px-4 py-1.5 rounded text-sm"
                       disabled={!recipeKey || (orderType === 'NUMERICAL' && !targetQty) || addOrder.isPending}
-                      onClick={() => recipeKey && addOrder.mutate(bType)}
+                      onClick={() => recipeKey && addOrder.mutate(bTypeId)}
                     >
                       Add Order
                     </button>
@@ -633,14 +639,14 @@ const CYCLE_LABEL = (() => {
 })();
 
 function WorkersTab({ keep, ledgerMap }: {
-  keep: { buildings: Array<{ buildingType: string; level: number; isActive: boolean }> };
+  keep: { buildings: Array<{ buildingTypeId: number; level: number; isActive: boolean }> };
   ledgerMap: Map<string, number>;
 }) {
   const totalWorkers = keep.buildings
-    .filter((b) => b.buildingType === 'HOUSING' && b.isActive)
+    .filter((b) => b.buildingTypeId === BUILDING_TYPE_IDS.HOUSING && b.isActive)
     .reduce((sum, b) => sum + b.level * HOUSING_BASE_CAPACITY, 0);
   const usedWorkers = keep.buildings
-    .filter((b) => b.buildingType !== 'HOUSING' && b.buildingType !== 'WAREHOUSE' && b.isActive)
+    .filter((b) => b.buildingTypeId !== BUILDING_TYPE_IDS.HOUSING && b.buildingTypeId !== BUILDING_TYPE_IDS.WAREHOUSE && b.isActive)
     .reduce((sum, b) => sum + b.level * WORKERS_PER_LEVEL, 0);
   const freeWorkers = Math.max(0, totalWorkers - usedWorkers);
   const workerShortfall = Math.max(0, usedWorkers - totalWorkers);

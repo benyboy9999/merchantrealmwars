@@ -6,6 +6,7 @@ import {
   RESOURCE_WEIGHT, KEEP_BASE_STORAGE, WAREHOUSE_BASE_CAPACITY,
   BUILDING_CONSTRUCTION_COSTS, KEEP_MAX_BUILDING_SLOTS,
   KEEP_DEFAULT_BUILDING_SLOTS, KEEP_SLOT_UNLOCK_RESOURCE,
+  BUILDING_TYPE_IDS, BUILDING_TYPE_BY_ID, RECIPE_IDS,
 } from '@merchant-realms/shared';
 import type { BuildingType } from '@merchant-realms/shared';
 import { calculateRepairCost } from '@merchant-realms/engine';
@@ -75,7 +76,7 @@ keepRouter.get('/:id', async (req, res, next) => {
           plot:             { include: { district: true } },
           buildings:        { orderBy: { slotIndex: 'asc' }, include: { productionTask: true } },
           warehouse:        { include: { items: { orderBy: { resourceType: 'asc' } } } },
-          productionOrders: { orderBy: [{ buildingType: 'asc' }, { position: 'asc' }] },
+          productionOrders: { orderBy: [{ buildingTypeId: 'asc' }, { position: 'asc' }] },
         },
       }),
       db.empire.findUnique({ where: { id: empireId }, select: { goldBalance: true } }),
@@ -97,6 +98,9 @@ keepRouter.post('/:id/buildings', async (req, res, next) => {
       buildingType: z.string(),
       slotIndex:    z.number().int().min(0),
     }).parse(req.body);
+
+    const buildingTypeId = BUILDING_TYPE_IDS[buildingType as BuildingType];
+    if (!buildingTypeId) { res.status(400).json({ error: `Unknown building type: ${buildingType}` }); return; }
 
     const id       = parseInt(req.params['id']!);
     const empireId = req.auth!.empireId;
@@ -132,10 +136,10 @@ keepRouter.post('/:id/buildings', async (req, res, next) => {
         });
       }
       const b = await tx.building.create({
-        data: { keepId: keep.id, buildingType, slotIndex, level: 1, health: 100, workersAssigned: 0 },
+        data: { keepId: keep.id, buildingTypeId, slotIndex, level: 1, health: 100, workersAssigned: 0 },
       });
       // Increase warehouse capacity when a Warehouse building is constructed
-      if (buildingType === 'WAREHOUSE') {
+      if (buildingTypeId === BUILDING_TYPE_IDS.WAREHOUSE) {
         await tx.warehouse.update({
           where: { id: warehouseId },
           data:  { cap: { increment: WAREHOUSE_BASE_CAPACITY } },
@@ -213,7 +217,7 @@ keepRouter.delete('/:keepId/buildings/:buildingId', async (req, res, next) => {
     await db.$transaction(async (tx) => {
       await tx.building.delete({ where: { id: building.id } });
       // Decrease warehouse cap when a Warehouse building is demolished
-      if (building.buildingType === 'WAREHOUSE') {
+      if (building.buildingTypeId === BUILDING_TYPE_IDS.WAREHOUSE) {
         const keep = await tx.keep.findUnique({ where: { id: keepId } });
         if (keep?.warehouseId) {
           await tx.warehouse.update({
@@ -257,7 +261,8 @@ keepRouter.post('/:keepId/buildings/:buildingId/repair', async (req, res, next) 
     if (!building) { res.status(404).json({ error: 'Building not found' }); return; }
     if (building.health >= 100) { res.status(400).json({ error: 'Building is already at full health' }); return; }
 
-    const constructionCost = BUILDING_CONSTRUCTION_COSTS[building.buildingType as BuildingType];
+    const buildingTypeCode = BUILDING_TYPE_BY_ID[building.buildingTypeId] as BuildingType | undefined;
+    const constructionCost = buildingTypeCode ? BUILDING_CONSTRUCTION_COSTS[buildingTypeCode] : undefined;
     if (!constructionCost) { res.status(400).json({ error: 'No construction cost defined for this building type' }); return; }
 
     const repairCost  = calculateRepairCost(constructionCost, building.level, building.health);
@@ -292,8 +297,10 @@ keepRouter.post('/:keepId/buildings/:buildingId/repair', async (req, res, next) 
 keepRouter.get('/:id/queue/:buildingType', async (req, res, next) => {
   try {
     const keepId = parseInt(req.params['id']!);
+    const buildingTypeId = BUILDING_TYPE_IDS[req.params['buildingType'] as BuildingType];
+    if (!buildingTypeId) { res.status(400).json({ error: `Unknown building type: ${req.params['buildingType']}` }); return; }
     const orders = await db.productionOrder.findMany({
-      where:   { keepId, buildingType: req.params['buildingType'] },
+      where:   { keepId, buildingTypeId },
       orderBy: [{ orderType: 'asc' }, { position: 'asc' }],
     });
     res.json({ orders });
@@ -313,6 +320,12 @@ keepRouter.post('/:id/queue/:buildingType', async (req, res, next) => {
       return;
     }
 
+    const buildingTypeId = BUILDING_TYPE_IDS[req.params['buildingType'] as BuildingType];
+    if (!buildingTypeId) { res.status(400).json({ error: `Unknown building type: ${req.params['buildingType']}` }); return; }
+
+    const recipeId = RECIPE_IDS[recipeKey as keyof typeof RECIPE_IDS];
+    if (!recipeId) { res.status(400).json({ error: `Unknown recipe: ${recipeKey}` }); return; }
+
     const keepId   = parseInt(req.params['id']!);
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
@@ -320,15 +333,15 @@ keepRouter.post('/:id/queue/:buildingType', async (req, res, next) => {
     if (!keepOwned) { res.status(404).json({ error: 'Keep not found' }); return; }
 
     const last = await db.productionOrder.findFirst({
-      where:   { keepId, buildingType: req.params['buildingType'] },
+      where:   { keepId, buildingTypeId },
       orderBy: { position: 'desc' },
     });
 
     const order = await db.productionOrder.create({
       data: {
         keepId,
-        buildingType:     req.params['buildingType'],
-        recipeKey,
+        buildingTypeId,
+        recipeId,
         orderType,
         targetQuantity:   orderType === 'NUMERICAL' ? (targetQuantity ?? null) : null,
         producedQuantity: 0,
@@ -338,11 +351,11 @@ keepRouter.post('/:id/queue/:buildingType', async (req, res, next) => {
 
     // If this building has no active ProductionTask, start one now
     const building = await db.building.findFirst({
-      where: { keepId, buildingType: req.params['buildingType'], isActive: true, isDormant: false },
+      where: { keepId, buildingTypeId, isActive: true, isDormant: false },
       include: { productionTask: true },
     });
     if (building && !building.productionTask) {
-      await startTask(building.id, keepId, recipeKey);
+      await startTask(building.id, keepId, recipeId);
     }
 
     res.status(201).json({ order });

@@ -234,17 +234,17 @@ export interface CaravanWithCargo {
 }
 export interface CaravanCapacity { usedWeight: number; maxWeight: number }
 export interface ProductionTask {
-  id: number; buildingId: number; keepId: number; recipeKey: string;
+  id: number; buildingId: number; keepId: number; recipeId: number;
   startedAt: string; completesAt: string;
   progressAtUpdate: number; updatedAt: string; speedSnapshot: number;
 }
 export interface Building {
-  id: number; keepId: number; buildingType: string; level: number; slotIndex: number;
+  id: number; keepId: number; buildingTypeId: number; level: number; slotIndex: number;
   isActive: boolean; isDormant: boolean; health: number; workersAssigned: number; productionProgress: number;
   productionTask: ProductionTask | null;
 }
 export interface Storage { usedWeight: number; maxWeight: number }
-export interface ProductionOrder { id: number; keepId: number; buildingType: string; recipeKey: string; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity: number | null; producedQuantity: number; position: number }
+export interface ProductionOrder { id: number; keepId: number; buildingTypeId: number; recipeId: number; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity: number | null; producedQuantity: number; position: number }
 export interface ExchangeListing { id: number; empireId: number | null; regionId: number; resourceType: string; quantity: number; pricePerUnit: number; fulfilledQty: number; status: string; createdAt: string }
 export interface AdminStatus { bypassEnabled: boolean; lastTick: { tickNumber: number; processedAt: string; durationMs: number } | null; goldBalance: number; tickIntervalSeconds: number }
 export interface TickResult { tickNumber: number; durationMs: number; produced: number; delivered: number }

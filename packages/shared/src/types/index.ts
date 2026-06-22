@@ -66,11 +66,14 @@ export interface BuildingSlot {
 export interface Building {
   id: number;
   keepId: number;
-  slotId: number;
-  buildingType: BuildingType;
+  slotIndex: number;
+  buildingTypeId: number;
   level: number;
   isActive: boolean;
   isDormant: boolean;
+  health: number;
+  productionProgress: number;
+  workersAssigned: number;
 }
 
 export interface Housing {

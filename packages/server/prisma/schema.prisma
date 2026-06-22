@@ -228,7 +228,7 @@ model Keep {
 model Building {
   id                 Int     @id @default(autoincrement())
   keepId             Int
-  buildingType       String
+  buildingTypeId     Int
   level              Int     @default(1)
   slotIndex          Int
   isActive           Boolean @default(true)
@@ -242,6 +242,7 @@ model Building {
 
   @@unique([keepId, slotIndex])
   @@index([keepId])
+  @@index([buildingTypeId])
 }
 
 // ── Production Queue ───────────────────────────────────────────────────────
@@ -249,8 +250,8 @@ model Building {
 model ProductionOrder {
   id               Int                 @id @default(autoincrement())
   keepId           Int
-  buildingType     String
-  recipeKey        String
+  buildingTypeId   Int
+  recipeId         Int
   orderType        ProductionOrderType
   targetQuantity   Float?
   producedQuantity Float               @default(0)
@@ -259,14 +260,14 @@ model ProductionOrder {
 
   keep Keep @relation(fields: [keepId], references: [id], onDelete: Cascade)
 
-  @@index([keepId, buildingType, position])
+  @@index([keepId, buildingTypeId, position])
 }
 
 model ProductionTask {
   id               Int      @id @default(autoincrement())
   buildingId       Int      @unique
   keepId           Int
-  recipeKey        String
+  recipeId         Int
   startedAt        DateTime
   completesAt      DateTime
   progressAtUpdate Float    @default(0)

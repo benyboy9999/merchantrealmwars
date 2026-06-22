@@ -10,6 +10,8 @@ import {
   OVERHEAD_CONSTANTS,
   OVERHEAD_TIER_WEIGHTS,
   RECIPE_BY_KEY,
+  RECIPE_BY_ID,
+  BUILDING_TYPE_BY_ID,
   BASE_CYCLE_SECONDS,
   DURABILITY_CONSTANTS,
   getStarterSpeedMultiplier,
@@ -70,9 +72,11 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
     let keepWeighted = 0;
     for (const b of keep.buildings) {
       if (!b.isActive || b.isDormant) continue;
-      const housingCap = HOUSING_CAPACITY_PER_LEVEL[b.buildingType as BuildingType];
+      const btCode = BUILDING_TYPE_BY_ID[b.buildingTypeId] as BuildingType | undefined;
+      if (!btCode) continue;
+      const housingCap = HOUSING_CAPACITY_PER_LEVEL[btCode];
       if (housingCap !== undefined) {
-        const tier = (BUILDING_TIER[b.buildingType as BuildingType] ?? 1) as 1 | 2 | 3;
+        const tier = (BUILDING_TIER[btCode] ?? 1) as 1 | 2 | 3;
         keepWeighted += b.level * housingCap * OVERHEAD_TIER_WEIGHTS[`T${tier}` as WorkerTier];
       }
     }
@@ -89,9 +93,11 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
     const tierHousingCap: Record<WorkerTier, number> = { T1: 0, T2: 0, T3: 0 };
     for (const b of keep.buildings) {
       if (!b.isActive || b.isDormant) continue;
-      const housingCap = HOUSING_CAPACITY_PER_LEVEL[b.buildingType as BuildingType];
+      const btCode = BUILDING_TYPE_BY_ID[b.buildingTypeId] as BuildingType | undefined;
+      if (!btCode) continue;
+      const housingCap = HOUSING_CAPACITY_PER_LEVEL[btCode];
       if (housingCap !== undefined) {
-        const tier = (BUILDING_TIER[b.buildingType as BuildingType] ?? 1) as 1 | 2 | 3;
+        const tier = (BUILDING_TIER[btCode] ?? 1) as 1 | 2 | 3;
         tierHousingCap[`T${tier}` as WorkerTier] += b.level * housingCap;
       }
     }
@@ -99,9 +105,11 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
     const tierDemand: Record<WorkerTier, number> = { T1: 0, T2: 0, T3: 0 };
     for (const b of keep.buildings) {
       if (!b.isActive || b.isDormant) continue;
-      const workerCost = BUILDING_WORKER_COST[b.buildingType as BuildingType] ?? 0;
+      const btCode = BUILDING_TYPE_BY_ID[b.buildingTypeId] as BuildingType | undefined;
+      if (!btCode) continue;
+      const workerCost = BUILDING_WORKER_COST[btCode] ?? 0;
       if (workerCost === 0) continue;
-      const tier = (BUILDING_TIER[b.buildingType as BuildingType] ?? 1) as 1 | 2 | 3;
+      const tier = (BUILDING_TIER[btCode] ?? 1) as 1 | 2 | 3;
       tierDemand[`T${tier}` as WorkerTier] += b.level * workerCost;
     }
 
@@ -123,8 +131,8 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
     const empireAgeDays     = (Date.now() - keep.empire.createdAt.getTime()) / 86_400_000;
     const starterMultiplier = getStarterSpeedMultiplier(empireAgeDays);
 
-    const weightedWorkforce   = empireWeightedWorkforce.get(keep.empireId) ?? 0;
-    const overheadMultiplier  = adminState.bypassEnabled
+    const weightedWorkforce  = empireWeightedWorkforce.get(keep.empireId) ?? 0;
+    const overheadMultiplier = adminState.bypassEnabled
       ? 1
       : calculateOverheadFactor(
           weightedWorkforce,
@@ -161,38 +169,45 @@ async function doTick(io?: SocketServer): Promise<TickResult> {
       consumptionBonus   = cr.bonusFactor;
     }
 
-    const byType = new Map<string, typeof keep.buildings>();
+    // Group buildings by buildingTypeId (integer)
+    const byTypeId = new Map<number, typeof keep.buildings>();
     for (const b of keep.buildings) {
       if (!b.isActive || b.isDormant) continue;
-      if ((BUILDING_WORKER_COST[b.buildingType as BuildingType] ?? 0) === 0) continue;
-      (byType.get(b.buildingType) ?? byType.set(b.buildingType, []).get(b.buildingType)!).push(b);
+      const btCode = BUILDING_TYPE_BY_ID[b.buildingTypeId] as BuildingType | undefined;
+      if (!btCode || (BUILDING_WORKER_COST[btCode] ?? 0) === 0) continue;
+      (byTypeId.get(b.buildingTypeId) ?? byTypeId.set(b.buildingTypeId, []).get(b.buildingTypeId)!).push(b);
     }
 
-    for (const [buildingType, buildings] of byType) {
-      const orders = keep.productionOrders.filter((o) => o.buildingType === buildingType);
+    for (const [buildingTypeId, buildings] of byTypeId) {
+      const btCode = BUILDING_TYPE_BY_ID[buildingTypeId] as BuildingType | undefined;
+      if (!btCode) continue;
+
+      const orders = keep.productionOrders.filter((o) => o.buildingTypeId === buildingTypeId);
       if (orders.length === 0) continue;
 
       const numericalOrders = orders.filter((o) => o.orderType === 'NUMERICAL' && (o.targetQuantity ?? 0) > o.producedQuantity);
       const infiniteOrders  = orders.filter((o) => o.orderType === 'INFINITE');
 
-      let activeRecipeKey: string | null = null;
+      let activeRecipeId: number | null = null;
       let activeOrderId: number | null = null;
 
       if (numericalOrders.length > 0) {
-        activeRecipeKey = numericalOrders[0]!.recipeKey;
-        activeOrderId   = numericalOrders[0]!.id;
+        activeRecipeId = numericalOrders[0]!.recipeId;
+        activeOrderId  = numericalOrders[0]!.id;
       } else if (infiniteOrders.length > 0) {
         const idx = tickNumber % infiniteOrders.length;
-        activeRecipeKey = infiniteOrders[idx]!.recipeKey;
-        activeOrderId   = infiniteOrders[idx]!.id;
+        activeRecipeId = infiniteOrders[idx]!.recipeId;
+        activeOrderId  = infiniteOrders[idx]!.id;
       }
 
-      if (!activeRecipeKey) continue;
+      if (!activeRecipeId) continue;
 
-      const recipe = RECIPE_BY_KEY[activeRecipeKey];
+      const recipeKey = RECIPE_BY_ID[activeRecipeId];
+      if (!recipeKey) continue;
+      const recipe = RECIPE_BY_KEY[recipeKey];
       if (!recipe) continue;
 
-      const bTier = (BUILDING_TIER[buildingType as BuildingType] ?? 1) as 1 | 2 | 3;
+      const bTier = (BUILDING_TIER[btCode] ?? 1) as 1 | 2 | 3;
       const workerFactor    = tierWorkerFactor[`T${bTier}` as WorkerTier];
       const progressPerTick = config.TICK_INTERVAL_SECONDS / (recipe.timeMinutes * 60);
       const baseProgressGain = progressPerTick * workerFactor * consumptionPenalty * consumptionBonus * starterMultiplier;

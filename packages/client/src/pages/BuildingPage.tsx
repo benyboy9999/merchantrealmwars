@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api.js';
-import { BUILDING_NAMES, WORKERS_PER_LEVEL } from '@merchant-realms/shared';
+import { BUILDING_NAMES, BUILDING_TYPE_BY_ID, WORKERS_PER_LEVEL } from '@merchant-realms/shared';
+import type { BuildingType } from '@merchant-realms/shared';
 
 export default function BuildingPage() {
   const { keepId: keepIdStr, buildingId: buildingIdStr } = useParams<{ keepId: string; buildingId: string }>();
@@ -24,7 +25,7 @@ export default function BuildingPage() {
 
   if (!building) return <div className="p-8 text-stone-400 text-sm">Loading...</div>;
 
-  const buildingType = building.buildingType;
+  const buildingTypeCode = BUILDING_TYPE_BY_ID[building.buildingTypeId] as BuildingType | undefined;
   const workerCost = building.level * WORKERS_PER_LEVEL;
 
   return (
@@ -34,7 +35,7 @@ export default function BuildingPage() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-parchment-100">
-            {BUILDING_NAMES[buildingType as keyof typeof BUILDING_NAMES] ?? buildingType}
+            {buildingTypeCode ? (BUILDING_NAMES[buildingTypeCode as keyof typeof BUILDING_NAMES] ?? buildingTypeCode) : String(building.buildingTypeId)}
           </h1>
           <div className="text-stone-500 text-sm mt-1">
             Level {building.level}
