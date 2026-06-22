@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SQRT3, hexToPixel, hexDistance, pixelToHex, axialRound } from '../utils/hex.js';
 import { api } from '../services/api.js';
 import { useAuthStore } from '../stores/auth.js';
@@ -66,6 +66,10 @@ const EXCHANGE_REGION_NAME: Record<string, string> = {
   '-6,0': 'Northwest Exchange',
   '-6,6': 'Southwest Exchange',
   '6,0':  'Southeast Exchange',
+};
+
+const EXCHANGE_HEX_TO_REGION_ID: Record<string, string> = {
+  '0,0': 'CENTRAL', '6,-6': 'NE', '-6,0': 'NW', '-6,6': 'SW', '6,0': 'SE',
 };
 
 // ── Visual constants ──────────────────────────────────────────────────────────
@@ -278,15 +282,32 @@ function draw(
 
 // ── Plot panel ────────────────────────────────────────────────────────────────
 function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
-  const navigate  = useNavigate();
+  const navigate   = useNavigate();
+  const qc         = useQueryClient();
   const myEmpireId = useAuthStore((s) => s.empireId);
 
+  const { data: empireData } = useQuery({
+    queryKey: ['empire'],
+    queryFn:  api.empireBootstrap,
+    staleTime: 30_000,
+  });
+
+  const dispatchMut = useMutation({
+    mutationFn: (caravanId: string) => api.caravanDispatch(caravanId, 'PLOT', dot.plotId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['empire'] });
+      onClose();
+    },
+  });
+
   if (dot.type === 'exchange') {
+    const hexKey  = dot.plotId.replace('exchange-', '');
+    const regionId = EXCHANGE_HEX_TO_REGION_ID[hexKey] ?? 'CENTRAL';
     return (
       <Overlay onClose={onClose}>
         <PanelHeader title={dot.plotName} subtitle="Regional Exchange" onClose={onClose} />
         <PanelActions>
-          <ActionButton variant="gold" onClick={() => { navigate('/exchange'); onClose(); }}>
+          <ActionButton variant="gold" onClick={() => { navigate(`/exchange?region=${regionId}`); onClose(); }}>
             Visit Exchange
           </ActionButton>
         </PanelActions>
@@ -297,14 +318,11 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
   const myKeeps    = dot.keeps.filter((k) => k.empireId === myEmpireId);
   const otherKeeps = dot.keeps.filter((k) => k.empireId !== myEmpireId);
   const isEmpty    = dot.keeps.length === 0;
+  const idleCaravans = (empireData?.empire.caravans ?? []).filter((c) => c.status === 'IDLE');
 
   return (
     <Overlay onClose={onClose}>
       <PanelHeader title={dot.plotName} subtitle={dot.districtName} onClose={onClose} />
-
-      <PanelSection label="Plot Traits">
-        <p className="text-stone-600 text-xs italic">No traits recorded — coming once item chains are finalised.</p>
-      </PanelSection>
 
       <PanelActions>
         {myKeeps.map((k) => (
@@ -312,13 +330,32 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
             View Keep — {k.name}
           </ActionButton>
         ))}
-        <ActionButton variant="muted" disabled>
-          Travel here — coming soon
-        </ActionButton>
         {isEmpty && (
-          <p className="text-stone-600 text-xs text-center py-1">Empty plot — no keep founded here</p>
+          <p className="text-stone-600 text-xs text-center py-1">Empty plot — no keep founded here yet</p>
         )}
       </PanelActions>
+
+      <PanelSection label="Send Caravan Here">
+        {dispatchMut.isError && (
+          <p className="text-red-400 text-xs mb-2">{(dispatchMut.error as Error).message}</p>
+        )}
+        {idleCaravans.length === 0 ? (
+          <p className="text-stone-600 text-xs italic">No idle caravans available</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {idleCaravans.map((c) => (
+              <button
+                key={c.id}
+                disabled={dispatchMut.isPending}
+                onClick={() => dispatchMut.mutate(c.id)}
+                className="w-full text-left text-sm px-3 py-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-parchment-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {dispatchMut.isPending ? 'Sending…' : `Send ${c.name} →`}
+              </button>
+            ))}
+          </div>
+        )}
+      </PanelSection>
 
       {otherKeeps.length > 0 && (
         <PanelSection label="Occupied by">

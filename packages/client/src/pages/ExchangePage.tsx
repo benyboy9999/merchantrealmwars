@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api.js';
 import type { ExchangeListing } from '../services/api.js';
 import { RESOURCE_NAMES } from '@merchant-realms/shared';
@@ -17,7 +18,9 @@ const rName = (rt: string) => RESOURCE_NAMES[rt as keyof typeof RESOURCE_NAMES] 
 
 export default function ExchangePage() {
   const qc = useQueryClient();
-  const [regionId, setRegionId]   = useState<string>('CENTRAL');
+  const [searchParams] = useSearchParams();
+  const initialRegion = REGIONS.find((r) => r.id === searchParams.get('region'))?.id ?? 'CENTRAL';
+  const [regionId, setRegionId]   = useState<string>(initialRegion);
   const [selected, setSelected]   = useState<string | null>(null); // resourceType
   const [buyListingId, setBuyListingId] = useState<string | null>(null);
   const [buyQty, setBuyQty]       = useState('');
