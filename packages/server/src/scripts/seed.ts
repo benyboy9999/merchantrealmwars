@@ -308,6 +308,8 @@ async function main() {
   console.log('  ✓ Admin 2 starter caravans (at Central Exchange, empty, 500kg each)');
 
   // ── NPC Exchange sell orders — unlimited T1 at 1 gold ────────────────────
+  const npcOrders = await db.marketOrder.findMany({ where: { empireId: null, regionId: REGION_IDS.CENTRAL }, select: { id: true } });
+  await db.marketTrade.deleteMany({ where: { listingId: { in: npcOrders.map((o) => o.id) } } });
   await db.marketOrder.deleteMany({ where: { empireId: null, regionId: REGION_IDS.CENTRAL } });
   await db.marketOrder.createMany({
     data: Object.values(ResourceType).map((resourceType) => ({
