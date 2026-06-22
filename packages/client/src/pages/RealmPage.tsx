@@ -380,6 +380,8 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
   const otherKeeps = dot.keeps.filter((k) => k.empireId !== myEmpireId);
   const isEmpty    = dot.keeps.length === 0;
 
+  const isFirstKeep = (empireData?.empire.keeps.length ?? 0) === 0;
+
   // Caravans idle at this specific plot
   const caravansHere = allCaravans.filter(
     (c) => c.status === 'IDLE' && c.locationType === 'PLOT' && c.locationId === plotId
@@ -392,7 +394,8 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
       combined.set(item.resourceType, (combined.get(item.resourceType) ?? 0) + item.quantity);
     }
   }
-  const canSettle = isEmpty && caravansHere.length > 0 && KEEP_FOUNDING_COST.every(
+  const canSettleFirstKeep = isFirstKeep && isEmpty && caravansHere.length > 0;
+  const canSettle = !isFirstKeep && isEmpty && caravansHere.length > 0 && KEEP_FOUNDING_COST.every(
     (cost) => (combined.get(cost.resource) ?? 0) >= cost.quantity
   );
 
@@ -411,7 +414,31 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
         )}
       </PanelActions>
 
-      {isEmpty && caravansHere.length > 0 && (
+      {canSettleFirstKeep && (
+        <PanelSection label="Settle Your First Keep">
+          <p className="text-stone-500 text-xs mb-3">Free — must be in the Central region. Your keep will arrive stocked with building materials.</p>
+          <input
+            className="w-full bg-stone-900 border border-stone-700 rounded px-3 py-2 text-parchment-100 text-sm mb-2 focus:outline-none focus:border-stone-500"
+            placeholder={dot.plotName}
+            value={keepName}
+            maxLength={40}
+            onChange={(e) => setKeepName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !settleMut.isPending && settleMut.mutate()}
+          />
+          {settleMut.isError && (
+            <p className="text-red-400 text-xs mb-2">{(settleMut.error as Error).message}</p>
+          )}
+          <ActionButton
+            variant="gold"
+            disabled={settleMut.isPending}
+            onClick={() => settleMut.mutate()}
+          >
+            {settleMut.isPending ? 'Founding…' : 'Found Keep Here'}
+          </ActionButton>
+        </PanelSection>
+      )}
+
+      {!isFirstKeep && isEmpty && caravansHere.length > 0 && (
         <PanelSection label="Settle a Keep">
           <div className="mb-3 space-y-1">
             {KEEP_FOUNDING_COST.map((cost) => {

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '../../db/client.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { adminState } from '../../admin-bypass.js';
-import { KEEP_FOUNDING_COST, KEEP_BASE_STORAGE, KEEP_DEFAULT_BUILDING_SLOTS, getStarterSpeedMultiplier } from '@merchant-realms/shared';
+import { KEEP_FOUNDING_COST, KEEP_BASE_STORAGE, KEEP_DEFAULT_BUILDING_SLOTS, getStarterSpeedMultiplier, REGION_IDS } from '@merchant-realms/shared';
 import { scheduleArrival } from '../../services/caravan-timers.js';
 
 export const caravanRouter = Router();
@@ -116,42 +116,58 @@ caravanRouter.post('/found', async (req, res, next) => {
     });
     if (caravans.length === 0) { res.status(400).json({ error: 'No caravans at this plot' }); return; }
 
-    const combined = new Map<string, number>();
-    for (const c of caravans) {
-      for (const item of c.warehouse?.items ?? []) {
-        combined.set(item.resourceType, (combined.get(item.resourceType) ?? 0) + item.quantity);
-      }
-    }
+    // First keep is free and must be in the Central region
+    const empireKeepCount = await db.keep.count({ where: { empireId } });
+    const isFirstKeep = empireKeepCount === 0;
 
-    for (const cost of KEEP_FOUNDING_COST) {
-      if ((combined.get(cost.resource) ?? 0) < cost.quantity) {
-        res.status(400).json({
-          error: `Not enough ${cost.resource} — need ${cost.quantity}, have ${Math.floor(combined.get(cost.resource) ?? 0)}`,
-        });
+    if (isFirstKeep) {
+      const plotRecord = await db.plot.findUnique({
+        where:   { id: plotId },
+        include: { district: true },
+      });
+      if (plotRecord?.district.regionId !== REGION_IDS.CENTRAL) {
+        res.status(400).json({ error: 'Your first keep must be settled in the Central region' });
         return;
       }
-    }
-
-    // Deduct founding costs from caravan warehouses, spreading across multiple caravans
-    for (const cost of KEEP_FOUNDING_COST) {
-      let remaining = cost.quantity;
+    } else {
+      // Subsequent keeps require founding materials
+      const combined = new Map<string, number>();
       for (const c of caravans) {
-        if (remaining <= 0) break;
-        const item = c.warehouse?.items.find((x) => x.resourceType === cost.resource);
-        if (!item || !c.warehouseId) continue;
-        const take   = Math.min(item.quantity, remaining);
-        const newQty = item.quantity - take;
-        if (newQty < 0.001) {
-          await db.warehouseItem.delete({
-            where: { warehouseId_resourceType: { warehouseId: c.warehouseId, resourceType: cost.resource } },
-          });
-        } else {
-          await db.warehouseItem.update({
-            where: { warehouseId_resourceType: { warehouseId: c.warehouseId, resourceType: cost.resource } },
-            data:  { quantity: newQty },
-          });
+        for (const item of c.warehouse?.items ?? []) {
+          combined.set(item.resourceType, (combined.get(item.resourceType) ?? 0) + item.quantity);
         }
-        remaining -= take;
+      }
+
+      for (const cost of KEEP_FOUNDING_COST) {
+        if ((combined.get(cost.resource) ?? 0) < cost.quantity) {
+          res.status(400).json({
+            error: `Not enough ${cost.resource} — need ${cost.quantity}, have ${Math.floor(combined.get(cost.resource) ?? 0)}`,
+          });
+          return;
+        }
+      }
+
+      // Deduct founding costs from caravan warehouses, spreading across multiple caravans
+      for (const cost of KEEP_FOUNDING_COST) {
+        let remaining = cost.quantity;
+        for (const c of caravans) {
+          if (remaining <= 0) break;
+          const item = c.warehouse?.items.find((x) => x.resourceType === cost.resource);
+          if (!item || !c.warehouseId) continue;
+          const take   = Math.min(item.quantity, remaining);
+          const newQty = item.quantity - take;
+          if (newQty < 0.001) {
+            await db.warehouseItem.delete({
+              where: { warehouseId_resourceType: { warehouseId: c.warehouseId, resourceType: cost.resource } },
+            });
+          } else {
+            await db.warehouseItem.update({
+              where: { warehouseId_resourceType: { warehouseId: c.warehouseId, resourceType: cost.resource } },
+              data:  { quantity: newQty },
+            });
+          }
+          remaining -= take;
+        }
       }
     }
 
@@ -170,6 +186,17 @@ caravanRouter.post('/found', async (req, res, next) => {
       });
       return k;
     });
+
+    // Stock first keep with building materials for 2× Housing + 2× Mining Camp
+    if (isFirstKeep && keep.warehouseId) {
+      await db.warehouseItem.createMany({
+        data: [
+          { warehouseId: keep.warehouseId, resourceType: 'CONSTRUCTION_KIT', quantity: 32 },
+          { warehouseId: keep.warehouseId, resourceType: 'COBBLESTONE',       quantity: 48 },
+          { warehouseId: keep.warehouseId, resourceType: 'AMENITIES',         quantity: 24 },
+        ],
+      });
+    }
 
     res.status(201).json({ keep });
   } catch (err) { next(err); }

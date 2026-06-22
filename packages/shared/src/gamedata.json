@@ -660,18 +660,20 @@
     { "resource": "MASTER_RESEARCH", "quantity": 435 }
   ],
   "starterBonus": [
-    { "maxDaysAge": 2,  "speedMultiplier": 40  },
-    { "maxDaysAge": 5,  "speedMultiplier": 20  },
-    { "maxDaysAge": 9,  "speedMultiplier": 8   },
-    { "maxDaysAge": 20, "speedMultiplier": 3   },
-    { "maxDaysAge": 30, "speedMultiplier": 1.5 }
+    { "maxDaysAge": 1,  "speedMultiplier": 40   },
+    { "maxDaysAge": 3,  "speedMultiplier": 15   },
+    { "maxDaysAge": 7,  "speedMultiplier": 5    },
+    { "maxDaysAge": 14, "speedMultiplier": 2    },
+    { "maxDaysAge": 20, "speedMultiplier": 1.5  },
+    { "maxDaysAge": 25, "speedMultiplier": 1.25 },
+    { "maxDaysAge": 30, "speedMultiplier": 1    }
   ],
   "constants": {
     "keepBaseStorageKg":        10000,
     "warehouseStoragePerLevel": 2500,
     "housingWorkersPerLevel":   150,
     "defaultWorkersPerLevel":   75,
-    "muleCapacityKg":           100,
+    "muleCapacityKg":           500,
     "consumptionCycleMinutes":  480,
     "maxBuildingSlots":         20,
     "defaultBuildingSlots":     7,

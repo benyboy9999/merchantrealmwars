@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { ResourceType, KEEP_DEFAULT_BUILDING_SLOTS, KEEP_BASE_STORAGE, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
+import { ResourceType, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
 
 type MapRegionCode = 'CENTRAL' | 'NE' | 'NW' | 'SW' | 'SE';
 
@@ -280,55 +280,32 @@ async function main() {
   console.log('  ✓ Kieran Google account (kieran.benson10@gmail.com) — admin');
   const adminEmpire = await db.empire.upsert({
     where:  { playerId: admin.id },
-    create: { playerId: admin.id, name: 'Admin Empire', goldBalance: 0 },
+    create: { playerId: admin.id, name: 'Admin Empire', goldBalance: 1000 },
     update: {},
   });
   console.log('  ✓ Admin player + empire (admin@merchantrealms.dev)');
 
-  // ── Admin starting Keep ───────────────────────────────────────────────────
-  // First non-center plot in the district at q=1, r=0 (the Reach, closest to centre)
-  const startingPlot = await db.plot.findFirst({
-    where:   { district: { q: 1, r: 0 }, isCenter: false },
-    orderBy: { id: 'asc' },
-  });
-  if (!startingPlot) throw new Error('Starting plot not found — check district q=1, r=0 exists');
-
-  const adminKeep = await db.$transaction(async (tx) => {
-    const wh = await tx.warehouse.create({
-      data: { type: 'KEEP', empireId: adminEmpire.id, cap: KEEP_BASE_STORAGE },
-    });
-    const k = await tx.keep.create({
-      data: { empireId: adminEmpire.id, plotId: startingPlot.id, name: 'Highwatch Keep', buildingSlotCount: KEEP_DEFAULT_BUILDING_SLOTS, warehouseId: wh.id },
-    });
-    await tx.warehouseItem.createMany({
-      data: [
-        { warehouseId: wh.id, resourceType: 'OAK',      quantity: 15 },
-        { warehouseId: wh.id, resourceType: 'LIMESTONE', quantity: 15 },
-      ],
-    });
-    return k;
-  });
-  console.log('  ✓ Admin starting Keep (Highwatch Keep) + 15 OAK + 15 LIMESTONE');
-
-  // ── Starting caravan ──────────────────────────────────────────────────────
+  // ── Admin starting caravans (same experience as new players) ─────────────
   await db.$transaction(async (tx) => {
-    const wh = await tx.warehouse.create({
-      data: { type: 'CARAVAN', empireId: adminEmpire.id, cap: MULE_CAPACITY_KG },
-    });
-    await tx.caravan.create({
-      data: {
-        empireId:     adminEmpire.id,
-        name:         'Caravan',
-        animalType:   'MULE',
-        animalCount:  1,
-        locationType: 'KEEP',
-        locationId:   adminKeep.id,
-        status:       'IDLE',
-        warehouseId:  wh.id,
-      },
-    });
+    for (const name of ['Caravan 1', 'Caravan 2']) {
+      const wh = await tx.warehouse.create({
+        data: { type: 'CARAVAN', empireId: adminEmpire.id, cap: MULE_CAPACITY_KG },
+      });
+      await tx.caravan.create({
+        data: {
+          empireId:     adminEmpire.id,
+          name,
+          animalType:   'MULE',
+          animalCount:  1,
+          locationType: 'EXCHANGE',
+          locationId:   REGION_IDS.CENTRAL,
+          status:       'IDLE',
+          warehouseId:  wh.id,
+        },
+      });
+    }
   });
-  console.log('  ✓ Starting caravan (1 mule, idle at Highwatch Keep)');
+  console.log('  ✓ Admin 2 starter caravans (at Central Exchange, empty, 500kg each)');
 
   // ── NPC Exchange sell orders — unlimited T1 at 1 gold ────────────────────
   await db.marketOrder.deleteMany({ where: { empireId: null, regionId: REGION_IDS.CENTRAL } });

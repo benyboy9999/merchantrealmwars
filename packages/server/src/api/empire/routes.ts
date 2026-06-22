@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { CreateEmpireSchema, KEEP_FOUNDING_COST, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
+import { CreateEmpireSchema, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
 import { db } from '../../db/client.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { issueTokens, saveRefreshToken } from '../../utils/tokens.js';
@@ -51,35 +51,28 @@ empireRouter.post('/', async (req, res, next) => {
     const body = CreateEmpireSchema.parse(req.body);
 
     const empire = await db.empire.create({
-      data: { playerId: req.auth!.playerId, name: body.name, goldBalance: 100 },
+      data: { playerId: req.auth!.playerId, name: body.name, goldBalance: 1000 },
     });
 
-    // Provision starter caravan at the CENTRAL exchange, pre-loaded with
-    // founding materials so the player can immediately dispatch to a plot.
-    const caravan = await db.$transaction(async (tx) => {
-      const warehouse = await tx.warehouse.create({
-        data: { type: 'CARAVAN', empireId: empire.id, cap: MULE_CAPACITY_KG },
-      });
-      const c = await tx.caravan.create({
-        data: {
-          empireId:     empire.id,
-          name:         'Starter Caravan',
-          animalType:   'MULE',
-          animalCount:  1,
-          locationType: 'EXCHANGE',
-          locationId:   REGION_IDS.CENTRAL,
-          status:       'IDLE',
-          warehouseId:  warehouse.id,
-        },
-      });
-      await tx.warehouseItem.createMany({
-        data: KEEP_FOUNDING_COST.map((cost) => ({
-          warehouseId:  warehouse.id,
-          resourceType: cost.resource,
-          quantity:     cost.quantity,
-        })),
-      });
-      return c;
+    // Provision 2 starter caravans at the CENTRAL exchange (empty — first keep is free).
+    await db.$transaction(async (tx) => {
+      for (const name of ['Caravan 1', 'Caravan 2']) {
+        const warehouse = await tx.warehouse.create({
+          data: { type: 'CARAVAN', empireId: empire.id, cap: MULE_CAPACITY_KG },
+        });
+        await tx.caravan.create({
+          data: {
+            empireId:     empire.id,
+            name,
+            animalType:   'MULE',
+            animalCount:  1,
+            locationType: 'EXCHANGE',
+            locationId:   REGION_IDS.CENTRAL,
+            status:       'IDLE',
+            warehouseId:  warehouse.id,
+          },
+        });
+      }
     });
 
     // Re-issue tokens so the JWT carries the new empireId.
@@ -87,7 +80,7 @@ empireRouter.post('/', async (req, res, next) => {
     const { accessToken, refreshToken } = issueTokens(req.auth!.playerId, empire.id);
     await saveRefreshToken(req.auth!.playerId, refreshToken);
 
-    res.status(201).json({ empire, caravan, accessToken, refreshToken });
+    res.status(201).json({ empire, accessToken, refreshToken });
   } catch (err) {
     next(err);
   }
