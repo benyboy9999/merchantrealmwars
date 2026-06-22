@@ -19,10 +19,11 @@ echo "▶ Building..."
 pnpm build
 
 echo "▶ Running database migrations..."
-export DATABASE_URL=$(grep '^DATABASE_URL=' .env.production | cut -d'=' -f2-)
+set -a; source .env.production; set +a
 pnpm db:migrate:prod
 
 echo "▶ Restarting server..."
+set -a; source .env.production; set +a
 pm2 restart merchant-realms --update-env
 
 echo ""
