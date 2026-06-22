@@ -124,11 +124,12 @@ model District {
 }
 
 model Plot {
-  id               String @id
+  id               String  @id
   districtId       String
   name             String
   bonusDescription String
-  tier             Int    @default(1)
+  tier             Int     @default(1)
+  isCenter         Boolean @default(false)
   x                Float
   y                Float
 

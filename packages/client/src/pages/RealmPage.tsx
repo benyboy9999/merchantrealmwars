@@ -165,7 +165,7 @@ type PlotKeep = { id: string; name: string; empireId: string };
 
 type PlotDot = {
   worldX: number; worldY: number;
-  type: 'plot' | 'exchange';
+  type: 'plot' | 'exchange' | 'center';
   plotId: string; plotName: string;
   districtName: string;
   keeps: PlotKeep[];
@@ -256,6 +256,20 @@ function draw(
       ctx.arc(dot.worldX, dot.worldY, 8, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(210,155,30,0.95)';
       ctx.fill();
+    } else if (dot.type === 'center') {
+      // District center — small diamond shape, muted white
+      const isHov = hoveredPlotId === dot.plotId;
+      const r = isHov ? 5.5 : 4.5;
+      if (isHov) { ctx.shadowColor = 'rgba(255,255,255,0.5)'; ctx.shadowBlur = 10 / cam.zoom; }
+      ctx.beginPath();
+      ctx.moveTo(dot.worldX,     dot.worldY - r);
+      ctx.lineTo(dot.worldX + r, dot.worldY);
+      ctx.lineTo(dot.worldX,     dot.worldY + r);
+      ctx.lineTo(dot.worldX - r, dot.worldY);
+      ctx.closePath();
+      ctx.fillStyle = isHov ? 'rgba(255,255,255,0.7)' : 'rgba(210,200,180,0.35)';
+      ctx.fill();
+      if (isHov) { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; }
     } else {
       const isHov = hoveredPlotId === dot.plotId;
       const baseR  = DOT_SIZES[dot.sizeVariant]!;
@@ -300,6 +314,8 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
     },
   });
 
+  const idleCaravans = (empireData?.empire.caravans ?? []).filter((c) => c.status === 'IDLE');
+
   if (dot.type === 'exchange') {
     const hexKey  = dot.plotId.replace('exchange-', '');
     const regionId = EXCHANGE_HEX_TO_REGION_ID[hexKey] ?? 'CENTRAL';
@@ -315,10 +331,38 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
     );
   }
 
+  if (dot.type === 'center') {
+    return (
+      <Overlay onClose={onClose}>
+        <PanelHeader title={dot.plotName} subtitle="District Centre" onClose={onClose} />
+        <PanelSection label="Send Caravan Here">
+          {dispatchMut.isError && (
+            <p className="text-red-400 text-xs mb-2">{(dispatchMut.error as Error).message}</p>
+          )}
+          {idleCaravans.length === 0 ? (
+            <p className="text-stone-600 text-xs italic">No idle caravans available</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {idleCaravans.map((c) => (
+                <button
+                  key={c.id}
+                  disabled={dispatchMut.isPending}
+                  onClick={() => dispatchMut.mutate(c.id)}
+                  className="w-full text-left text-sm px-3 py-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-parchment-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {dispatchMut.isPending ? 'Sending…' : `Send ${c.name} →`}
+                </button>
+              ))}
+            </div>
+          )}
+        </PanelSection>
+      </Overlay>
+    );
+  }
+
   const myKeeps    = dot.keeps.filter((k) => k.empireId === myEmpireId);
   const otherKeeps = dot.keeps.filter((k) => k.empireId !== myEmpireId);
   const isEmpty    = dot.keeps.length === 0;
-  const idleCaravans = (empireData?.empire.caravans ?? []).filter((c) => c.status === 'IDLE');
 
   return (
     <Overlay onClose={onClose}>
@@ -472,12 +516,13 @@ export default function RealmPage() {
       for (const plot of d.plots) {
         const keeps: PlotKeep[] = (plot.keeps ?? []).map((k) => ({ id: k.id, name: k.name, empireId: k.empireId }));
         const hasMyKeep = keeps.some((k) => k.empireId === myEmpireId);
-        if (hasMyKeep) occupied++;
+        if (hasMyKeep && !plot.isCenter) occupied++;
         const worldX = cx + (plot.x - d.x) * MAP_SCALE;
         const worldY = cy + (plot.y - d.y) * MAP_SCALE;
         const h = dotHash(plot.id);
         dots.push({
-          worldX, worldY, type: 'plot',
+          worldX, worldY,
+          type: plot.isCenter ? 'center' : 'plot',
           plotId: plot.id, plotName: plot.name,
           districtName: d.name,
           keeps,
@@ -486,7 +531,8 @@ export default function RealmPage() {
           sizeVariant: (h % 3) as 0 | 1 | 2,
         });
       }
-      info.set(`${d.q},${d.r}`, { name: d.name, total: d.plots.length, occupied });
+      const ringPlots = d.plots.filter((p) => !p.isCenter);
+      info.set(`${d.q},${d.r}`, { name: d.name, total: ringPlots.length, occupied });
     }
 
     for (const [key, name] of Object.entries(EXCHANGE_REGION_NAME)) {

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Plot" ADD COLUMN "isCenter" BOOLEAN NOT NULL DEFAULT false;

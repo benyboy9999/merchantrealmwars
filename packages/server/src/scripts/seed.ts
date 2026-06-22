@@ -56,24 +56,109 @@ function plotCount(q: number, r: number): number {
   return 4 + Math.abs(q * 7 + r * 11) % 3;
 }
 
-// 6 fixed offsets in absolute map units from a district center (no center plot).
-// At MAP_SCALE=2 → world px: [20,0],[10,18],[-10,18],[-20,0],[-10,-18],[10,-18]
+// 6 fixed offsets in absolute map units from a district center
 const PLOT_OFFSETS: [number, number][] = [
   [10, 0], [5, 9], [-5, 9], [-10, 0], [-5, -9], [5, -9],
 ];
 
-// Cardinal/positional names for the 6 ring-1 districts
-const RING1_NAMES = ['East', 'Northeast', 'Northwest', 'West', 'Southwest', 'Southeast'];
+// ── District name pools (sorted by region) ────────────────────────────────────
+// Counts calibrated to actual district counts per region:
+//   CENTRAL=18, NE(Reach)=68, NW(Wold)=68, SW(Vale)=64, SE(Mere)=64
 
-function districtName(q: number, r: number): string {
-  const d = hexDist(q, r);
-  if (d === 1) {
-    const ring1 = [[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]] as [number,number][];
-    const idx = ring1.findIndex(([hq, hr]) => hq === q && hr === r);
-    return idx >= 0 ? `${RING1_NAMES[idx]!} Quarter` : `District ${q},${r}`;
-  }
-  return `District ${q},${r}`;
-}
+const DISTRICT_NAMES: Record<string, string[]> = {
+  // the Crown — -gate / -stow / -wick
+  CENTRAL: [
+    'Goldgate',     'Silvergate',   'Irongate',     'Coppergate',
+    'Mintgate',     'Marketgate',   'Guildgate',    'Tollgate',
+    'Courtgate',    'Bridgegate',   'Wardgate',     'Bellgate',
+    'Marketstow',   'Tradestow',    'Charterstow',  'Weighstow',
+    'Goldwick',     'Tradewick',
+  ],
+
+  // the Reach — -ford / -by / -reach
+  NE: [
+    // -ford (25)
+    'Ashford',    'Ironford',   'Coalford',   'Stormford',  'Wolfford',
+    'Hawkford',   'Reedford',   'Greyford',   'Millford',   'Coldford',
+    'Stoneford',  'Ramford',    'Frostford',  'Dustford',   'Blastford',
+    'Saltford',   'Thornford',  'Ridgeford',  'Shaleford',  'Scarford',
+    'Cragford',   'Grimford',   'Brineford',  'Murkford',   'Rawford',
+    // -by (25)
+    'Ironby',     'Ashby',      'Coalby',     'Stormby',    'Wolfby',
+    'Crowby',     'Ravenby',    'Coldby',     'Frostby',    'Dustby',
+    'Galeby',     'Windby',     'Stagby',     'Bearby',     'Boarby',
+    'Foxby',      'Hawkby',     'Boulderby',  'Gritby',     'Blastby',
+    'Cragby',     'Grimby',     'Brineby',    'Murkby',     'Rawby',
+    // -reach (18)
+    'Ironreach',  'Coalreach',  'Ashreach',   'Stormreach', 'Coldreach',
+    'Frostreach', 'Wolfreach',  'Ravenreach', 'Greyreach',  'Dustreach',
+    'Galereach',  'Windreach',  'Scarreach',  'Cliffreach', 'Boulderreach',
+    'Blastreach', 'Saltreach',  'Thornreach',
+  ],
+
+  // the Wold — -shaw / -hurst / -wold
+  NW: [
+    // -shaw (25)
+    'Oakshaw',      'Elmshaw',      'Birchshaw',    'Yewshaw',      'Thornshaw',
+    'Briarshaw',    'Ivyshaw',      'Fernshaw',     'Brackenshaw',  'Heathershaw',
+    'Gorseshaw',    'Whinshaw',     'Brakeshaw',    'Gladeshaw',    'Clearshaw',
+    'Tangleshaw',   'Ashshaw',      'Willowshaw',   'Holmshaw',     'Brambleshaw',
+    'Aldershaw',    'Rowanshaw',    'Hazelshaw',    'Sloeshaw',     'Spinneyshaw',
+    // -hurst (25)
+    'Oakhurst',     'Elmhurst',     'Birchhurst',   'Yewhurst',     'Thornhurst',
+    'Briarhurst',   'Ivyhurst',     'Fernhurst',    'Brackenhurst', 'Heatherhurst',
+    'Gorsehurst',   'Whinhurst',    'Brakehurst',   'Clearhurst',   'Mosshurst',
+    'Ashurst',      'Greenhurst',   'Craghurst',    'Bramblehurst', 'Gloomhurst',
+    'Alderhurst',   'Rowanhurst',   'Hazelhurst',   'Sloehurst',    'Spineyhurst',
+    // -wold (18)
+    'Oakwold',      'Elmwold',      'Thornwold',    'Briarwold',    'Fernwold',
+    'Greenwold',    'Ashwold',      'Mosswold',     'Heatherwold',  'Gorsewold',
+    'Gladewold',    'Ivywold',      'Brackenwold',  'Holmwold',     'Clearwold',
+    'Tanglewold',   'Whinwold',     'Brakewold',
+  ],
+
+  // the Vale — -ham / -thorpe / -dale
+  SW: [
+    // -ham (23)
+    'Grainham',   'Wheatham',   'Barleyham',  'Ryeham',     'Oatham',
+    'Meadowham',  'Fieldham',   'Harvestham', 'Hayham',     'Maltham',
+    'Millham',    'Seedham',    'Plowham',    'Gleanham',   'Furrowham',
+    'Limeham',    'Cloverham',  'Heronham',   'Swanham',    'Doveham',
+    'Foldham',    'Yardham',    'Beanham',
+    // -thorpe (20)
+    'Grainthorpe','Wheatthorpe','Barleythorpe','Ryethorpe', 'Oatthorpe',
+    'Meadowthorpe','Fieldthorpe','Harvestthorpe','Haythorpe','Maltthorpe',
+    'Millthorpe', 'Seedthorpe', 'Plowthorpe', 'Gleanthorpe','Herdthorpe',
+    'Hawthorpe',  'Lambthorpe', 'Croftthorpe','Swinethorpe','Catthorpe',
+    // -dale (21)
+    'Graindale',  'Wheatdale',  'Meadowdale', 'Fielddale',  'Harvestdale',
+    'Haydale',    'Maltdale',   'Milldale',   'Seeddale',   'Plowdale',
+    'Herddale',   'Lambdale',   'Stockdale',  'Cloverdale', 'Dovedale',
+    'Swandale',   'Herondale',  'Crestdale',  'Flaxdale',   'Furrowdale',
+    'Ryedale',
+  ],
+
+  // the Mere — -mere / -holm / -fen
+  SE: [
+    // -mere (23)
+    'Reedmere',   'Rushmere',   'Tidemere',   'Bogmere',    'Fenmere',
+    'Marshmere',  'Deepmere',   'Coldmere',   'Greymere',   'Mistmere',
+    'Fogmere',    'Darkmere',   'Stillmere',  'Blackmere',  'Silvermere',
+    'Glassmere',  'Shallowmere','Saltmere',   'Duskmere',   'Siltmere',
+    'Cranmere',   'Plovermere', 'Snipemere',
+    // -holm (23)
+    'Reedholm',   'Rushholm',   'Tideholm',   'Bogholm',    'Fenholm',
+    'Marshholm',  'Deepholm',   'Coldholm',   'Greyholm',   'Mistholm',
+    'Fogholm',    'Darkholm',   'Stillholm',  'Blackholm',  'Saltholm',
+    'Glassholm',  'Mireholm',   'Siltholm',   'Duckholm',   'Heronholm',
+    'Craneholm',  'Ploverholm', 'Snipeholm',
+    // -fen (18)
+    'Reedfen',    'Rushfen',    'Tidefen',    'Bogfen',     'Marshfen',
+    'Deepfen',    'Coldfen',    'Greyfen',    'Mistfen',    'Fogfen',
+    'Darkfen',    'Stillfen',   'Blackfen',   'Saltfen',    'Glassfen',
+    'Mirefen',    'Duskfen',    'Heronfen',
+  ],
+};
 
 // ── Seed ──────────────────────────────────────────────────────────────────────
 
@@ -81,15 +166,14 @@ async function main() {
   console.log('🌱 Seeding dev database...');
 
   // ── Regions ──────────────────────────────────────────────────────────────
-  await db.region.upsert({ where: { id: 'CENTRAL' }, create: { id: 'CENTRAL', name: 'Central',   guildControllable: false }, update: {} });
-  await db.region.upsert({ where: { id: 'NE' },      create: { id: 'NE',      name: 'Northeast', guildControllable: true  }, update: {} });
-  await db.region.upsert({ where: { id: 'NW' },      create: { id: 'NW',      name: 'Northwest', guildControllable: true  }, update: {} });
-  await db.region.upsert({ where: { id: 'SW' },      create: { id: 'SW',      name: 'Southwest', guildControllable: true  }, update: {} });
-  await db.region.upsert({ where: { id: 'SE' },      create: { id: 'SE',      name: 'Southeast', guildControllable: true  }, update: {} });
-  console.log('  ✓ Regions (CENTRAL + NE/NW/SW/SE)');
+  await db.region.upsert({ where: { id: 'CENTRAL' }, create: { id: 'CENTRAL', name: 'the Crown', guildControllable: false }, update: { name: 'the Crown' } });
+  await db.region.upsert({ where: { id: 'NE' },      create: { id: 'NE',      name: 'the Reach', guildControllable: true  }, update: { name: 'the Reach' } });
+  await db.region.upsert({ where: { id: 'NW' },      create: { id: 'NW',      name: 'the Wold',  guildControllable: true  }, update: { name: 'the Wold'  } });
+  await db.region.upsert({ where: { id: 'SW' },      create: { id: 'SW',      name: 'the Vale',  guildControllable: true  }, update: { name: 'the Vale'  } });
+  await db.region.upsert({ where: { id: 'SE' },      create: { id: 'SE',      name: 'the Mere',  guildControllable: true  }, update: { name: 'the Mere'  } });
+  console.log('  ✓ Regions (the Crown / Reach / Wold / Vale / Mere)');
 
-  // ── Clean slate: remove all existing game data so we can rebuild with
-  //    coordinate-based IDs and correct region assignments across the full map.
+  // ── Clean slate ───────────────────────────────────────────────────────────
   await db.caravan.deleteMany({});
   await db.keep.deleteMany({});
   await db.warehouseItem.deleteMany({});
@@ -97,33 +181,70 @@ async function main() {
   await db.plot.deleteMany({});
   await db.district.deleteMany({});
 
-  // ── Districts + Plots — every non-exchange hex in the full map grid ────────
-  const districtRows = hexesInMap()
+  // ── Build raw districts (q/r/region — no names yet) ───────────────────────
+  const rawDistricts = hexesInMap()
     .filter(([q, r]) => !EXCHANGE_HEXES.has(`${q},${r}`))
     .map(([q, r]) => {
-      const [dx, dy] = hexToAbsolute(q, r);
-      return {
-        id: `district-${q}-${r}`,
-        regionId: getRegionId(q, r),
-        name: districtName(q, r),
-        bonusDescription: 'No special bonus',
-        q, r, x: dx, y: dy,
-      };
+      const [x, y] = hexToAbsolute(q, r);
+      return { q, r, regionId: getRegionId(q, r), x, y };
     });
+
+  // ── Assign district names (sort by q then r within each region) ───────────
+  const byRegion: Record<string, typeof rawDistricts> = {};
+  for (const d of rawDistricts) {
+    (byRegion[d.regionId] ??= []).push(d);
+  }
+  for (const list of Object.values(byRegion)) {
+    list.sort((a, b) => a.q - b.q || a.r - b.r);
+  }
+  const nameMap = new Map<string, string>();
+  for (const [rid, list] of Object.entries(byRegion)) {
+    const pool = DISTRICT_NAMES[rid] ?? [];
+    list.forEach((d, i) => {
+      nameMap.set(`${d.q},${d.r}`, pool[i] ?? `${rid} District ${i + 1}`);
+    });
+  }
+
+  // ── Create districts ──────────────────────────────────────────────────────
+  const districtRows = rawDistricts.map((d) => ({
+    id:               `district-${d.q}-${d.r}`,
+    regionId:         d.regionId,
+    name:             nameMap.get(`${d.q},${d.r}`)!,
+    bonusDescription: 'No special bonus',
+    q: d.q, r: d.r, x: d.x, y: d.y,
+  }));
 
   await db.district.createMany({ data: districtRows });
 
-  type PlotRow = { id: string; districtId: string; name: string; bonusDescription: string; x: number; y: number };
+  // ── Create plots (center + ring) ──────────────────────────────────────────
+  type PlotRow = {
+    id: string; districtId: string; name: string;
+    bonusDescription: string; isCenter: boolean; x: number; y: number;
+  };
   const plotRows: PlotRow[] = [];
+
   for (const d of districtRows) {
+    // District center — sits at hex center, visually distinct later
+    plotRows.push({
+      id:               `plot-${d.id}-center`,
+      districtId:       d.id,
+      name:             `${d.name} District`,
+      bonusDescription: 'District center',
+      isCenter:         true,
+      x:                d.x,
+      y:                d.y,
+    });
+
+    // Ring plots — offset from center
     const num = plotCount(d.q, d.r);
     for (let i = 0; i < num; i++) {
       const [ox, oy] = PLOT_OFFSETS[i]!;
       plotRows.push({
         id:               `plot-${d.id}-${i + 1}`,
         districtId:       d.id,
-        name:             `${d.name} [${i + 1}]`,
+        name:             `${d.name} ${i + 1}`,
         bonusDescription: 'No special bonus',
+        isCenter:         false,
         x:                Math.round((d.x + ox) * 100) / 100,
         y:                Math.round((d.y + oy) * 100) / 100,
       });
@@ -131,7 +252,9 @@ async function main() {
   }
 
   await db.plot.createMany({ data: plotRows });
-  console.log(`  ✓ ${districtRows.length} districts, ${plotRows.length} plots (all regions)`);
+  const centerCount  = plotRows.filter((p) => p.isCenter).length;
+  const regularCount = plotRows.filter((p) => !p.isCenter).length;
+  console.log(`  ✓ ${districtRows.length} districts, ${centerCount} district centers, ${regularCount} ring plots`);
 
   // ── Admin player + empire ─────────────────────────────────────────────────
   const hash = await bcrypt.hash('admin', 12);
@@ -147,7 +270,7 @@ async function main() {
   });
   console.log('  ✓ Admin player + empire (admin@merchantrealms.dev)');
 
-  // ── Admin starting Keep — first plot of East Quarter (hex 1,0) ────────────
+  // ── Admin starting Keep ───────────────────────────────────────────────────
   const startingPlotId = 'plot-district-1-0-1';
   const adminKeep = await db.$transaction(async (tx) => {
     const wh = await tx.warehouse.create({
@@ -158,13 +281,13 @@ async function main() {
     });
     await tx.warehouseItem.createMany({
       data: [
-        { warehouseId: wh.id, resourceType: 'OAK',       quantity: 15 },
-        { warehouseId: wh.id, resourceType: 'LIMESTONE',  quantity: 15 },
+        { warehouseId: wh.id, resourceType: 'OAK',      quantity: 15 },
+        { warehouseId: wh.id, resourceType: 'LIMESTONE', quantity: 15 },
       ],
     });
     return k;
   });
-  console.log('  ✓ Admin starting Keep (Highwatch Keep, East Quarter [1]) + 15 OAK + 15 LIMESTONE');
+  console.log('  ✓ Admin starting Keep (Highwatch Keep) + 15 OAK + 15 LIMESTONE');
 
   // ── Starting caravan ──────────────────────────────────────────────────────
   await db.$transaction(async (tx) => {
@@ -200,7 +323,7 @@ async function main() {
       status:       'OPEN' as const,
     })),
   });
-  console.log(`  ✓ NPC sell orders (${Object.values(ResourceType).length} T1 resources @ 1 gold)`);
+  console.log(`  ✓ NPC sell orders (${Object.values(ResourceType).length} resources @ 1 gold)`);
 
   console.log('\n✅ Seed complete.');
 }

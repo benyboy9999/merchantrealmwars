@@ -206,7 +206,7 @@ export interface AuthResponse {
 }
 
 export interface Region       { id: string; name: string; guildControllable: boolean; districts?: District[] }
-export interface MapPlot      { id: string; name: string; tier: number; x: number; y: number; bonusDescription: string; keeps: { id: string; name: string; empireId: string }[] }
+export interface MapPlot      { id: string; name: string; tier: number; isCenter: boolean; x: number; y: number; bonusDescription: string; keeps: { id: string; name: string; empireId: string }[] }
 export interface MapDistrict  { id: string; regionId: string; name: string; q: number; r: number; x: number; y: number; tier: number; plots: MapPlot[] }
 export interface District { id: string; regionId: string; name: string; bonusDescription: string; q: number; r: number; x: number; y: number; plots: Plot[] }
 export interface Plot     { id: string; districtId: string; name: string; tier: number; x: number; y: number; bonusDescription: string; keeps: Keep[]; district?: District }
