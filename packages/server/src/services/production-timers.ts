@@ -1,5 +1,11 @@
 import type { Server } from 'socket.io';
-import { WsEvent, RECIPE_BY_KEY, RECIPE_BY_ID } from '@merchant-realms/shared';
+import {
+  WsEvent,
+  RECIPE_BY_KEY,
+  RECIPE_BY_ID,
+  getStarterSpeedMultiplier,
+} from '@merchant-realms/shared';
+import type { ResourceType } from '@merchant-realms/shared';
 import { db } from '../db/client.js';
 
 let io: Server | null = null;
@@ -22,17 +28,99 @@ export function cancelCompletion(buildingId: number): void {
   if (t) { clearTimeout(t); timers.delete(buildingId); }
 }
 
+// ── Speed helper ─────────────────────────────────────────────────────────────
+
+async function getSpeedMultiplier(keepId: number): Promise<number> {
+  const keep = await db.keep.findUnique({
+    where:   { id: keepId },
+    include: { empire: { select: { createdAt: true } } },
+  });
+  if (!keep) return 1;
+  const ageDays = (Date.now() - keep.empire.createdAt.getTime()) / 86_400_000;
+  return getStarterSpeedMultiplier(ageDays);
+}
+
+// ── Start a production cycle ─────────────────────────────────────────────────
+// Deducts recipe inputs upfront, creates ProductionTask, schedules timer.
+// Returns silently (building halted) if inputs are insufficient.
+
+export async function startTask(
+  buildingId: number,
+  keepId:     number,
+  recipeId:   number,
+): Promise<void> {
+  const existing = await db.productionTask.findUnique({ where: { buildingId } });
+  if (existing) return;
+
+  const recipeKey = RECIPE_BY_ID[recipeId];
+  if (!recipeKey) return;
+  const recipe = RECIPE_BY_KEY[recipeKey];
+  if (!recipe) return;
+
+  const keep = await db.keep.findUnique({
+    where:   { id: keepId },
+    include: { empire: { select: { createdAt: true } }, warehouse: { include: { items: true } } },
+  });
+  if (!keep?.warehouseId) return;
+
+  const warehouseId = keep.warehouseId;
+  const ledger      = new Map((keep.warehouse?.items ?? []).map((i) => [i.resourceType, i.quantity]));
+
+  // Halt silently if inputs are insufficient
+  for (const input of recipe.inputs) {
+    if ((ledger.get(input.resource) ?? 0) < input.quantity) return;
+  }
+
+  const ageDays     = (Date.now() - keep.empire.createdAt.getTime()) / 86_400_000;
+  const mult        = getStarterSpeedMultiplier(ageDays);
+  const now         = new Date();
+  const completesAt = new Date(now.getTime() + (recipe.timeMinutes * 60 * 1000) / mult);
+
+  await db.$transaction(async (tx) => {
+    for (const input of recipe.inputs) {
+      const current   = ledger.get(input.resource) ?? 0;
+      const remaining = current - input.quantity;
+      if (remaining < 0.001) {
+        await tx.warehouseItem.delete({
+          where: { warehouseId_resourceType: { warehouseId, resourceType: input.resource } },
+        });
+      } else {
+        await tx.warehouseItem.update({
+          where: { warehouseId_resourceType: { warehouseId, resourceType: input.resource } },
+          data:  { quantity: remaining },
+        });
+      }
+    }
+
+    await tx.productionTask.create({
+      data: {
+        buildingId,
+        keepId,
+        recipeId,
+        startedAt:        now,
+        completesAt,
+        progressAtUpdate: 0,
+        speedSnapshot:    mult,
+      },
+    });
+  });
+
+  scheduleCompletion(buildingId, completesAt);
+}
+
+// ── Complete a production cycle ───────────────────────────────────────────────
+// Adds output, emits socket event, starts next cycle.
+
 async function complete(buildingId: number): Promise<void> {
   timers.delete(buildingId);
 
   const task = await db.productionTask.findUnique({
-    where: { buildingId },
+    where:   { buildingId },
     include: {
-      building: true,
+      building: { select: { buildingTypeId: true, level: true } },
       keep: {
         include: {
-          warehouse: { include: { items: true } },
-          empire: { select: { playerId: true } },
+          empire:           { select: { playerId: true } },
           productionOrders: { orderBy: { position: 'asc' } },
         },
       },
@@ -48,55 +136,26 @@ async function complete(buildingId: number): Promise<void> {
   const warehouseId = task.keep.warehouseId;
   if (!warehouseId) return;
 
-  const items = task.keep.warehouse?.items ?? [];
-  const ledger = new Map(items.map((i) => [i.resourceType, i.quantity]));
+  const outputQty = recipe.outputQty * task.building.level;
 
-  // Check all inputs are available
-  for (const input of recipe.inputs) {
-    if ((ledger.get(input.resource) ?? 0) < input.quantity) {
-      // Mark building dormant and notify
-      await db.building.update({ where: { id: buildingId }, data: { isDormant: true } });
-      await db.productionTask.delete({ where: { buildingId } });
-      io?.to(`player:${task.keep.empire.playerId}`).emit(WsEvent.PRODUCTION_BLOCKED, {
-        keepId:    task.keepId,
-        buildingId,
-        recipeId:  task.recipeId,
-        missing:   recipe.inputs.filter((i) => (ledger.get(i.resource) ?? 0) < i.quantity).map((i) => i.resource),
-      });
-      return;
-    }
-  }
+  const order = task.keep.productionOrders.find(
+    (o) => o.buildingTypeId === task.building.buildingTypeId && o.recipeId === task.recipeId,
+  );
 
-  // Consume inputs + add output atomically
   await db.$transaction(async (tx) => {
-    // Deduct inputs
-    for (const input of recipe.inputs) {
-      const current = ledger.get(input.resource) ?? 0;
-      const remaining = current - input.quantity;
-      if (remaining <= 0) {
-        await tx.warehouseItem.delete({ where: { warehouseId_resourceType: { warehouseId, resourceType: input.resource } } });
-      } else {
-        await tx.warehouseItem.update({ where: { warehouseId_resourceType: { warehouseId, resourceType: input.resource } }, data: { quantity: remaining } });
-      }
-    }
-
-    // Add output
-    await tx.warehouseItem.upsert({
-      where:  { warehouseId_resourceType: { warehouseId, resourceType: recipe.output } },
-      create: { warehouseId, resourceType: recipe.output, quantity: recipe.outputQty },
-      update: { quantity: { increment: recipe.outputQty } },
-    });
-
-    // Delete completed task
     await tx.productionTask.delete({ where: { buildingId } });
 
-    // Update production order
-    const order = task.keep.productionOrders.find(
-      (o) => o.buildingTypeId === task.building.buildingTypeId && o.recipeId === task.recipeId
-    );
+    await tx.warehouseItem.upsert({
+      where:  { warehouseId_resourceType: { warehouseId, resourceType: recipe.output as ResourceType } },
+      create: { warehouseId, resourceType: recipe.output, quantity: outputQty },
+      update: { quantity: { increment: outputQty } },
+    });
+
     if (order) {
-      const newProduced = order.producedQuantity + recipe.outputQty;
-      const isDone = order.orderType === 'NUMERICAL' && order.targetQuantity != null && newProduced >= order.targetQuantity;
+      const newProduced = order.producedQuantity + outputQty;
+      const isDone = order.orderType === 'NUMERICAL'
+        && order.targetQuantity != null
+        && newProduced >= order.targetQuantity;
       if (isDone) {
         await tx.productionOrder.delete({ where: { id: order.id } });
       } else {
@@ -105,51 +164,55 @@ async function complete(buildingId: number): Promise<void> {
     }
   });
 
-  // Re-read warehouse for the emit payload
-  const updatedWarehouse = await db.warehouseItem.findMany({ where: { warehouseId } });
-
+  const warehouseItems = await db.warehouseItem.findMany({ where: { warehouseId } });
   io?.to(`player:${task.keep.empire.playerId}`).emit(WsEvent.PRODUCTION_COMPLETED, {
     keepId:         task.keepId,
     buildingId,
-    recipeId:       task.recipeId,
-    warehouseItems: updatedWarehouse,
+    warehouseItems,
   });
 
-  // Try to start the next cycle
   await scheduleNextCycle(buildingId, task.keepId, task.building.buildingTypeId);
 }
 
-async function scheduleNextCycle(buildingId: number, keepId: number, buildingTypeId: number): Promise<void> {
-  const nextOrder = await db.productionOrder.findFirst({
+// ── Schedule next cycle ───────────────────────────────────────────────────────
+
+async function scheduleNextCycle(
+  buildingId:     number,
+  keepId:         number,
+  buildingTypeId: number,
+): Promise<void> {
+  const order = await db.productionOrder.findFirst({
     where:   { keepId, buildingTypeId },
     orderBy: { position: 'asc' },
   });
-  if (!nextOrder) return;
-
-  const recipeKey = RECIPE_BY_ID[nextOrder.recipeId];
-  if (!recipeKey) return;
-  const recipe = RECIPE_BY_KEY[recipeKey];
-  if (!recipe) return;
-
-  const now         = new Date();
-  const completesAt = new Date(now.getTime() + recipe.timeMinutes * 60 * 1000);
-
-  await db.productionTask.create({
-    data: {
-      buildingId,
-      keepId,
-      recipeId:         nextOrder.recipeId,
-      startedAt:        now,
-      completesAt,
-      progressAtUpdate: 0,
-      speedSnapshot:    1.0,
-    },
-  });
-
-  scheduleCompletion(buildingId, completesAt);
+  if (!order) return;
+  await startTask(buildingId, keepId, order.recipeId);
 }
 
-// Called once at server startup to recover in-flight tasks.
+// ── Check halted buildings ────────────────────────────────────────────────────
+// Called whenever items are added to a keep's warehouse.
+// Scoped to that keep only — never scans globally.
+
+export async function checkHaltedBuildings(keepId: number): Promise<void> {
+  const [orders, buildings] = await Promise.all([
+    db.productionOrder.findMany({ where: { keepId }, orderBy: { position: 'asc' } }),
+    db.building.findMany({
+      where:   { keepId, isActive: true, isDormant: false },
+      include: { productionTask: true },
+    }),
+  ]);
+  if (orders.length === 0) return;
+
+  for (const building of buildings) {
+    if (building.productionTask) continue;
+    const order = orders.find((o) => o.buildingTypeId === building.buildingTypeId);
+    if (!order) continue;
+    void startTask(building.id, keepId, order.recipeId);
+  }
+}
+
+// ── Server startup: recover in-flight tasks ───────────────────────────────────
+
 export async function rescheduleActiveTasks(): Promise<void> {
   const tasks = await db.productionTask.findMany();
   for (const t of tasks) {
@@ -160,36 +223,74 @@ export async function rescheduleActiveTasks(): Promise<void> {
   }
 }
 
-// Creates a ProductionTask for a building that has no active task but has
-// queued orders. Called from the route when an order is added to an idle building.
-export async function startTask(
-  buildingId: number,
-  keepId:     number,
-  recipeId:   number,
-): Promise<void> {
-  const recipeKey = RECIPE_BY_ID[recipeId];
-  if (!recipeKey) return;
-  const recipe = RECIPE_BY_KEY[recipeKey];
-  if (!recipe) return;
+// ── Admin: force complete all active production tasks ─────────────────────────
 
-  // Idempotent — don't create a second task if one already exists
-  const existing = await db.productionTask.findUnique({ where: { buildingId } });
-  if (existing) return;
-
-  const now         = new Date();
-  const completesAt = new Date(now.getTime() + recipe.timeMinutes * 60 * 1000);
-
-  await db.productionTask.create({
-    data: {
-      buildingId,
-      keepId,
-      recipeId,
-      startedAt:        now,
-      completesAt,
-      progressAtUpdate: 0,
-      speedSnapshot:    1.0,
+export async function forceCompleteAllTasks(): Promise<number> {
+  const tasks = await db.productionTask.findMany({
+    include: {
+      building: { select: { buildingTypeId: true, level: true } },
+      keep: {
+        include: {
+          empire:           { select: { playerId: true } },
+          productionOrders: { orderBy: { position: 'asc' } },
+        },
+      },
     },
   });
 
-  scheduleCompletion(buildingId, completesAt);
+  let completed = 0;
+  for (const task of tasks) {
+    cancelCompletion(task.buildingId);
+
+    const recipeKey = RECIPE_BY_ID[task.recipeId];
+    if (!recipeKey) continue;
+    const recipe = RECIPE_BY_KEY[recipeKey];
+    if (!recipe) continue;
+
+    const warehouseId = task.keep.warehouseId;
+    if (!warehouseId) continue;
+
+    const outputQty = recipe.outputQty * task.building.level;
+    const order = task.keep.productionOrders.find(
+      (o) => o.buildingTypeId === task.building.buildingTypeId && o.recipeId === task.recipeId,
+    );
+
+    await db.$transaction(async (tx) => {
+      await tx.productionTask.delete({ where: { buildingId: task.buildingId } });
+      await tx.warehouseItem.upsert({
+        where:  { warehouseId_resourceType: { warehouseId, resourceType: recipe.output as ResourceType } },
+        create: { warehouseId, resourceType: recipe.output, quantity: outputQty },
+        update: { quantity: { increment: outputQty } },
+      });
+      if (order) {
+        const newProduced = order.producedQuantity + outputQty;
+        const isDone = order.orderType === 'NUMERICAL'
+          && order.targetQuantity != null
+          && newProduced >= order.targetQuantity;
+        if (isDone) {
+          await tx.productionOrder.delete({ where: { id: order.id } });
+        } else {
+          await tx.productionOrder.update({ where: { id: order.id }, data: { producedQuantity: newProduced } });
+        }
+      }
+    });
+
+    const warehouseItems = await db.warehouseItem.findMany({ where: { warehouseId } });
+    io?.to(`player:${task.keep.empire.playerId}`).emit(WsEvent.PRODUCTION_COMPLETED, {
+      keepId: task.keepId, buildingId: task.buildingId, warehouseItems,
+    });
+
+    const nextOrder = await db.productionOrder.findFirst({
+      where:   { keepId: task.keepId, buildingTypeId: task.building.buildingTypeId },
+      orderBy: { position: 'asc' },
+    });
+    if (nextOrder) void startTask(task.buildingId, task.keepId, nextOrder.recipeId);
+
+    completed++;
+  }
+  return completed;
 }
+
+// ── Exported for tick-job speed-adjustment ────────────────────────────────────
+
+export { getSpeedMultiplier };

@@ -4,6 +4,7 @@ import { db } from '../../db/client.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { adminState } from '../../admin-bypass.js';
 import { RESOURCE_WEIGHT } from '@merchant-realms/shared';
+import { checkHaltedBuildings } from '../../services/production-timers.js';
 
 export const inventoryRouter = Router();
 inventoryRouter.use(requireAuth);
@@ -99,6 +100,12 @@ inventoryRouter.post('/transfer', async (req, res, next) => {
         ? dst.items.map((x) => x.resourceType === resourceType ? { ...x, quantity: x.quantity + quantity } : x)
         : [...dst.items, { id: 0, warehouseId: toWarehouseId, resourceType, quantity, updatedAt: new Date() }],
     };
+
+    // If items just landed in a KEEP warehouse, try to restart any halted production
+    if (dst.type === 'KEEP') {
+      const destKeep = await db.keep.findFirst({ where: { warehouseId: dst.id } });
+      if (destKeep) void checkHaltedBuildings(destKeep.id);
+    }
 
     res.json({ ok: true, fromWarehouse: updatedSrc, toWarehouse: updatedDst });
   } catch (err: unknown) {

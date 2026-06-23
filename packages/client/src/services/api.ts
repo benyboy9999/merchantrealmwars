@@ -240,7 +240,7 @@ export interface ProductionTask {
 }
 export interface Building {
   id: number; keepId: number; buildingTypeId: number; level: number; slotIndex: number;
-  isActive: boolean; isDormant: boolean; health: number; workersAssigned: number; productionProgress: number;
+  isActive: boolean; isDormant: boolean; health: number; workersAssigned: number;
   productionTask: ProductionTask | null;
 }
 export interface Storage { usedWeight: number; maxWeight: number }

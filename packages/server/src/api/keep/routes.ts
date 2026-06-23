@@ -7,10 +7,11 @@ import {
   BUILDING_CONSTRUCTION_COSTS, KEEP_MAX_BUILDING_SLOTS,
   KEEP_DEFAULT_BUILDING_SLOTS, KEEP_SLOT_UNLOCK_RESOURCE,
   BUILDING_TYPE_IDS, BUILDING_TYPE_BY_ID, RECIPE_IDS,
+  RECIPE_BY_KEY, RECIPE_BY_ID,
 } from '@merchant-realms/shared';
 import type { BuildingType } from '@merchant-realms/shared';
 import { calculateRepairCost } from '@merchant-realms/engine';
-import { startTask } from '../../services/production-timers.js';
+import { startTask, cancelCompletion } from '../../services/production-timers.js';
 
 export const keepRouter = Router();
 keepRouter.use(requireAuth);
@@ -364,14 +365,46 @@ keepRouter.post('/:id/queue/:buildingType', async (req, res, next) => {
 
 keepRouter.delete('/:keepId/queue/:orderId', async (req, res, next) => {
   try {
-    const keepId  = parseInt(req.params['keepId']!);
-    const orderId = parseInt(req.params['orderId']!);
+    const keepId   = parseInt(req.params['keepId']!);
+    const orderId  = parseInt(req.params['orderId']!);
     const empireId = req.auth!.empireId;
     if (!empireGuard(empireId, res)) return;
+
     const order = await db.productionOrder.findFirst({
       where: { id: orderId, keep: { id: keepId, empireId } },
     });
     if (!order) { res.status(404).json({ error: 'Order not found' }); return; }
+
+    // If there is an active production task for this recipe, cancel it and return inputs.
+    const building = await db.building.findFirst({
+      where:   { keepId, buildingTypeId: order.buildingTypeId },
+      include: { productionTask: true },
+    });
+
+    if (building?.productionTask?.recipeId === order.recipeId) {
+      const recipeKey = RECIPE_BY_ID[order.recipeId];
+      const recipe    = recipeKey ? RECIPE_BY_KEY[recipeKey] : null;
+      const keep      = await db.keep.findUnique({ where: { id: keepId }, select: { warehouseId: true } });
+      const warehouseId = keep?.warehouseId;
+
+      if (recipe && warehouseId) {
+        cancelCompletion(building.id);
+        await db.$transaction(async (tx) => {
+          await tx.productionTask.delete({ where: { buildingId: building.id } });
+          await tx.productionOrder.delete({ where: { id: order.id } });
+          for (const input of recipe.inputs) {
+            await tx.warehouseItem.upsert({
+              where:  { warehouseId_resourceType: { warehouseId, resourceType: input.resource } },
+              create: { warehouseId, resourceType: input.resource, quantity: input.quantity },
+              update: { quantity: { increment: input.quantity } },
+            });
+          }
+        });
+        res.json({ ok: true, inputsReturned: true });
+        return;
+      }
+    }
+
     await db.productionOrder.delete({ where: { id: order.id } });
     res.json({ ok: true });
   } catch (err) { next(err); }

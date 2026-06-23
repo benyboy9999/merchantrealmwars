@@ -72,7 +72,6 @@ export interface Building {
   isActive: boolean;
   isDormant: boolean;
   health: number;
-  productionProgress: number;
   workersAssigned: number;
 }
 

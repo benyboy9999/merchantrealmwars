@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { db } from '../../db/client.js';
 import { adminState } from '../../admin-bypass.js';
 import { runTick } from '../../jobs/tick-job.js';
+import { checkHaltedBuildings, forceCompleteAllTasks } from '../../services/production-timers.js';
 import { config } from '../../config/index.js';
 import { requireAdmin } from '../../middleware/auth.js';
-import { RECIPE_BY_KEY, RECIPE_BY_ID, BUILDING_TYPE_IDS, BUILDING_TYPE_BY_ID, KEEP_FOUNDING_COST, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
-import type { ResourceType, BuildingType } from '@merchant-realms/shared';
+import { KEEP_FOUNDING_COST, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -62,87 +62,7 @@ adminRouter.post('/complete-caravans', async (_req, res) => {
 });
 
 adminRouter.post('/complete-production', async (_req, res) => {
-  const keeps = await db.keep.findMany({
-    include: {
-      buildings:        true,
-      warehouse:        { include: { items: true } },
-      productionOrders: { orderBy: [{ orderType: 'asc' }, { position: 'asc' }] },
-    },
-  });
-
-  let completed = 0;
-
-  for (const keep of keeps) {
-    const ledgerMap = new Map((keep.warehouse?.items ?? []).map((e) => [e.resourceType, e.quantity]));
-
-    const byTypeId = new Map<number, typeof keep.buildings>();
-    for (const b of keep.buildings) {
-      if (!b.isActive || b.isDormant) continue;
-      const btCode = BUILDING_TYPE_BY_ID[b.buildingTypeId] as BuildingType | undefined;
-      if (!btCode || btCode === 'WAREHOUSE' || btCode === 'HOUSING' || btCode === 'TENEMENTS' || btCode === 'MANOR') continue;
-      (byTypeId.get(b.buildingTypeId) ?? byTypeId.set(b.buildingTypeId, []).get(b.buildingTypeId)!).push(b);
-    }
-
-    for (const [buildingTypeId, buildings] of byTypeId) {
-      const orders = keep.productionOrders.filter((o) => o.buildingTypeId === buildingTypeId);
-      if (orders.length === 0) continue;
-
-      const numericalOrders = orders.filter((o) => o.orderType === 'NUMERICAL' && (o.targetQuantity ?? 0) > o.producedQuantity);
-      const infiniteOrders  = orders.filter((o) => o.orderType === 'INFINITE');
-      const activeOrder = numericalOrders[0] ?? infiniteOrders[0];
-      if (!activeOrder) continue;
-
-      const recipeKey = RECIPE_BY_ID[activeOrder.recipeId];
-      if (!recipeKey) continue;
-      const recipe = RECIPE_BY_KEY[recipeKey];
-      if (!recipe) continue;
-
-      for (const building of buildings) {
-        const scaledInputs = recipe.inputs.map((inp) => ({
-          resource: inp.resource as ResourceType,
-          quantity: inp.quantity * building.level,
-        }));
-        const inputsOk = adminState.bypassEnabled || scaledInputs.every(
-          (inp) => (ledgerMap.get(inp.resource) ?? 0) >= inp.quantity,
-        );
-        if (!inputsOk) continue;
-
-        if (!adminState.bypassEnabled) {
-          for (const inp of scaledInputs) {
-            ledgerMap.set(inp.resource, (ledgerMap.get(inp.resource) ?? 0) - inp.quantity);
-          }
-        }
-
-        const outputQty = recipe.outputQty * building.level;
-        ledgerMap.set(recipe.output as ResourceType, (ledgerMap.get(recipe.output as ResourceType) ?? 0) + outputQty);
-
-        await db.building.update({ where: { id: building.id }, data: { productionProgress: 0 } });
-        completed++;
-
-        if (activeOrder.orderType === 'NUMERICAL') {
-          activeOrder.producedQuantity += outputQty;
-        }
-      }
-
-      if (activeOrder.orderType === 'NUMERICAL') {
-        if ((activeOrder.targetQuantity ?? 0) <= activeOrder.producedQuantity) {
-          await db.productionOrder.delete({ where: { id: activeOrder.id } });
-        } else {
-          await db.productionOrder.update({ where: { id: activeOrder.id }, data: { producedQuantity: activeOrder.producedQuantity } });
-        }
-      }
-    }
-
-    const warehouseId = keep.warehouseId!;
-    for (const [resourceType, quantity] of ledgerMap) {
-      await db.warehouseItem.upsert({
-        where:  { warehouseId_resourceType: { warehouseId, resourceType } },
-        create: { warehouseId, resourceType, quantity: Math.max(0, quantity) },
-        update: { quantity: Math.max(0, quantity) },
-      });
-    }
-  }
-
+  const completed = await forceCompleteAllTasks();
   res.json({ completed });
 });
 
@@ -267,6 +187,7 @@ adminRouter.post('/players/:id/resources', async (req, res, next) => {
       create: { warehouseId, resourceType, quantity },
       update: { quantity: { increment: quantity } },
     });
+    void checkHaltedBuildings(keepId);
     res.json({ item });
   } catch (err) { next(err); }
 });

@@ -235,7 +235,6 @@ model Building {
   isDormant          Boolean @default(false)
   health             Float   @default(100)
   workersAssigned    Int     @default(0)
-  productionProgress Float   @default(0)
 
   keep            Keep             @relation(fields: [keepId], references: [id], onDelete: Cascade)
   productionTask  ProductionTask?

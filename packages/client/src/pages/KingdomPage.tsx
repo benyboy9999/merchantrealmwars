@@ -481,7 +481,7 @@ function EfficiencyBar({ keep, ledgerMap }: {
 
 function ProductionTab({ keep, keepId, ledgerMap, qc }: {
   keep: {
-    buildings: Array<{ buildingTypeId: number; level: number; isActive: boolean; productionProgress: number; productionTask: ProductionTask | null }>;
+    buildings: Array<{ buildingTypeId: number; level: number; isActive: boolean; productionTask: ProductionTask | null }>;
     productionOrders: Array<{ id: number; buildingTypeId: number; recipeId: number; orderType: string; targetQuantity: number | null; producedQuantity: number }>;
   };
   keepId: number;
