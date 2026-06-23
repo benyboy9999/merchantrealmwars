@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 import { ResourceType, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-realms/shared';
 
 type MapRegionCode = 'CENTRAL' | 'NE' | 'NW' | 'SW' | 'SE';
@@ -263,37 +262,25 @@ async function main() {
   const regularCount = plotRows.filter((p) => !p.isCenter).length;
   console.log(`  ✓ ${createdDistricts.length} districts, ${centerCount} district centers, ${regularCount} ring plots`);
 
-  // ── Admin player + empire ─────────────────────────────────────────────────
-  const hash = await bcrypt.hash('admin', 12);
-  const admin = await db.player.upsert({
-    where:  { email: 'admin@merchantrealms.dev' },
-    create: { username: 'Admin', email: 'admin@merchantrealms.dev', passwordHash: hash, isAdmin: true },
-    update: { isAdmin: true },
-  });
-
-  // Google account — linked on first OAuth sign-in by email match
-  await db.player.upsert({
+  // ── Kieran — admin player + starter empire (Google login) ────────────────
+  const kieran = await db.player.upsert({
     where:  { email: 'kieran.benson10@gmail.com' },
     create: { username: 'Kieran', email: 'kieran.benson10@gmail.com', isAdmin: true },
     update: { isAdmin: true },
   });
-  console.log('  ✓ Kieran Google account (kieran.benson10@gmail.com) — admin');
-  const adminEmpire = await db.empire.upsert({
-    where:  { playerId: admin.id },
-    create: { playerId: admin.id, name: 'Admin Empire', goldBalance: 1000 },
+  const kieranEmpire = await db.empire.upsert({
+    where:  { playerId: kieran.id },
+    create: { playerId: kieran.id, name: 'Kieran\'s Empire', goldBalance: 1000 },
     update: {},
   });
-  console.log('  ✓ Admin player + empire (admin@merchantrealms.dev)');
-
-  // ── Admin starting caravans (same experience as new players) ─────────────
   await db.$transaction(async (tx) => {
     for (const name of ['Caravan 1', 'Caravan 2']) {
       const wh = await tx.warehouse.create({
-        data: { type: 'CARAVAN', empireId: adminEmpire.id, cap: MULE_CAPACITY_KG },
+        data: { type: 'CARAVAN', empireId: kieranEmpire.id, cap: MULE_CAPACITY_KG },
       });
       await tx.caravan.create({
         data: {
-          empireId:     adminEmpire.id,
+          empireId:     kieranEmpire.id,
           name,
           animalType:   'MULE',
           animalCount:  1,
@@ -305,7 +292,7 @@ async function main() {
       });
     }
   });
-  console.log('  ✓ Admin 2 starter caravans (at Central Exchange, empty, 500kg each)');
+  console.log('  ✓ Kieran (kieran.benson10@gmail.com) — admin, 1000 gold, 2 caravans at Central Exchange');
 
   // ── NPC Exchange sell orders — unlimited T1 at 1 gold ────────────────────
   const npcOrders = await db.marketOrder.findMany({ where: { empireId: null, regionId: REGION_IDS.CENTRAL }, select: { id: true } });
