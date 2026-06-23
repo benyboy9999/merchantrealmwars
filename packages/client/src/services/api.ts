@@ -254,6 +254,7 @@ export interface EmpireBootstrap {
   id: number;
   name: string;
   goldBalance: number;
+  createdAt: string;
   keeps: Array<{
     id: number; name: string; plotId: number; warehouseId: number | null;
     plot?: { id: number; name: string; districtId: number; district?: { id: number; name: string; regionId: number } | null } | null;

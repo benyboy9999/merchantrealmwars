@@ -8,7 +8,7 @@ import {
   BUILDING_NAMES, RESOURCE_NAMES, RECIPES_BY_BUILDING, RECIPE_BY_KEY, RECIPE_BY_ID,
   BUILDING_CONSTRUCTION_COSTS, BUILDING_TYPE_IDS, BUILDING_TYPE_BY_ID,
   HOUSING_BASE_CAPACITY, WORKERS_PER_LEVEL,
-  T1_WORKER_NEEDS, BASE_CYCLE_SECONDS,
+  T1_WORKER_NEEDS, BASE_CYCLE_SECONDS, getStarterSpeedMultiplier,
   KEEP_MAX_BUILDING_SLOTS, KEEP_DEFAULT_BUILDING_SLOTS, KEEP_SLOT_UNLOCK_RESOURCE,
 } from '@merchant-realms/shared';
 import type { BuildingType, Recipe, RecipeInput } from '@merchant-realms/shared';
@@ -88,7 +88,7 @@ export default function KingdomPage() {
             No keeps — found one to get started.
           </div>
         ) : (
-          <KeepDetail keepId={keepId} currentTab={currentTab} onTabChange={(t) => navigate(`/kingdom/${keepId}/${t}`)} qc={qc} />
+          <KeepDetail keepId={keepId} currentTab={currentTab} onTabChange={(t) => navigate(`/kingdom/${keepId}/${t}`)} qc={qc} {...(empireData ? { empireCreatedAt: empireData.empire.createdAt } : {})} />
         )}
       </div>
     </div>
@@ -97,11 +97,12 @@ export default function KingdomPage() {
 
 // ── Keep detail ───────────────────────────────────────────────────────────────
 
-function KeepDetail({ keepId, currentTab, onTabChange, qc }: {
+function KeepDetail({ keepId, currentTab, onTabChange, qc, empireCreatedAt }: {
   keepId: number;
   currentTab: Tab;
   onTabChange: (tab: Tab) => void;
   qc: ReturnType<typeof useQueryClient>;
+  empireCreatedAt?: string;
 }) {
   const navigate = useNavigate();
 
@@ -181,7 +182,7 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc }: {
           />
         )}
         {currentTab === 'production' && <ProductionTab keep={keep} keepId={keepId} ledgerMap={ledgerMap} qc={qc} />}
-        {currentTab === 'workers'    && <WorkersTab keep={keep} ledgerMap={ledgerMap} />}
+        {currentTab === 'workers'    && <WorkersTab keep={keep} ledgerMap={ledgerMap} {...(empireCreatedAt ? { empireCreatedAt } : {})} />}
       </div>
     </>
   );
@@ -633,15 +634,25 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
 
 // ── Workers tab ───────────────────────────────────────────────────────────────
 
-const CYCLE_LABEL = (() => {
-  const mins = BASE_CYCLE_SECONDS / 60;
-  return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
-})();
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return h > 0 ? `${h}h ${rem}m` : `${m}m`;
+}
 
-function WorkersTab({ keep, ledgerMap }: {
+function WorkersTab({ keep, ledgerMap, empireCreatedAt }: {
   keep: { buildings: Array<{ buildingTypeId: number; level: number; isActive: boolean }> };
   ledgerMap: Map<string, number>;
+  empireCreatedAt?: string;
 }) {
+  const ageDays = empireCreatedAt
+    ? (Date.now() - new Date(empireCreatedAt).getTime()) / 86_400_000
+    : 0;
+  const speedMultiplier = getStarterSpeedMultiplier(ageDays);
+  const effectiveCycleSeconds = BASE_CYCLE_SECONDS / speedMultiplier;
+  const cycleLabel = formatDuration(effectiveCycleSeconds);
   const totalWorkers = keep.buildings
     .filter((b) => b.buildingTypeId === BUILDING_TYPE_IDS.HOUSING && b.isActive)
     .reduce((sum, b) => sum + b.level * HOUSING_BASE_CAPACITY, 0);
@@ -694,7 +705,7 @@ function WorkersTab({ keep, ledgerMap }: {
       <div>
         <div className="flex items-baseline justify-between mb-3">
           <div className="text-xs uppercase tracking-wider text-stone-500">T1 Labourer Consumption</div>
-          <div className="text-xs text-stone-600">per {CYCLE_LABEL} cycle · {totalWorkers} workers</div>
+          <div className="text-xs text-stone-600">per {cycleLabel} cycle · {totalWorkers} workers</div>
         </div>
 
         {totalWorkers === 0 ? (
