@@ -9,3 +9,4 @@ export { IconSlot }    from './icon-slot.js';
 export { Stat }        from './stat.js';
 export { Modal, ModalBody, ModalSection } from './modal.js';
 export type { ModalSize, ModalProps } from './modal.js';
+export { TransferPopover } from './transfer-popover.js';

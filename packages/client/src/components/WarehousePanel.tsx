@@ -5,7 +5,7 @@ import type { CaravanWithCargo, Warehouse, WarehouseItem, Keep, EmpireBootstrap 
 import { RESOURCE_NAMES, RESOURCE_WEIGHT, REGION_IDS } from '@merchant-realms/shared';
 import { useLivePercent } from '../hooks/useLivePercent.js';
 import ProgressBar from './ProgressBar.js';
-import { IconSlot, Modal, ModalSection, Button } from './ui/index.js';
+import { IconSlot, Modal, ModalSection, Button, TransferPopover } from './ui/index.js';
 
 const rName  = (rt: string) => RESOURCE_NAMES[rt as keyof typeof RESOURCE_NAMES] ?? rt;
 const rKgPer = (rt: string) => RESOURCE_WEIGHT[rt as keyof typeof RESOURCE_WEIGHT] ?? 0.5;
@@ -252,8 +252,9 @@ export default function WarehousePanel({
 }: WarehousePanelProps) {
   const qc = useQueryClient();
 
-  const [loadPopup,    setLoadPopup]    = useState<{ rt: string; caravanId: number } | null>(null);
-  const [unloadPopup,  setUnloadPopup]  = useState<{ caravanId: number; rt: string } | null>(null);
+  // anchor includes cursor position so the popover appears near the button
+  const [loadPopup,    setLoadPopup]    = useState<{ rt: string; caravanId: number; anchor: { x: number; y: number } } | null>(null);
+  const [unloadPopup,  setUnloadPopup]  = useState<{ caravanId: number; rt: string; anchor: { x: number; y: number } } | null>(null);
   const [sellPopup,    setSellPopup]    = useState<string | null>(null);
   // activeCaId: which caravan is showing in the cargo view (right panel)
   const [activeCaId,   setActiveCaId]   = useState<number | null>(null);
@@ -361,6 +362,14 @@ export default function WarehousePanel({
     },
   });
 
+  const bulkTransfer = useMutation({
+    mutationFn: async (items: TransferParams[]) => {
+      await Promise.all(items.map((p) => api.transfer(p)));
+    },
+    onSuccess: () => invalidate(),
+    onError:   () => invalidate(),
+  });
+
   const allCaravans           = empireData?.empire.caravans ?? [];
   const hereCaravans          = allCaravans.filter((c) => c.status === 'IDLE' && c.locationType === locationType && c.locationId === locationId);
   const idleElsewhereCaravans = allCaravans.filter((c) => c.status === 'IDLE' && !(c.locationType === locationType && c.locationId === locationId));
@@ -403,9 +412,28 @@ export default function WarehousePanel({
 
       {/* ── Left: warehouse inventory ────────────────────────────────────── */}
       <div className="flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
-          <span className="text-xs uppercase tracking-wider text-slate-500">{locationLabel}</span>
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
+          <span className="text-xs uppercase tracking-wider text-slate-500 flex-1">{locationLabel}</span>
           <span className="text-xs text-slate-600">{totalWeight.toFixed(1)} kg</span>
+          {hereCaravans.length > 0 && (() => {
+            const targetId = (activeCaId && activeIsHere ? activeCaId : null) ?? hereCaravans[0]?.id;
+            const targetCaravan = hereCaravans.find((c) => c.id === targetId);
+            const transfers = inventory
+              .filter((e) => e.quantity > 0)
+              .flatMap((e) => {
+                const qty = Math.floor(maxLoadable(e.resourceType, targetId ?? 0));
+                if (!targetCaravan?.warehouseId || qty <= 0) return [];
+                return [{ fromWarehouseId: warehouseId, toWarehouseId: targetCaravan.warehouseId, resourceType: e.resourceType, quantity: qty }];
+              });
+            return (
+              <button
+                title={`Load all into ${targetCaravan?.name ?? 'caravan'}`}
+                disabled={transfers.length === 0 || bulkTransfer.isPending}
+                onClick={() => bulkTransfer.mutate(transfers)}
+                className="w-6 h-6 flex items-center justify-center border border-slate-600 rounded text-slate-400 hover:text-slate-100 hover:border-slate-400 hover:bg-slate-700/40 disabled:opacity-30 disabled:pointer-events-none transition-colors text-xs"
+              >››</button>
+            );
+          })()}
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -434,43 +462,22 @@ export default function WarehousePanel({
                       {hereCaravans.length > 0 && (
                         <button
                           className={`w-6 h-6 flex items-center justify-center border rounded text-sm transition-colors ${isLoadOpen ? 'border-slate-200 text-slate-200' : 'border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200'} disabled:opacity-30`}
-                          title={`Load into ${activeIsHere && activeCaravan ? activeCaravan.name : 'caravan'}`}
-                          onClick={() => isLoadOpen ? setLoadPopup(null) : setLoadPopup({ rt: e.resourceType, caravanId: loadCaId })}
+                          title={`Left-click: choose amount · Right-click: transfer all`}
+                          onClick={(ev) => {
+                            if (isLoadOpen) { setLoadPopup(null); return; }
+                            setLoadPopup({ rt: e.resourceType, caravanId: loadCaId, anchor: { x: ev.clientX, y: ev.clientY } });
+                          }}
+                          onContextMenu={(ev) => {
+                            ev.preventDefault();
+                            const q = Math.floor(maxLoadable(e.resourceType, loadCaId));
+                            const targetCaravan = hereCaravans.find((c) => c.id === loadCaId);
+                            if (!targetCaravan?.warehouseId || q <= 0) return;
+                            transfer.mutate({ fromWarehouseId: warehouseId, toWarehouseId: targetCaravan.warehouseId, resourceType: e.resourceType, quantity: q });
+                          }}
                           disabled={!canLoad}
                         >›</button>
                       )}
                     </div>
-
-                    {isLoadOpen && loadPopup && (
-                      <div className="mx-3 mb-2 mt-0.5">
-                        {hereCaravans.length > 1 && (
-                          <div className="flex items-center gap-2 mb-1.5 px-1">
-                            <span className="text-xs text-slate-500">Load into</span>
-                            <select
-                              className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs focus:outline-none"
-                              value={loadPopup.caravanId}
-                              onChange={(ev) => setLoadPopup({ rt: e.resourceType, caravanId: parseInt(ev.target.value) })}
-                            >
-                              {hereCaravans.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                          </div>
-                        )}
-                        <TransferPopup
-                          label={`Transfer to ${hereCaravans.find(c => c.id === loadPopup.caravanId)?.name ?? 'caravan'} (max ${Math.floor(maxLoadable(e.resourceType, loadPopup.caravanId))})`}
-                          maxQty={maxLoadable(e.resourceType, loadPopup.caravanId)}
-                          onConfirm={(qty) => {
-                            const targetCaravan = hereCaravans.find((c) => c.id === loadPopup.caravanId);
-                            if (!targetCaravan?.warehouseId) return;
-                            transfer.mutate({ fromWarehouseId: warehouseId, toWarehouseId: targetCaravan.warehouseId, resourceType: e.resourceType, quantity: qty });
-                          }}
-                          onClose={() => setLoadPopup(null)}
-                          isPending={transfer.isPending}
-                        />
-                        {transfer.isError && loadPopup?.rt === e.resourceType && (
-                          <p className="text-red-400 text-xs mt-1 px-3">{(transfer.error as Error).message}</p>
-                        )}
-                      </div>
-                    )}
 
                     {isSellOpen && onSell && (
                       <div className="mx-3 mb-2 mt-0.5 border border-slate-600 rounded bg-slate-900 px-3 py-2.5 text-xs">
@@ -518,7 +525,26 @@ export default function WarehousePanel({
                 <span className="ml-1.5 text-xs text-slate-500 font-normal">▸</span>
               </button>
               {activeIsHere && (
-                <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500" title="Here" />
+                <>
+                  <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500" title="Here" />
+                  {(activeCaravan.warehouse?.items ?? []).length > 0 && (
+                    <button
+                      title="Unload all to warehouse"
+                      disabled={bulkTransfer.isPending}
+                      onClick={() => {
+                        if (!activeCaravan.warehouseId) return;
+                        const transfers = (activeCaravan.warehouse?.items ?? []).map((it) => ({
+                          fromWarehouseId: activeCaravan.warehouseId!,
+                          toWarehouseId: warehouseId,
+                          resourceType: it.resourceType,
+                          quantity: it.quantity,
+                        }));
+                        bulkTransfer.mutate(transfers);
+                      }}
+                      className="w-6 h-6 flex items-center justify-center border border-slate-600 rounded text-slate-400 hover:text-slate-100 hover:border-slate-400 hover:bg-slate-700/40 disabled:opacity-30 disabled:pointer-events-none transition-colors text-xs flex-shrink-0"
+                    >‹‹</button>
+                  )}
+                </>
               )}
             </div>
 
@@ -557,31 +583,22 @@ export default function WarehousePanel({
                           {activeIsHere && (
                             <button
                               className={`w-5 h-5 flex items-center justify-center border rounded text-xs transition-colors flex-shrink-0 ${isUnloadOpen ? 'border-slate-200 text-slate-200' : 'border-slate-600 text-slate-500 hover:border-slate-400 hover:text-slate-200'}`}
-                              title="Unload to warehouse"
-                              onClick={() => isUnloadOpen ? setUnloadPopup(null) : setUnloadPopup({ caravanId: activeCaravan.id, rt: cargo.resourceType })}
+                              title="Left-click: choose amount · Right-click: unload all"
+                              onClick={(ev) => {
+                                if (isUnloadOpen) { setUnloadPopup(null); return; }
+                                setUnloadPopup({ caravanId: activeCaravan.id, rt: cargo.resourceType, anchor: { x: ev.clientX, y: ev.clientY } });
+                              }}
+                              onContextMenu={(ev) => {
+                                ev.preventDefault();
+                                if (!activeCaravan.warehouseId) return;
+                                transfer.mutate({ fromWarehouseId: activeCaravan.warehouseId, toWarehouseId: warehouseId, resourceType: cargo.resourceType, quantity: cargo.quantity });
+                              }}
                             >‹</button>
                           )}
                           <IconSlot size="xs" label={rName(cargo.resourceType)} />
                           <span className="flex-1 text-sm text-slate-300">{rName(cargo.resourceType)}</span>
                           <span className="text-slate-200 font-mono text-sm tabular-nums w-12 text-right">{cargo.quantity.toFixed(0)}</span>
                         </div>
-                        {isUnloadOpen && (
-                          <div className="mx-3 mb-2 mt-0.5">
-                            <TransferPopup
-                              label={`Unload to ${locationLabel}`}
-                              maxQty={cargo.quantity}
-                              onConfirm={(qty) => {
-                                if (!activeCaravan.warehouseId) return;
-                                transfer.mutate({ fromWarehouseId: activeCaravan.warehouseId, toWarehouseId: warehouseId, resourceType: cargo.resourceType, quantity: qty });
-                              }}
-                              onClose={() => setUnloadPopup(null)}
-                              isPending={transfer.isPending}
-                            />
-                            {transfer.isError && unloadPopup?.caravanId === activeCaravan.id && unloadPopup.rt === cargo.resourceType && (
-                              <p className="text-red-400 text-xs mt-1 px-3">{(transfer.error as Error).message}</p>
-                            )}
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -695,6 +712,49 @@ export default function WarehousePanel({
           isDispatching={caravanDispatch.isPending}
           dispatchError={caravanDispatch.isError ? (caravanDispatch.error as Error).message : null}
           onClose={() => setActionCaId(null)}
+        />
+      )}
+
+      {/* ── Load popover (portal-rendered at cursor) ──────────────────────── */}
+      {loadPopup && (
+        <TransferPopover
+          label={`Load ${rName(loadPopup.rt)} → ${hereCaravans.find((c) => c.id === loadPopup.caravanId)?.name ?? 'caravan'}`}
+          maxQty={maxLoadable(loadPopup.rt, loadPopup.caravanId)}
+          anchor={loadPopup.anchor}
+          onConfirm={(qty) => {
+            const targetCaravan = hereCaravans.find((c) => c.id === loadPopup.caravanId);
+            if (!targetCaravan?.warehouseId) return;
+            transfer.mutate({ fromWarehouseId: warehouseId, toWarehouseId: targetCaravan.warehouseId, resourceType: loadPopup.rt, quantity: qty });
+            setLoadPopup(null);
+          }}
+          onClose={() => setLoadPopup(null)}
+          isPending={transfer.isPending}
+        >
+          {hereCaravans.length > 1 && (
+            <select
+              className="w-full bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-azure-500 mb-0.5"
+              value={loadPopup.caravanId}
+              onChange={(ev) => setLoadPopup({ ...loadPopup, caravanId: parseInt(ev.target.value) })}
+            >
+              {hereCaravans.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+        </TransferPopover>
+      )}
+
+      {/* ── Unload popover (portal-rendered at cursor) ────────────────────── */}
+      {unloadPopup && activeCaravan && (
+        <TransferPopover
+          label={`Unload ${rName(unloadPopup.rt)} → ${locationLabel}`}
+          maxQty={(activeCaravan.warehouse?.items ?? []).find((i) => i.resourceType === unloadPopup.rt)?.quantity ?? 0}
+          anchor={unloadPopup.anchor}
+          onConfirm={(qty) => {
+            if (!activeCaravan.warehouseId) return;
+            transfer.mutate({ fromWarehouseId: activeCaravan.warehouseId, toWarehouseId: warehouseId, resourceType: unloadPopup.rt, quantity: qty });
+            setUnloadPopup(null);
+          }}
+          onClose={() => setUnloadPopup(null)}
+          isPending={transfer.isPending}
         />
       )}
     </div>
