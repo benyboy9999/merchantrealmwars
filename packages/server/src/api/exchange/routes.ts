@@ -100,7 +100,113 @@ exchangeRouter.post('/:regionId/listings', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Listings — buy ────────────────────────────────────────────────────────────
+// ── Market buy — fill from cheapest listings automatically ────────────────────
+
+exchangeRouter.post('/:regionId/buy-market', async (req, res, next) => {
+  try {
+    const regionId = parseInt(req.params['regionId']!);
+    const { resourceType, quantity } = z.object({
+      resourceType: z.string(),
+      quantity:     z.number().positive(),
+    }).parse(req.body);
+
+    const buyerEmpireId = req.auth!.empireId;
+    if (!empireGuard(buyerEmpireId, res)) return;
+
+    const buyer = await db.empire.findUnique({ where: { id: buyerEmpireId }, select: { id: true, goldBalance: true } });
+    if (!buyer) { res.status(404).json({ error: 'Empire not found' }); return; }
+
+    // Snapshot available listings cheapest-first
+    const listings = await db.marketOrder.findMany({
+      where: { regionId, resourceType, orderType: 'SELL', status: { in: ['OPEN', 'PARTIALLY_FILLED'] } },
+      orderBy: { pricePerUnit: 'asc' },
+    });
+
+    type Fill = { listingId: number; qty: number; price: number; sellerId: number | null };
+    const fills: Fill[] = [];
+    let remaining = quantity;
+    let totalCost = 0;
+
+    for (const l of listings) {
+      if (remaining <= 0) break;
+      const avail = l.quantity - l.fulfilledQty;
+      if (avail <= 0) continue;
+      const take = Math.min(remaining, avail);
+      fills.push({ listingId: l.id, qty: take, price: l.pricePerUnit, sellerId: l.empireId });
+      totalCost += take * l.pricePerUnit;
+      remaining -= take;
+    }
+
+    if (remaining > 0) {
+      const available = quantity - remaining;
+      res.status(400).json({ error: `Only ${available.toFixed(0)} of ${quantity} available in this exchange` });
+      return;
+    }
+    if (buyer.goldBalance < totalCost) {
+      res.status(400).json({ error: `Need ${totalCost.toFixed(0)}g — you have ${buyer.goldBalance.toFixed(0)}g` });
+      return;
+    }
+
+    const buyerWarehouseId = await findOrCreateExchangeWarehouse(buyer.id, regionId);
+
+    try {
+      await db.$transaction(async (tx) => {
+        for (const fill of fills) {
+          const claimed = await tx.$executeRaw`
+            UPDATE "MarketOrder"
+            SET    "fulfilledQty" = "fulfilledQty" + ${fill.qty}
+            WHERE  "id" = ${fill.listingId}
+              AND  "status" IN ('OPEN', 'PARTIALLY_FILLED')
+              AND  ("quantity" - "fulfilledQty") >= ${fill.qty}
+          `;
+          if (claimed === 0) throw new Error('MARKET_CHANGED');
+        }
+
+        await tx.empire.update({ where: { id: buyer.id }, data: { goldBalance: { decrement: totalCost } } });
+
+        for (const fill of fills) {
+          if (fill.sellerId) {
+            await tx.empire.update({ where: { id: fill.sellerId }, data: { goldBalance: { increment: fill.qty * fill.price } } });
+          }
+        }
+
+        await tx.warehouseItem.upsert({
+          where:  { warehouseId_resourceType: { warehouseId: buyerWarehouseId, resourceType } },
+          create: { warehouseId: buyerWarehouseId, resourceType, quantity },
+          update: { quantity: { increment: quantity } },
+        });
+
+        for (const fill of fills) {
+          const updated = await tx.marketOrder.findUnique({ where: { id: fill.listingId }, select: { quantity: true, fulfilledQty: true } });
+          await tx.marketOrder.update({
+            where: { id: fill.listingId },
+            data:  { status: updated && updated.fulfilledQty >= updated.quantity ? 'FILLED' : 'PARTIALLY_FILLED' },
+          });
+          await tx.marketTrade.create({
+            data: {
+              listingId:      fill.listingId,
+              sellerEmpireId: fill.sellerId,
+              buyerEmpireId:  buyer.id,
+              resourceType,
+              quantity:       fill.qty,
+              pricePerUnit:   fill.price,
+              totalGold:      fill.qty * fill.price,
+            },
+          });
+        }
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'MARKET_CHANGED') {
+        res.status(409).json({ error: 'Market changed while buying — please try again' }); return;
+      }
+      throw err;
+    }
+
+    res.json({ ok: true, quantity, resourceType, totalCost, listings: fills.length });
+  } catch (err) { next(err); }
+});
+
+// ── Listings — buy single listing ─────────────────────────────────────────────
 
 exchangeRouter.post('/listings/:id/buy', async (req, res, next) => {
   try {

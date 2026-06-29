@@ -156,6 +156,8 @@ export const api = {
     get<{ listings: ExchangeListing[] }>(`/api/exchange/${regionId}/listings${resourceType ? `?resourceType=${resourceType}` : ''}`),
   createListing:   (regionId: number, resourceType: string, quantity: number, pricePerUnit: number) =>
     post<{ listing: ExchangeListing }>(`/api/exchange/${regionId}/listings`, { resourceType, quantity, pricePerUnit }),
+  marketBuy:       (regionId: number, resourceType: string, quantity: number) =>
+    post<{ ok: boolean; quantity: number; resourceType: string; totalCost: number; listings: number }>(`/api/exchange/${regionId}/buy-market`, { resourceType, quantity }),
   buyListing:      (id: number, quantity: number) =>
     post<{ ok: boolean; quantity: number; resourceType: string; totalGold: number }>(`/api/exchange/listings/${id}/buy`, { quantity }),
   cancelListing:   (id: number) =>

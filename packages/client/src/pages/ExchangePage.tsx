@@ -23,14 +23,13 @@ export default function ExchangePage() {
   const [searchParams] = useSearchParams();
   const initialRegion = REGIONS.find((r) => r.id === parseInt(searchParams.get('region') ?? ''))?.id ?? REGION_IDS.CENTRAL;
   const myEmpireId = useAuthStore((s) => s.empireId);
-  const [regionId, setRegionId]     = useState<number>(initialRegion);
-  const [selected, setSelected]     = useState<string | null>(null);
-  const [search, setSearch]         = useState('');
-  const [tradeMode, setTradeMode]   = useState<'buy' | 'sell'>('buy');
-  const [buyListingId, setBuyListingId] = useState<number | null>(null);
-  const [buyQty, setBuyQty]         = useState('');
-  const [listQty, setListQty]       = useState('');
-  const [listPrice, setListPrice]   = useState('');
+  const [regionId, setRegionId]   = useState<number>(initialRegion);
+  const [selected, setSelected]   = useState<string | null>(null);
+  const [search, setSearch]       = useState('');
+  const [tradeMode, setTradeMode] = useState<'buy' | 'sell'>('buy');
+  const [buyQty, setBuyQty]       = useState('');
+  const [listQty, setListQty]     = useState('');
+  const [listPrice, setListPrice] = useState('');
 
   // Wishlist panel state
   const [bottomTab, setBottomTab]         = useState<'listings' | 'wishlists'>('listings');
@@ -67,9 +66,9 @@ export default function ExchangePage() {
     onSuccess: () => { invalidate(); setListQty(''); setListPrice(''); },
   });
 
-  const buyListing = useMutation({
-    mutationFn: () => api.buyListing(buyListingId!, Number(buyQty)),
-    onSuccess: () => { invalidate(); setBuyQty(''); setBuyListingId(null); },
+  const marketBuy = useMutation({
+    mutationFn: () => api.marketBuy(regionId, selected!, Number(buyQty)),
+    onSuccess: () => { invalidate(); setBuyQty(''); },
   });
 
   const cancelListing = useMutation({
@@ -159,7 +158,21 @@ export default function ExchangePage() {
     return weightedSum / totalQty;
   }, [resourceListings]);
 
-  const activeBuyListing = buyListingId ? allListings.find((l) => l.id === buyListingId) ?? null : null;
+  // Cost preview: simulate filling buyQty from cheapest listings
+  const buyQtyNum = Number(buyQty);
+  const costPreview = useMemo(() => {
+    if (!buyQtyNum || buyQtyNum <= 0) return null;
+    let remaining = buyQtyNum;
+    let cost = 0;
+    for (const l of resourceListings) {
+      if (remaining <= 0) break;
+      const avail = l.quantity - l.fulfilledQty;
+      const take  = Math.min(remaining, avail);
+      cost      += take * l.pricePerUnit;
+      remaining -= take;
+    }
+    return { cost, shortfall: Math.max(0, remaining) };
+  }, [buyQtyNum, resourceListings]);
 
   const allWishlists: WishlistWithItems[] = wishlistData?.wishlists ?? [];
   const activeWishlist = allWishlists.find((w) => w.id === activeWishlistId)
@@ -169,7 +182,6 @@ export default function ExchangePage() {
   const switchRegion = (id: number) => {
     setRegionId(id);
     setSelected(null);
-    setBuyListingId(null);
     setBuyQty('');
     setListQty('');
     setListPrice('');
@@ -291,7 +303,7 @@ export default function ExchangePage() {
                           className={`border-b border-slate-800/40 cursor-pointer transition-colors ${
                             selected === rt ? 'bg-slate-700/40' : 'hover:bg-slate-800/40'
                           }`}
-                          onClick={() => { setSelected(rt); setBuyListingId(null); setBuyQty(''); setListQty(''); setListPrice(''); }}
+                          onClick={() => { setSelected(rt); setBuyQty(''); setListQty(''); setListPrice(''); }}
                         >
                           <td className="px-4 py-2">
                             <div className="flex items-center gap-2">
@@ -399,7 +411,6 @@ export default function ExchangePage() {
                             className="border-b border-slate-800/40 hover:bg-slate-800/40 cursor-pointer transition-colors group"
                             onClick={() => {
                               setSelected(item.resourceType);
-                              setBuyListingId(null);
                               setBuyQty(String(item.quantity));
                               setBottomTab('listings');
                             }}
@@ -537,7 +548,7 @@ export default function ExchangePage() {
               {/* ── Buy / Sell toggle ────────────────────────────────── */}
               <div className="flex border-b border-slate-700/60">
                 <button
-                  onClick={() => { setTradeMode('buy'); setBuyListingId(null); setBuyQty(''); }}
+                  onClick={() => { setTradeMode('buy'); setBuyQty(''); }}
                   className={`flex-1 py-2 text-sm font-medium transition-colors ${
                     tradeMode === 'buy'
                       ? 'bg-azure-500/10 text-azure-300 border-b-2 border-azure-500'
@@ -559,51 +570,40 @@ export default function ExchangePage() {
                 {tradeMode === 'buy' ? (
                   /* Buy mode */
                   <div className="space-y-3">
-                    {!activeBuyListing ? (
-                      <p className="text-slate-600 text-xs">Select a listing below to buy.</p>
+                    {resourceListings.length === 0 ? (
+                      <p className="text-slate-600 text-xs">No listings available — nothing to buy.</p>
                     ) : (
                       <>
-                        <div className="text-xs text-slate-500 bg-slate-800/60 rounded px-3 py-2">
-                          Buying at <span className="text-gold-400 font-mono">{activeBuyListing.pricePerUnit}g</span>/unit
-                          · Available: <span className="text-slate-200 font-mono">{(activeBuyListing.quantity - activeBuyListing.fulfilledQty).toFixed(0)}</span>
-                          · Balance: <span className="text-gold-400 font-mono">{goldBalance.toFixed(0)}g</span>
-                        </div>
                         <div className="flex gap-2 items-center">
                           <input
-                            type="number" min={1} max={activeBuyListing.quantity - activeBuyListing.fulfilledQty}
-                            className="w-28 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
+                            type="number" min={1}
+                            className="w-32 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
                             placeholder="Quantity"
                             value={buyQty}
                             onChange={(e) => setBuyQty(e.target.value)}
                           />
-                          {buyQty && Number(buyQty) > 0 && (
+                          {costPreview && (
                             <span className="text-xs text-slate-500">
-                              = <span className="text-gold-400 font-mono">{(Number(buyQty) * activeBuyListing.pricePerUnit).toFixed(0)}g</span>
+                              {costPreview.shortfall > 0
+                                ? <span className="text-amber-400">Only {(buyQtyNum - costPreview.shortfall).toFixed(0)} available</span>
+                                : <>= <span className="text-gold-400 font-mono">{costPreview.cost.toFixed(0)}g</span></>
+                              }
+                              <span className="ml-2 text-slate-600">(have {goldBalance.toFixed(0)}g)</span>
                             </span>
                           )}
                         </div>
-                        <div className="flex gap-2">
-                          <button
-                            className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-5 py-1.5 rounded text-sm transition-colors"
-                            disabled={
-                              !buyQty || Number(buyQty) <= 0 ||
-                              Number(buyQty) > activeBuyListing.quantity - activeBuyListing.fulfilledQty ||
-                              Number(buyQty) * activeBuyListing.pricePerUnit > goldBalance ||
-                              buyListing.isPending
-                            }
-                            onClick={() => buyListing.mutate()}
-                          >{buyListing.isPending ? 'Buying…' : 'Confirm Buy'}</button>
-                          <button
-                            className="text-slate-500 hover:text-slate-300 px-3 py-1.5 rounded text-sm transition-colors"
-                            onClick={() => { setBuyListingId(null); setBuyQty(''); }}
-                          >Clear</button>
-                        </div>
-                        {buyListing.isError && (
-                          <p className="text-red-400 text-xs">
-                            {(buyListing.error as Error).message === 'LISTING_EXPIRED'
-                              ? 'Listing expired — someone else bought it first.'
-                              : (buyListing.error as Error).message}
-                          </p>
+                        <button
+                          className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-5 py-1.5 rounded text-sm transition-colors"
+                          disabled={
+                            !buyQty || buyQtyNum <= 0 ||
+                            !costPreview || costPreview.shortfall > 0 ||
+                            costPreview.cost > goldBalance ||
+                            marketBuy.isPending
+                          }
+                          onClick={() => marketBuy.mutate()}
+                        >{marketBuy.isPending ? 'Buying…' : 'Buy'}</button>
+                        {marketBuy.isError && (
+                          <p className="text-red-400 text-xs">{(marketBuy.error as Error).message}</p>
                         )}
                       </>
                     )}
@@ -681,21 +681,13 @@ export default function ExchangePage() {
                     </thead>
                     <tbody>
                       {resourceListings.map((listing: ExchangeListing) => {
-                        const remaining  = listing.quantity - listing.fulfilledQty;
-                        const isSelected = buyListingId === listing.id;
-                        const isMine     = listing.empireId === myEmpireId;
-                        const isNpc      = listing.empireId === null;
+                        const remaining = listing.quantity - listing.fulfilledQty;
+                        const isMine    = listing.empireId === myEmpireId;
+                        const isNpc     = listing.empireId === null;
                         return (
                           <tr
                             key={listing.id}
-                            className={`border-b border-slate-800/30 transition-colors ${
-                              isSelected ? 'bg-azure-500/10' : 'hover:bg-slate-800/40'
-                            } ${tradeMode === 'buy' && !isMine ? 'cursor-pointer' : ''}`}
-                            onClick={() => {
-                              if (tradeMode !== 'buy' || isMine) return;
-                              setBuyListingId(isSelected ? null : listing.id);
-                              setBuyQty('');
-                            }}
+                            className="border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors"
                           >
                             <td className="px-4 py-2 text-slate-400">
                               {isNpc ? <span className="text-slate-600">NPC</span>
