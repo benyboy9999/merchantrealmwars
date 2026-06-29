@@ -38,7 +38,7 @@ export default function KingdomPage() {
 
   if (!keepId && keepsError) {
     return (
-      <div className="h-[calc(100vh-48px)] flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <span className="text-red-400 text-sm">Failed to load keeps — check the server is running.</span>
       </div>
     );
@@ -47,45 +47,43 @@ export default function KingdomPage() {
   // Don't flash "No keeps" while the initial fetch is still running
   if (!keepId && keepsLoading) {
     return (
-      <div className="h-[calc(100vh-48px)] flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <span className="text-slate-500 text-sm">Loading…</span>
       </div>
     );
   }
 
   return (
-    <div className="h-[calc(100vh-48px)] flex overflow-hidden">
-      {/* ── Left sidebar: keep list ──────────────────────────────────────── */}
-      <aside className="w-52 flex-shrink-0 border-r border-slate-700/60 flex flex-col overflow-hidden">
+    <div className="flex gap-4 items-start">
+      {/* ── Card: keep list ──────────────────────────────────────────────── */}
+      <aside className="w-48 flex-shrink-0 bg-slate-900 border border-slate-700/60 rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-700/60">
           <span className="text-xs uppercase tracking-wider text-slate-500">My Keeps</span>
         </div>
-        <div className="flex-1 overflow-y-auto">
-          {keepsError && (
-            <div className="p-4 text-red-400 text-xs">Error loading keeps</div>
-          )}
-          {!keepsError && keeps.length === 0 && !keepsLoading && (
-            <div className="p-4 text-slate-600 text-sm">No keeps yet.</div>
-          )}
-          {keeps.map((k) => (
-            <button
-              key={k.id}
-              className={`w-full text-left px-4 py-3 border-b border-slate-800/60 transition-colors ${
-                k.id === keepId ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:bg-slate-800/50'
-              }`}
-              onClick={() => navigate(`/kingdom/${k.id}/${currentTab}`)}
-            >
-              <div className="text-sm">{k.name}</div>
-              <div className="text-xs text-slate-600 mt-0.5">{k.plot?.name ?? ''}</div>
-            </button>
-          ))}
-        </div>
+        {keepsError && (
+          <div className="p-4 text-red-400 text-xs">Error loading keeps</div>
+        )}
+        {!keepsError && keeps.length === 0 && !keepsLoading && (
+          <div className="p-4 text-slate-600 text-sm">No keeps yet.</div>
+        )}
+        {keeps.map((k) => (
+          <button
+            key={k.id}
+            className={`w-full text-left px-4 py-3 border-b border-slate-800/60 transition-colors ${
+              k.id === keepId ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:bg-slate-800/50'
+            }`}
+            onClick={() => navigate(`/kingdom/${k.id}/${currentTab}`)}
+          >
+            <div className="text-sm">{k.name}</div>
+            <div className="text-xs text-slate-600 mt-0.5">{k.plot?.name ?? ''}</div>
+          </button>
+        ))}
       </aside>
 
-      {/* ── Right panel ─────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* ── Card: keep detail ────────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 bg-slate-900 border border-slate-700/60 rounded-lg overflow-hidden">
         {!keepId ? (
-          <div className="flex items-center justify-center h-full text-slate-600 text-sm">
+          <div className="flex items-center justify-center py-16 text-slate-600 text-sm">
             No keeps — found one to get started.
           </div>
         ) : (
@@ -137,7 +135,7 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc, empireCreatedAt }: {
   return (
     <>
       {/* Keep header + stats */}
-      <div className="border-b border-slate-700/60 px-6 py-3 flex-shrink-0">
+      <div className="border-b border-slate-700/60 px-6 py-3">
         <div className="flex items-baseline gap-3 mb-2">
           <h1 className="text-lg font-semibold text-slate-100">{keep.name}</h1>
           <span className="text-slate-500 text-sm">{keep.plot?.name ?? ''}</span>
@@ -151,7 +149,7 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc, empireCreatedAt }: {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-700/60 flex-shrink-0">
+      <div className="flex border-b border-slate-700/60">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -168,7 +166,7 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc, empireCreatedAt }: {
       </div>
 
       {/* Tab content */}
-      <div className={`flex-1 ${currentTab === 'warehouse' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+      <div>
         {currentTab === 'keep'       && <KeepTab keep={keep} qc={qc} />}
         {currentTab === 'buildings'  && <BuildingsTab keep={keep} keepId={keepId} ledgerMap={ledgerMap} qc={qc} />}
         {currentTab === 'warehouse'  && (
@@ -179,7 +177,7 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc, empireCreatedAt }: {
             locationLabel={`${keep.name} — Resources`}
             inventory={(keep.warehouse?.items ?? []).filter((e) => e.quantity > 0)}
             onInventoryChange={() => qc.invalidateQueries({ queryKey: ['keep', keepId] })}
-            className="h-full"
+            className="h-[480px]"
           />
         )}
         {currentTab === 'production' && <ProductionTab keep={keep} keepId={keepId} ledgerMap={ledgerMap} qc={qc} />}

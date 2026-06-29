@@ -56,6 +56,10 @@ function ReconnectOverlay() {
   );
 }
 
+function Page({ children }: { children: React.ReactNode }) {
+  return <div className="max-w-7xl mx-auto px-4 py-6">{children}</div>;
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
   if (!token) return <Navigate to="/login" replace />;
@@ -87,14 +91,14 @@ export default function App() {
                 <main>
                   <Routes>
                     <Route path="/"                                               element={<Navigate to="/kingdom" replace />} />
-                    <Route path="/kingdom"                                        element={<KingdomPage />} />
-                    <Route path="/kingdom/:keepId"                                element={<KingdomPage />} />
-                    <Route path="/kingdom/:keepId/:tab"                          element={<KingdomPage />} />
-                    <Route path="/kingdom/:keepId/buildings/:buildingId"          element={<BuildingPage />} />
+                    <Route path="/kingdom"                                        element={<Page><KingdomPage /></Page>} />
+                    <Route path="/kingdom/:keepId"                                element={<Page><KingdomPage /></Page>} />
+                    <Route path="/kingdom/:keepId/:tab"                          element={<Page><KingdomPage /></Page>} />
+                    <Route path="/kingdom/:keepId/buildings/:buildingId"          element={<Page><BuildingPage /></Page>} />
                     <Route path="/realm"                                          element={<RealmPage />} />
-                    <Route path="/exchange"                                       element={<ExchangePage />} />
-                    <Route path="/admin"                                          element={<AdminPage />} />
-                    <Route path="/encyclopedia"                                   element={<EncyclopediaPage />} />
+                    <Route path="/exchange"                                       element={<Page><ExchangePage /></Page>} />
+                    <Route path="/admin"                                          element={<Page><AdminPage /></Page>} />
+                    <Route path="/encyclopedia"                                   element={<Page><EncyclopediaPage /></Page>} />
                   </Routes>
                 </main>
               </div>

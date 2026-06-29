@@ -144,58 +144,58 @@ export default function ExchangePage() {
   };
 
   return (
-    <div className="h-[calc(100vh-48px)] flex flex-col overflow-hidden">
+    <div className="space-y-4">
 
       {(storageError || listingsError) && (
-        <div className="px-4 py-2 text-xs text-red-400 bg-red-950/20 border-b border-red-900/30">
+        <div className="px-4 py-2 text-xs text-red-400 bg-red-950/20 border border-red-900/30 rounded-lg">
           {storageError && <span>Warehouse: {(storageErr as Error)?.message ?? 'Failed to load'}</span>}
           {storageError && listingsError && <span className="mx-2">·</span>}
           {listingsError && <span>Listings: {(listingsErr as Error)?.message ?? 'Failed to load'}</span>}
         </div>
       )}
 
-      {/* ── Region tabs ──────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-700/60 flex-shrink-0 bg-slate-950/40">
-        {REGIONS.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => switchRegion(r.id)}
-            className={`px-3 py-1 rounded text-sm transition-colors ${
-              regionId === r.id
-                ? 'bg-slate-700 text-slate-100 font-medium'
-                : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
-            }`}
-          >
-            {r.name}
-          </button>
-        ))}
-        <span className="ml-auto text-xs text-slate-600">
-          {REGIONS.find((r) => r.id === regionId)?.name} Exchange
-        </span>
+      {/* ── Card: region selector + warehouse + caravans ─────────────────── */}
+      <div className="bg-slate-900 border border-slate-700/60 rounded-lg overflow-hidden">
+        <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-700/60 bg-slate-950/40">
+          {REGIONS.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => switchRegion(r.id)}
+              className={`px-3 py-1 rounded text-sm transition-colors ${
+                regionId === r.id
+                  ? 'bg-slate-700 text-slate-100 font-medium'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
+              }`}
+            >
+              {r.name}
+            </button>
+          ))}
+          <span className="ml-auto text-xs text-slate-600">
+            {REGIONS.find((r) => r.id === regionId)?.name} Exchange
+          </span>
+        </div>
+        <WarehousePanel
+          locationType="EXCHANGE"
+          locationId={regionId}
+          warehouseId={storageData?.warehouse?.id ?? 0}
+          locationLabel={`${REGIONS.find((r) => r.id === regionId)?.name ?? regionId} Warehouse`}
+          inventory={inventory}
+          goldBalance={goldBalance}
+          showSell
+          onSell={(rt, qty) => sellNpc.mutate({ rt, qty })}
+          onInventoryChange={invalidate}
+          className="h-[300px]"
+        />
       </div>
 
-      {/* ── Top half: warehouse + caravans ──────────────────────────────── */}
-      <WarehousePanel
-        locationType="EXCHANGE"
-        locationId={regionId}
-        warehouseId={storageData?.warehouse?.id ?? 0}
-        locationLabel={`${REGIONS.find((r) => r.id === regionId)?.name ?? regionId} Warehouse`}
-        inventory={inventory}
-        goldBalance={goldBalance}
-        showSell
-        onSell={(rt, qty) => sellNpc.mutate({ rt, qty })}
-        onInventoryChange={invalidate}
-        className="h-[55%] border-b border-slate-700/60"
-      />
+      {/* ── Cards: listings browser ──────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-4">
 
-      {/* ── Bottom half: listings browser ───────────────────────────────── */}
-      <div className="flex-1 grid grid-cols-2 divide-x divide-slate-700/60 overflow-hidden min-h-0">
-
-        {/* Left: listings or wishlists */}
-        <div className="flex flex-col overflow-hidden">
+        {/* Left card: listings or wishlists */}
+        <div className="bg-slate-900 border border-slate-700/60 rounded-lg overflow-hidden flex flex-col">
 
           {/* Tab strip */}
-          <div className="flex border-b border-slate-700/60 flex-shrink-0">
+          <div className="flex border-b border-slate-700/60">
             <button
               onClick={() => setBottomTab('listings')}
               className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
@@ -219,7 +219,7 @@ export default function ExchangePage() {
           </div>
 
           {bottomTab === 'listings' ? (
-            <div className="flex-1 overflow-y-auto">
+            <div>
               {visibleResources.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-slate-600 text-sm">
                   No listings or warehouse items
@@ -273,7 +273,7 @@ export default function ExchangePage() {
             </div>
           ) : (
             /* ── Wishlists panel ─────────────────────────────────────── */
-            <div className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex flex-col">
 
               {/* Wishlist selector + actions */}
               <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/60 flex-shrink-0">
@@ -337,7 +337,7 @@ export default function ExchangePage() {
               </div>
 
               {/* Wishlist items */}
-              <div className="flex-1 overflow-y-auto">
+              <div>
                 {activeWishlist && activeWishlist.items.length > 0 ? (
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-slate-900/95">
@@ -462,16 +462,16 @@ export default function ExchangePage() {
           )}
         </div>
 
-        {/* Right: listing detail + actions */}
-        <div className="flex flex-col overflow-hidden">
+        {/* Right card: listing detail + actions */}
+        <div className="bg-slate-900 border border-slate-700/60 rounded-lg overflow-hidden">
           {!selected ? (
-            <div className="flex items-center justify-center h-full text-slate-600 text-sm">
+            <div className="flex items-center justify-center py-16 text-slate-600 text-sm">
               Select a material to view listings
             </div>
           ) : (
             <>
               {/* Resource header */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/60">
                 <div className="flex items-center gap-2.5">
                   <IconSlot size="sm" label={rName(selected)} />
                   <span className="text-slate-100 font-medium">{rName(selected)}</span>
@@ -483,7 +483,7 @@ export default function ExchangePage() {
                 </span>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-5">
+              <div className="p-4 space-y-5">
 
                 {/* Active listings for this resource */}
                 <div>
@@ -665,6 +665,7 @@ export default function ExchangePage() {
           )}
         </div>
       </div>
+
     </div>
   );
 }

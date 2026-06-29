@@ -773,7 +773,7 @@ export default function RealmPage() {
   }, [redraw]);
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 48px)' }}>
+    <div className="flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 48px)' }}>
       <div className="flex items-center gap-4 px-6 py-3 border-b border-slate-800 shrink-0">
         <h1 className="text-sm font-semibold text-slate-100">Realm Map</h1>
         <span className="text-xs text-slate-500">Scroll to zoom · Drag to pan · Click a plot</span>
