@@ -132,7 +132,7 @@ export default function ExchangePage() {
         showSell
         onSell={(rt, qty) => sellNpc.mutate({ rt, qty })}
         onInventoryChange={invalidate}
-        className="h-[40%] border-b border-slate-700/60"
+        className="h-[55%] border-b border-slate-700/60"
       />
 
       {/* ── Bottom half: listings browser ───────────────────────────────── */}

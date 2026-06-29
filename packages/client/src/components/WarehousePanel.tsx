@@ -5,7 +5,7 @@ import type { CaravanWithCargo, Warehouse, WarehouseItem, Keep, EmpireBootstrap 
 import { RESOURCE_NAMES, RESOURCE_WEIGHT, REGION_IDS } from '@merchant-realms/shared';
 import { useLivePercent } from '../hooks/useLivePercent.js';
 import ProgressBar from './ProgressBar.js';
-import { IconSlot } from './ui/index.js';
+import { IconSlot, Modal, ModalSection, Button } from './ui/index.js';
 
 const rName  = (rt: string) => RESOURCE_NAMES[rt as keyof typeof RESOURCE_NAMES] ?? rt;
 const rKgPer = (rt: string) => RESOURCE_WEIGHT[rt as keyof typeof RESOURCE_WEIGHT] ?? 0.5;
@@ -164,6 +164,85 @@ function TransferPopup({ label, maxQty, onConfirm, onClose, isPending = false }:
   );
 }
 
+// ── Caravan action modal ──────────────────────────────────────────────────────
+
+function CaravanActionModal({
+  caravan, isHere, allKeeps, plotsByRegion, excludeKeepId, excludeExchangeId,
+  onDispatch, isDispatching, dispatchError, onClose,
+}: {
+  caravan: CaravanWithCargo;
+  isHere: boolean;
+  allKeeps: Array<{ id: number; name: string }>;
+  plotsByRegion: Map<number, Array<{ id: number; name: string; hasKeep: boolean }>>;
+  excludeKeepId?: number | undefined;
+  excludeExchangeId?: number | undefined;
+  onDispatch: (dest: { type: string; id: number }) => void;
+  isDispatching: boolean;
+  dispatchError: string | null;
+  onClose: () => void;
+}) {
+  const [dest, setDest] = useState<{ type: string; id: number } | null>(null);
+  const items   = caravan.warehouse?.items ?? [];
+  const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
+  const maxKg   = caravan.warehouse?.cap ?? caravan.animalCount * MULE_KG;
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={caravan.name}
+      subtitle={`${caravan.animalCount} mule${caravan.animalCount !== 1 ? 's' : ''} · ${cargoKg.toFixed(0)} / ${maxKg} kg`}
+      size="sm"
+    >
+      {/* Cargo summary */}
+      {items.length > 0 && (
+        <ModalSection label="Cargo">
+          <div className="space-y-1.5">
+            {items.map((it) => (
+              <div key={it.resourceType} className="flex items-center gap-2">
+                <IconSlot size="xs" label={rName(it.resourceType)} />
+                <span className="flex-1 text-sm text-slate-300">{rName(it.resourceType)}</span>
+                <span className="font-mono text-sm text-slate-200 tabular-nums">{it.quantity.toFixed(0)}</span>
+              </div>
+            ))}
+          </div>
+        </ModalSection>
+      )}
+
+      {/* Dispatch */}
+      <ModalSection label="Send to">
+        <div className="space-y-2">
+          <DestinationPicker
+            value={dest}
+            onChange={setDest}
+            allKeeps={allKeeps}
+            plotsByRegion={plotsByRegion}
+            excludeKeepId={isHere ? excludeKeepId : undefined}
+            excludeExchangeId={isHere ? excludeExchangeId : undefined}
+          />
+          {dispatchError && (
+            <p className="text-red-400 text-xs">{dispatchError}</p>
+          )}
+          <Button
+            variant="primary"
+            size="md"
+            className="w-full"
+            disabled={!dest || isDispatching}
+            onClick={() => dest && onDispatch(dest)}
+          >
+            {isDispatching ? 'Dispatching…' : 'Dispatch'}
+          </Button>
+        </div>
+      </ModalSection>
+
+      {/* Future: upgrades */}
+      <ModalSection label="Caravan">
+        <p className="text-slate-600 text-xs italic">Upgrade &amp; modification options coming soon.</p>
+      </ModalSection>
+    </Modal>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function WarehousePanel({
@@ -173,14 +252,13 @@ export default function WarehousePanel({
 }: WarehousePanelProps) {
   const qc = useQueryClient();
 
-  const [loadPopup,         setLoadPopup]         = useState<{ rt: string; caravanId: number } | null>(null);
-  const [unloadPopup,       setUnloadPopup]        = useState<{ caravanId: number; rt: string } | null>(null);
-  const [sellPopup,         setSellPopup]          = useState<string | null>(null);
-  const [selectedCaravanId, setSelectedCaravanId]  = useState<number | null>(null);
-  const [expandedCaravanId, setExpandedCaravanId]  = useState<number | null>(null);
-
-  // Single destination per caravan (replaces the old 3-field destType/destId/plotRegion)
-  const [dest, setDest] = useState<Record<number, { type: string; id: number } | null>>({});
+  const [loadPopup,    setLoadPopup]    = useState<{ rt: string; caravanId: number } | null>(null);
+  const [unloadPopup,  setUnloadPopup]  = useState<{ caravanId: number; rt: string } | null>(null);
+  const [sellPopup,    setSellPopup]    = useState<string | null>(null);
+  // activeCaId: which caravan is showing in the cargo view (right panel)
+  const [activeCaId,   setActiveCaId]   = useState<number | null>(null);
+  // actionCaId: which caravan's action modal is open
+  const [actionCaId,   setActionCaId]   = useState<number | null>(null);
 
   const { data: empireData, isError: caravansError, error: caravansErr } = useQuery({ queryKey: ['empire'], queryFn: api.empireBootstrap });
   const { data: allDistrictsData } = useQuery({ queryKey: ['all-districts'], queryFn: api.allDistricts, staleTime: 60_000 });
@@ -203,12 +281,10 @@ export default function WarehousePanel({
     onInventoryChange?.();
   };
 
-  // Stable reference so AwayCaravan's arrival timer isn't reset on every render
   const useCaravanArrived = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['empire'] });
   }, [qc]);
 
-  // Immediately reflect a resource transfer in/out of the current location's inventory cache.
   function patchInventory(rt: string, delta: number) {
     const patchItems = (items: WarehouseItem[], wid: number): WarehouseItem[] => {
       const exists = items.some((e) => e.resourceType === rt);
@@ -217,30 +293,19 @@ export default function WarehousePanel({
     };
 
     if (locationType === 'KEEP') {
-      qc.setQueryData(
-        ['keep', locationId],
-        (old: { keep: Keep } | undefined) => {
-          if (!old || !old.keep.warehouse) return old;
-          return { ...old, keep: { ...old.keep, warehouse: { ...old.keep.warehouse, items: patchItems(old.keep.warehouse.items, old.keep.warehouse.id) } } };
-        },
-      );
+      qc.setQueryData(['keep', locationId], (old: { keep: Keep } | undefined) => {
+        if (!old || !old.keep.warehouse) return old;
+        return { ...old, keep: { ...old.keep, warehouse: { ...old.keep.warehouse, items: patchItems(old.keep.warehouse.items, old.keep.warehouse.id) } } };
+      });
     } else {
-      qc.setQueryData(
-        ['exchange-storage', locationId],
-        (old: { warehouse: Warehouse | null } | undefined) => {
-          if (!old || !old.warehouse) return old;
-          return { ...old, warehouse: { ...old.warehouse, items: patchItems(old.warehouse.items, old.warehouse.id) } };
-        },
-      );
+      qc.setQueryData(['exchange-storage', locationId], (old: { warehouse: Warehouse | null } | undefined) => {
+        if (!old || !old.warehouse) return old;
+        return { ...old, warehouse: { ...old.warehouse, items: patchItems(old.warehouse.items, old.warehouse.id) } };
+      });
     }
   }
 
-  type TransferParams = {
-    fromWarehouseId: number;
-    toWarehouseId:   number;
-    resourceType:    string;
-    quantity:        number;
-  };
+  type TransferParams = { fromWarehouseId: number; toWarehouseId: number; resourceType: string; quantity: number };
 
   const transfer = useMutation({
     mutationFn: (p: TransferParams) => api.transfer(p),
@@ -250,10 +315,10 @@ export default function WarehousePanel({
       setLoadPopup(null);
       setUnloadPopup(null);
 
-      const empireCache  = qc.getQueryData<{ empire: EmpireBootstrap }>(['empire']);
-      const fromCaravan  = empireCache?.empire.caravans.find((c) => c.warehouseId === fromWarehouseId);
-      const toCaravan    = empireCache?.empire.caravans.find((c) => c.warehouseId === toWarehouseId);
-      const caravan      = fromCaravan ?? toCaravan;
+      const empireCache = qc.getQueryData<{ empire: EmpireBootstrap }>(['empire']);
+      const fromCaravan = empireCache?.empire.caravans.find((c) => c.warehouseId === fromWarehouseId);
+      const toCaravan   = empireCache?.empire.caravans.find((c) => c.warehouseId === toWarehouseId);
+      const caravan     = fromCaravan ?? toCaravan;
       if (caravan) {
         const delta = fromCaravan ? -quantity : +quantity;
         qc.setQueryData(['empire'], (old: { empire: EmpireBootstrap } | undefined) => {
@@ -282,6 +347,7 @@ export default function WarehousePanel({
     onSuccess: () => invalidate(),
     onError:   () => invalidate(),
   });
+
   const caravanDispatch = useMutation({
     mutationFn: ({ id, dt, di }: { id: number; dt: string; di: number }) => api.caravanDispatch(id, dt, di),
     onSuccess: (data, vars) => {
@@ -289,34 +355,22 @@ export default function WarehousePanel({
         if (!old) return old;
         return { ...old, empire: { ...old.empire, caravans: old.empire.caravans.map((c) => c.id === data.caravan.id ? data.caravan : c) } };
       });
-      setExpandedCaravanId(null);
-      setDest((p) => { const n = { ...p }; delete n[vars.id]; return n; });
+      setActionCaId(null);
+      if (activeCaId === vars.id) setActiveCaId(null);
       invalidate();
     },
   });
 
-  const allCaravans          = empireData?.empire.caravans ?? [];
-  const hereCaravans         = allCaravans.filter(
-    (c) => c.status === 'IDLE' && c.locationType === locationType && c.locationId === locationId,
-  );
-  const idleElsewhereCaravans = allCaravans.filter(
-    (c) => c.status === 'IDLE' && !(c.locationType === locationType && c.locationId === locationId),
-  );
-  const inTransitCaravans    = allCaravans.filter((c) => c.status === 'IN_TRANSIT');
+  const allCaravans           = empireData?.empire.caravans ?? [];
+  const hereCaravans          = allCaravans.filter((c) => c.status === 'IDLE' && c.locationType === locationType && c.locationId === locationId);
+  const idleElsewhereCaravans = allCaravans.filter((c) => c.status === 'IDLE' && !(c.locationType === locationType && c.locationId === locationId));
+  const inTransitCaravans     = allCaravans.filter((c) => c.status === 'IN_TRANSIT');
+  const allKeeps              = empireData?.empire.keeps ?? [];
+  const totalWeight           = inventory.reduce((s, e) => s + e.quantity * rKgPer(e.resourceType), 0);
 
-  function caravanLocationName(c: { locationType: string; locationId: number }): string {
-    if (c.locationType === 'EXCHANGE') {
-      const r = EXCHANGE_REGIONS.find((r) => r.id === c.locationId);
-      return r ? `${r.name} Exchange` : `Region ${c.locationId}`;
-    }
-    if (c.locationType === 'KEEP') {
-      return allKeeps.find((k) => k.id === c.locationId)?.name ?? 'Keep';
-    }
-    return 'Plot';
-  }
-
-  const allKeeps    = empireData?.empire.keeps ?? [];
-  const totalWeight = inventory.reduce((s, e) => s + e.quantity * rKgPer(e.resourceType), 0);
+  const activeCaravan   = activeCaId != null ? allCaravans.find((c) => c.id === activeCaId) ?? null : null;
+  const actionCaravan   = actionCaId != null ? allCaravans.find((c) => c.id === actionCaId) ?? null : null;
+  const activeIsHere    = activeCaravan != null && hereCaravans.some((c) => c.id === activeCaravan.id);
 
   function maxLoadable(rt: string, caravanId: number): number {
     const caravan = hereCaravans.find((c) => c.id === caravanId);
@@ -330,27 +384,24 @@ export default function WarehousePanel({
     return Math.min(inWarehouse, byCapacity);
   }
 
-  function openLoadPopup(rt: string) {
-    const targetId = selectedCaravanId ?? hereCaravans[0]?.id;
-    if (!targetId) return;
-    setUnloadPopup(null); setSellPopup(null);
-    setLoadPopup({ rt, caravanId: targetId });
+  function caravanLocationName(c: { locationType: string; locationId: number }): string {
+    if (c.locationType === 'EXCHANGE') {
+      const r = EXCHANGE_REGIONS.find((r) => r.id === c.locationId);
+      return r ? `${r.name} Exchange` : `Region ${c.locationId}`;
+    }
+    if (c.locationType === 'KEEP') {
+      return allKeeps.find((k) => k.id === c.locationId)?.name ?? 'Keep';
+    }
+    return 'Plot';
   }
 
-  function openUnloadPopup(caravanId: number, rt: string) {
-    setLoadPopup(null); setSellPopup(null);
-    setUnloadPopup({ caravanId, rt });
-  }
-
-  function toggleExpand(caravanId: number) {
-    setExpandedCaravanId((prev) => prev === caravanId ? null : caravanId);
-    setLoadPopup(null); setUnloadPopup(null);
-  }
+  // Which caravan to target when loading from warehouse
+  const loadTargetId = loadPopup?.caravanId ?? activeCaId ?? hereCaravans[0]?.id ?? null;
 
   return (
     <div className={`grid grid-cols-2 divide-x divide-slate-700/60 overflow-hidden ${className}`}>
 
-      {/* ── Left: inventory ──────────────────────────────────────────────── */}
+      {/* ── Left: warehouse inventory ────────────────────────────────────── */}
       <div className="flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
           <span className="text-xs uppercase tracking-wider text-slate-500">{locationLabel}</span>
@@ -365,8 +416,8 @@ export default function WarehousePanel({
               {inventory.filter((e) => e.quantity > 0).sort((a, b) => b.quantity - a.quantity).map((e) => {
                 const isLoadOpen = loadPopup?.rt === e.resourceType;
                 const isSellOpen = sellPopup === e.resourceType;
-                const activeCaravanId = loadPopup?.caravanId ?? selectedCaravanId ?? hereCaravans[0]?.id ?? 0;
-                const canLoad = hereCaravans.length > 0 && maxLoadable(e.resourceType, activeCaravanId) > 0;
+                const loadCaId   = loadPopup?.caravanId ?? (activeCaId && activeIsHere ? activeCaId : null) ?? hereCaravans[0]?.id ?? 0;
+                const canLoad    = hereCaravans.length > 0 && maxLoadable(e.resourceType, loadCaId) > 0;
 
                 return (
                   <div key={e.resourceType} className="border-b border-slate-800/40">
@@ -382,36 +433,30 @@ export default function WarehousePanel({
                       )}
                       {hereCaravans.length > 0 && (
                         <button
-                          className={`w-6 h-6 flex items-center justify-center border rounded text-sm transition-colors ${isLoadOpen ? 'border-slate-200 text-slate-200' : 'border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200'}`}
-                          title="Load into caravan"
-                          onClick={() => isLoadOpen ? setLoadPopup(null) : openLoadPopup(e.resourceType)}
+                          className={`w-6 h-6 flex items-center justify-center border rounded text-sm transition-colors ${isLoadOpen ? 'border-slate-200 text-slate-200' : 'border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200'} disabled:opacity-30`}
+                          title={`Load into ${activeIsHere && activeCaravan ? activeCaravan.name : 'caravan'}`}
+                          onClick={() => isLoadOpen ? setLoadPopup(null) : setLoadPopup({ rt: e.resourceType, caravanId: loadCaId })}
                           disabled={!canLoad}
                         >›</button>
                       )}
                     </div>
 
-                    {isLoadOpen && (
-                      <div className="mx-3 mb-2 mt-0.5 border border-slate-600 rounded bg-slate-900 px-3 py-2.5 text-xs">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-slate-500">Load into</span>
-                          {hereCaravans.length > 1 ? (
+                    {isLoadOpen && loadPopup && (
+                      <div className="mx-3 mb-2 mt-0.5">
+                        {hereCaravans.length > 1 && (
+                          <div className="flex items-center gap-2 mb-1.5 px-1">
+                            <span className="text-xs text-slate-500">Load into</span>
                             <select
-                              className="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs focus:outline-none"
+                              className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs focus:outline-none"
                               value={loadPopup.caravanId}
-                              onChange={(ev) => {
-                                const cId = parseInt(ev.target.value);
-                                setLoadPopup({ rt: e.resourceType, caravanId: cId });
-                                setSelectedCaravanId(cId);
-                              }}
+                              onChange={(ev) => setLoadPopup({ rt: e.resourceType, caravanId: parseInt(ev.target.value) })}
                             >
                               {hereCaravans.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
-                          ) : (
-                            <span className="text-slate-200">{hereCaravans[0]?.name}</span>
-                          )}
-                        </div>
+                          </div>
+                        )}
                         <TransferPopup
-                          label={`Transfer to caravan (max ${Math.floor(maxLoadable(e.resourceType, loadPopup.caravanId))})`}
+                          label={`Transfer to ${hereCaravans.find(c => c.id === loadPopup.caravanId)?.name ?? 'caravan'} (max ${Math.floor(maxLoadable(e.resourceType, loadPopup.caravanId))})`}
                           maxQty={maxLoadable(e.resourceType, loadPopup.caravanId)}
                           onConfirm={(qty) => {
                             const targetCaravan = hereCaravans.find((c) => c.id === loadPopup.caravanId);
@@ -422,7 +467,7 @@ export default function WarehousePanel({
                           isPending={transfer.isPending}
                         />
                         {transfer.isError && loadPopup?.rt === e.resourceType && (
-                          <p className="text-red-400 text-xs mt-1">{(transfer.error as Error).message}</p>
+                          <p className="text-red-400 text-xs mt-1 px-3">{(transfer.error as Error).message}</p>
                         )}
                       </div>
                     )}
@@ -454,224 +499,211 @@ export default function WarehousePanel({
 
       {/* ── Right: caravans ──────────────────────────────────────────────── */}
       <div className="flex flex-col overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
-          <span className="text-xs uppercase tracking-wider text-slate-500">Caravans</span>
-        </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {caravansError && (
-            <div className="p-4 text-red-400 text-xs">
-              Failed to load caravans: {caravansErr instanceof Error ? caravansErr.message : 'Unknown error'}
+        {activeCaravan ? (
+          /* ── Cargo view ─────────────────────────────────────────────────── */
+          <>
+            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-700/60 flex-shrink-0">
+              <button
+                className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors flex-shrink-0"
+                onClick={() => { setActiveCaId(null); setUnloadPopup(null); }}
+                title="Back to caravan list"
+              >←</button>
+              <button
+                className="flex-1 text-left text-sm font-medium text-slate-100 hover:text-azure-300 transition-colors truncate"
+                onClick={() => setActionCaId(activeCaravan.id)}
+                title="Open caravan actions"
+              >
+                {activeCaravan.name}
+                <span className="ml-1.5 text-xs text-slate-500 font-normal">▸</span>
+              </button>
+              {activeIsHere && (
+                <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500" title="Here" />
+              )}
             </div>
-          )}
-          {!caravansError && allCaravans.length === 0 && (
-            <div className="p-4 text-slate-600 text-sm">No caravans.</div>
-          )}
 
-          {/* Here caravans — idle at this location */}
-          {hereCaravans.map((c) => {
-            const items      = c.warehouse?.items ?? [];
-            const cargoKg    = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
-            const maxKg      = c.warehouse?.cap ?? c.animalCount * MULE_KG;
-            const isExpanded = expandedCaravanId === c.id;
-            const d          = dest[c.id] ?? null;
-
-            return (
-              <div key={c.id} className="border-b border-slate-800/60">
-                {/* Clickable caravan header */}
-                <button
-                  className="w-full px-4 pt-3 pb-2 text-left hover:bg-slate-800/30 transition-colors"
-                  onClick={() => toggleExpand(c.id)}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-slate-200">{c.name}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-600">{c.animalCount} mule{c.animalCount !== 1 ? 's' : ''}</span>
-                      <span className={`text-slate-600 text-xs transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
-                    </div>
-                  </div>
+            {/* Cargo fill bar */}
+            {(() => {
+              const items   = activeCaravan.warehouse?.items ?? [];
+              const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
+              const maxKg   = activeCaravan.warehouse?.cap ?? activeCaravan.animalCount * MULE_KG;
+              return (
+                <div className="px-4 py-2 border-b border-slate-800/60 flex-shrink-0">
                   <div className="flex justify-between text-xs text-slate-600 mb-1">
-                    <span>{items.length === 0 ? 'Empty' : `${items.length} item${items.length !== 1 ? 's' : ''}`}</span>
+                    <span>{items.length === 0 ? 'Empty' : `${items.length} resource${items.length !== 1 ? 's' : ''}`}</span>
                     <span>{cargoKg.toFixed(0)} / {maxKg} kg</span>
                   </div>
-                  <div className="h-0.5 bg-slate-700 rounded">
-                    <div className="h-0.5 rounded bg-slate-500" style={{ width: `${Math.min(100, cargoKg / maxKg * 100)}%` }} />
+                  <div className="h-1 bg-slate-800 rounded overflow-hidden">
+                    <div
+                      className="h-full rounded bg-slate-500 transition-all"
+                      style={{ width: `${Math.min(100, maxKg > 0 ? cargoKg / maxKg * 100 : 0)}%` }}
+                    />
                   </div>
-                </button>
+                </div>
+              );
+            })()}
 
-                {/* Expanded panel: cargo detail + dispatch */}
-                {isExpanded && (
-                  <div className="border-t border-slate-800/40">
-                    {/* Cargo items */}
-                    {items.length > 0 && (
-                      <div className="px-4 py-2 space-y-0.5">
-                        {items.map((cargo) => {
-                          const isUnloadOpen = unloadPopup?.caravanId === c.id && unloadPopup.rt === cargo.resourceType;
-                          return (
-                            <div key={cargo.resourceType}>
-                              <div className="flex items-center gap-2 py-1">
-                                <button
-                                  className={`w-5 h-5 flex items-center justify-center border rounded text-xs transition-colors flex-shrink-0 ${isUnloadOpen ? 'border-slate-200 text-slate-200' : 'border-slate-600 text-slate-500 hover:border-slate-400 hover:text-slate-200'}`}
-                                  title="Unload to warehouse"
-                                  onClick={() => isUnloadOpen ? setUnloadPopup(null) : openUnloadPopup(c.id, cargo.resourceType)}
-                                >‹</button>
-                                <IconSlot size="xs" label={rName(cargo.resourceType)} />
-                                <span className="flex-1 text-xs text-slate-400">{rName(cargo.resourceType)}</span>
-                                <span className="text-slate-200 font-mono text-xs w-10 text-right">{cargo.quantity.toFixed(0)}</span>
-                              </div>
-                              {isUnloadOpen && (
-                                <div className="mb-1 border border-slate-600 rounded bg-slate-900 px-3 py-2">
-                                  <TransferPopup
-                                    label={`Unload to ${locationLabel}`}
-                                    maxQty={cargo.quantity}
-                                    onConfirm={(qty) => {
-                                      if (!c.warehouseId) return;
-                                      transfer.mutate({ fromWarehouseId: c.warehouseId, toWarehouseId: warehouseId, resourceType: cargo.resourceType, quantity: qty });
-                                    }}
-                                    onClose={() => setUnloadPopup(null)}
-                                    isPending={transfer.isPending}
-                                  />
-                                  {transfer.isError && unloadPopup?.caravanId === c.id && unloadPopup.rt === cargo.resourceType && (
-                                    <p className="text-red-400 text-xs mt-1">{(transfer.error as Error).message}</p>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Dispatch section */}
-                    <div className="px-4 pb-3 pt-2 border-t border-slate-800/40 space-y-2">
-                      <div className="text-xs text-slate-600 uppercase tracking-wider">Send to</div>
-
-                      <DestinationPicker
-                        value={d}
-                        onChange={(v) => setDest((p) => ({ ...p, [c.id]: v }))}
-                        allKeeps={allKeeps}
-                        plotsByRegion={plotsByRegion}
-                        excludeKeepId={locationType === 'KEEP' ? locationId : undefined}
-                        excludeExchangeId={locationType === 'EXCHANGE' ? locationId : undefined}
-                      />
-
-                      <button
-                        className="w-full text-xs py-1.5 border border-slate-600 rounded text-slate-400 hover:text-slate-100 hover:border-slate-500 hover:bg-slate-800/40 disabled:opacity-40 transition-colors"
-                        disabled={!d || caravanDispatch.isPending}
-                        onClick={() => d && caravanDispatch.mutate({ id: c.id, dt: d.type, di: d.id })}
-                      >
-                        Dispatch →
-                      </button>
-                      {caravanDispatch.isError && (
-                        <p className="text-red-400 text-xs">{(caravanDispatch.error as Error).message}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Idle elsewhere — can dispatch, cannot load/unload */}
-          {idleElsewhereCaravans.length > 0 && (
-            <div className={hereCaravans.length > 0 ? 'border-t border-slate-800' : ''}>
-              <div className="px-4 py-1.5">
-                <span className="text-xs text-slate-700 uppercase tracking-wider">Idle</span>
-              </div>
-              {idleElsewhereCaravans.map((c) => {
-                const elseItems  = c.warehouse?.items ?? [];
-                const cargoKg    = elseItems.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
-                const maxKg      = c.warehouse?.cap ?? c.animalCount * MULE_KG;
-                const isExpanded = expandedCaravanId === c.id;
-                const d          = dest[c.id] ?? null;
-                const atLabel    = caravanLocationName(c);
-
-                return (
-                  <div key={c.id} className="border-b border-slate-800/60">
-                    <button
-                      className="w-full px-4 pt-3 pb-2 text-left hover:bg-slate-800/30 transition-colors"
-                      onClick={() => toggleExpand(c.id)}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-slate-400">{c.name}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-600">at {atLabel}</span>
-                          <span className={`text-slate-600 text-xs transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
+            {/* Cargo items */}
+            <div className="flex-1 overflow-y-auto">
+              {(activeCaravan.warehouse?.items ?? []).length === 0 ? (
+                <div className="p-4 text-slate-600 text-sm">Caravan is empty.</div>
+              ) : (
+                <div>
+                  {(activeCaravan.warehouse?.items ?? []).map((cargo) => {
+                    const isUnloadOpen = unloadPopup?.caravanId === activeCaravan.id && unloadPopup.rt === cargo.resourceType;
+                    return (
+                      <div key={cargo.resourceType} className="border-b border-slate-800/40">
+                        <div className="flex items-center px-4 py-2 hover:bg-slate-800/30 gap-2">
+                          {activeIsHere && (
+                            <button
+                              className={`w-5 h-5 flex items-center justify-center border rounded text-xs transition-colors flex-shrink-0 ${isUnloadOpen ? 'border-slate-200 text-slate-200' : 'border-slate-600 text-slate-500 hover:border-slate-400 hover:text-slate-200'}`}
+                              title="Unload to warehouse"
+                              onClick={() => isUnloadOpen ? setUnloadPopup(null) : setUnloadPopup({ caravanId: activeCaravan.id, rt: cargo.resourceType })}
+                            >‹</button>
+                          )}
+                          <IconSlot size="xs" label={rName(cargo.resourceType)} />
+                          <span className="flex-1 text-sm text-slate-300">{rName(cargo.resourceType)}</span>
+                          <span className="text-slate-200 font-mono text-sm tabular-nums w-12 text-right">{cargo.quantity.toFixed(0)}</span>
                         </div>
-                      </div>
-                      <div className="flex justify-between text-xs text-slate-600 mb-1">
-                        <span>{elseItems.length === 0 ? 'Empty' : `${elseItems.length} item${elseItems.length !== 1 ? 's' : ''}`}</span>
-                        <span>{cargoKg.toFixed(0)} / {maxKg} kg</span>
-                      </div>
-                      <div className="h-0.5 bg-slate-700 rounded">
-                        <div className="h-0.5 rounded bg-slate-800" style={{ width: `${Math.min(100, cargoKg / maxKg * 100)}%` }} />
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="border-t border-slate-800/40">
-                        {elseItems.length > 0 && (
-                          <div className="px-4 py-2 space-y-0.5">
-                            {elseItems.map((cargo) => (
-                              <div key={cargo.resourceType} className="flex items-center gap-2 py-1">
-                                <span className="flex-1 text-xs text-slate-400">{rName(cargo.resourceType)}</span>
-                                <span className="text-slate-200 font-mono text-xs w-10 text-right">{cargo.quantity.toFixed(0)}</span>
-                              </div>
-                            ))}
+                        {isUnloadOpen && (
+                          <div className="mx-3 mb-2 mt-0.5">
+                            <TransferPopup
+                              label={`Unload to ${locationLabel}`}
+                              maxQty={cargo.quantity}
+                              onConfirm={(qty) => {
+                                if (!activeCaravan.warehouseId) return;
+                                transfer.mutate({ fromWarehouseId: activeCaravan.warehouseId, toWarehouseId: warehouseId, resourceType: cargo.resourceType, quantity: qty });
+                              }}
+                              onClose={() => setUnloadPopup(null)}
+                              isPending={transfer.isPending}
+                            />
+                            {transfer.isError && unloadPopup?.caravanId === activeCaravan.id && unloadPopup.rt === cargo.resourceType && (
+                              <p className="text-red-400 text-xs mt-1 px-3">{(transfer.error as Error).message}</p>
+                            )}
                           </div>
                         )}
-
-                        <div className="px-4 pb-3 pt-2 border-t border-slate-800/40 space-y-2">
-                          <div className="text-xs text-slate-600 uppercase tracking-wider">Send to</div>
-                          <DestinationPicker
-                            value={d}
-                            onChange={(v) => setDest((p) => ({ ...p, [c.id]: v }))}
-                            allKeeps={allKeeps}
-                            plotsByRegion={plotsByRegion}
-                            excludeKeepId={c.locationType === 'KEEP' ? c.locationId : undefined}
-                            excludeExchangeId={c.locationType === 'EXCHANGE' ? c.locationId : undefined}
-                          />
-                          <button
-                            className="w-full text-xs py-1.5 border border-slate-600 rounded text-slate-400 hover:text-slate-100 hover:border-slate-500 hover:bg-slate-800/40 disabled:opacity-40 transition-colors"
-                            disabled={!d || caravanDispatch.isPending}
-                            onClick={() => d && caravanDispatch.mutate({ id: c.id, dt: d.type, di: d.id })}
-                          >
-                            Dispatch →
-                          </button>
-                          {caravanDispatch.isError && (
-                            <p className="text-red-400 text-xs">{(caravanDispatch.error as Error).message}</p>
-                          )}
-                        </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
+          </>
+        ) : (
+          /* ── Caravan list ────────────────────────────────────────────────── */
+          <>
+            <div className="px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
+              <span className="text-xs uppercase tracking-wider text-slate-500">Caravans</span>
+            </div>
 
-          {/* In transit — read-only progress */}
-          {inTransitCaravans.length > 0 && (
-            <div className={(hereCaravans.length > 0 || idleElsewhereCaravans.length > 0) ? 'border-t border-slate-800' : ''}>
-              <div className="px-4 py-1.5">
-                <span className="text-xs text-slate-700 uppercase tracking-wider">In Transit</span>
-              </div>
-              {inTransitCaravans.map((c) => (
-                <AwayCaravan
-                  key={c.id}
-                  caravan={c}
-                  onArrived={useCaravanArrived}
-                />
-              ))}
+            <div className="flex-1 overflow-y-auto">
+              {caravansError && (
+                <div className="p-4 text-red-400 text-xs">
+                  Failed to load caravans: {caravansErr instanceof Error ? caravansErr.message : 'Unknown error'}
+                </div>
+              )}
+              {!caravansError && allCaravans.length === 0 && (
+                <div className="p-4 text-slate-600 text-sm">No caravans.</div>
+              )}
+
+              {/* Here — idle at this location */}
+              {hereCaravans.length > 0 && (
+                <div>
+                  <div className="px-4 py-1.5">
+                    <span className="text-xs text-slate-600 uppercase tracking-wider">Here</span>
+                  </div>
+                  {hereCaravans.map((c) => {
+                    const items   = c.warehouse?.items ?? [];
+                    const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
+                    const maxKg   = c.warehouse?.cap ?? c.animalCount * MULE_KG;
+                    return (
+                      <button
+                        key={c.id}
+                        className="w-full px-4 py-2.5 text-left hover:bg-slate-800/40 transition-colors border-b border-slate-800/60"
+                        onClick={() => setActiveCaId(c.id)}
+                      >
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                          <span className="flex-1 text-sm text-slate-100">{c.name}</span>
+                          <span className="text-xs text-slate-500">{cargoKg.toFixed(0)}/{maxKg} kg</span>
+                        </div>
+                        <div className="h-0.5 bg-slate-800 rounded overflow-hidden ml-3.5">
+                          <div className="h-full rounded bg-emerald-800/60 transition-all" style={{ width: `${Math.min(100, maxKg > 0 ? cargoKg / maxKg * 100 : 0)}%` }} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Idle elsewhere */}
+              {idleElsewhereCaravans.length > 0 && (
+                <div className={hereCaravans.length > 0 ? 'border-t border-slate-800/60' : ''}>
+                  <div className="px-4 py-1.5">
+                    <span className="text-xs text-slate-600 uppercase tracking-wider">Idle</span>
+                  </div>
+                  {idleElsewhereCaravans.map((c) => {
+                    const items   = c.warehouse?.items ?? [];
+                    const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
+                    const maxKg   = c.warehouse?.cap ?? c.animalCount * MULE_KG;
+                    return (
+                      <button
+                        key={c.id}
+                        className="w-full px-4 py-2.5 text-left hover:bg-slate-800/40 transition-colors border-b border-slate-800/60"
+                        onClick={() => setActiveCaId(c.id)}
+                      >
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-600 flex-shrink-0" />
+                          <span className="flex-1 text-sm text-slate-400">{c.name}</span>
+                          <span className="text-xs text-slate-600">{caravanLocationName(c)}</span>
+                        </div>
+                        <div className="h-0.5 bg-slate-800 rounded overflow-hidden ml-3.5">
+                          <div className="h-full rounded bg-slate-700 transition-all" style={{ width: `${Math.min(100, maxKg > 0 ? cargoKg / maxKg * 100 : 0)}%` }} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* In transit */}
+              {inTransitCaravans.length > 0 && (
+                <div className={(hereCaravans.length > 0 || idleElsewhereCaravans.length > 0) ? 'border-t border-slate-800/60' : ''}>
+                  <div className="px-4 py-1.5">
+                    <span className="text-xs text-slate-600 uppercase tracking-wider">In Transit</span>
+                  </div>
+                  {inTransitCaravans.map((c) => (
+                    <AwayCaravan key={c.id} caravan={c} onArrived={useCaravanArrived} onSelect={() => setActiveCaId(c.id)} />
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
+
+      {/* ── Caravan action modal ─────────────────────────────────────────── */}
+      {actionCaravan && (
+        <CaravanActionModal
+          caravan={actionCaravan}
+          isHere={hereCaravans.some((c) => c.id === actionCaravan.id)}
+          allKeeps={allKeeps}
+          plotsByRegion={plotsByRegion}
+          excludeKeepId={locationType === 'KEEP' ? locationId : undefined}
+          excludeExchangeId={locationType === 'EXCHANGE' ? locationId : undefined}
+          onDispatch={(dest) => caravanDispatch.mutate({ id: actionCaravan.id, dt: dest.type, di: dest.id })}
+          isDispatching={caravanDispatch.isPending}
+          dispatchError={caravanDispatch.isError ? (caravanDispatch.error as Error).message : null}
+          onClose={() => setActionCaId(null)}
+        />
+      )}
     </div>
   );
 }
 
-function AwayCaravan({ caravan: c, onArrived }: {
+// ── Away caravan (in transit progress row) ────────────────────────────────────
+
+function AwayCaravan({ caravan: c, onArrived, onSelect }: {
   caravan: {
     id: number; name: string; status: string;
     locationType: string; locationId: number;
@@ -679,11 +711,10 @@ function AwayCaravan({ caravan: c, onArrived }: {
     arrivesAt: string | null; departedAt: string | null;
   };
   onArrived: () => void;
+  onSelect: () => void;
 }) {
   const pct = useLivePercent(c.departedAt, c.arrivesAt);
-  const inTransit = c.status === 'IN_TRANSIT';
 
-  // Trigger a refetch at the exact arrival time so the caravan appears without waiting for the poll interval
   useEffect(() => {
     if (!c.arrivesAt) return;
     const delay = new Date(c.arrivesAt).getTime() - Date.now();
@@ -700,26 +731,19 @@ function AwayCaravan({ caravan: c, onArrived }: {
     ? remaining >= 60 ? `${Math.floor(remaining / 60)}m ${remaining % 60}s` : `${remaining}s`
     : null;
 
-  const locationLabel = inTransit
-    ? `→ ${destTypeLabel(c.destType)} ${remainingLabel ? `· ${remainingLabel}` : ''}`
-    : `at ${destTypeLabel(c.locationType)}`;
-
   return (
-    <div className="px-4 py-2.5 border-b border-slate-800/40">
-      <div className="flex items-center justify-between mb-1.5 text-xs">
-        <span className="text-slate-500">{c.name}</span>
-        <span className="text-slate-600">{locationLabel}</span>
+    <button
+      className="w-full px-4 py-2.5 text-left hover:bg-slate-800/40 transition-colors border-b border-slate-800/60"
+      onClick={onSelect}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-azure-500 flex-shrink-0 animate-pulse" />
+        <span className="flex-1 text-sm text-slate-400">{c.name}</span>
+        {remainingLabel && <span className="text-xs text-slate-600">{remainingLabel}</span>}
       </div>
-      {inTransit && <ProgressBar pct={pct} color="bg-slate-600" height="h-0.5" />}
-    </div>
+      <div className="ml-3.5">
+        <ProgressBar pct={pct} color="bg-azure-700/50" height="h-0.5" />
+      </div>
+    </button>
   );
-}
-
-function destTypeLabel(type: string | null): string {
-  switch (type) {
-    case 'KEEP':     return 'keep';
-    case 'EXCHANGE': return 'exchange';
-    case 'PLOT':     return 'plot';
-    default:         return type?.toLowerCase() ?? '?';
-  }
 }
