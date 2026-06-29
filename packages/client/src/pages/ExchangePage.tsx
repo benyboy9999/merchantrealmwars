@@ -5,6 +5,7 @@ import { api } from '../services/api.js';
 import type { ExchangeListing } from '../services/api.js';
 import { RESOURCE_NAMES, REGION_IDS } from '@merchant-realms/shared';
 import WarehousePanel from '../components/WarehousePanel.js';
+import { IconSlot } from '../components/ui/index.js';
 
 const REGIONS = [
   { id: REGION_IDS.CENTRAL, name: 'Central'   },
@@ -174,7 +175,12 @@ export default function ExchangePage() {
                         }`}
                         onClick={() => { setSelected(rt); setBuyListingId(null); setBuyQty(''); }}
                       >
-                        <td className="px-4 py-1.5 text-slate-300">{rName(rt)}</td>
+                        <td className="px-4 py-1.5">
+                          <div className="flex items-center gap-2">
+                            <IconSlot size="xs" label={rName(rt)} />
+                            <span className="text-slate-300">{rName(rt)}</span>
+                          </div>
+                        </td>
                         <td className={`px-4 py-1.5 text-right font-mono tabular-nums ${inWh > 0 ? 'text-slate-200' : 'text-slate-700'}`}>
                           {inWh > 0 ? inWh.toFixed(0) : '—'}
                         </td>
@@ -203,7 +209,10 @@ export default function ExchangePage() {
             <>
               {/* Resource header */}
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
-                <span className="text-slate-100 font-medium">{rName(selected)}</span>
+                <div className="flex items-center gap-2.5">
+                  <IconSlot size="sm" label={rName(selected)} />
+                  <span className="text-slate-100 font-medium">{rName(selected)}</span>
+                </div>
                 <span className="text-xs text-slate-500">
                   {warehouseQty > 0
                     ? <span>Warehouse: <span className="text-slate-200">{warehouseQty.toFixed(0)}</span></span>

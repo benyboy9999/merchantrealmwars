@@ -5,6 +5,7 @@ import type { CaravanWithCargo, Warehouse, WarehouseItem, Keep, EmpireBootstrap 
 import { RESOURCE_NAMES, RESOURCE_WEIGHT, REGION_IDS } from '@merchant-realms/shared';
 import { useLivePercent } from '../hooks/useLivePercent.js';
 import ProgressBar from './ProgressBar.js';
+import { IconSlot } from './ui/index.js';
 
 const rName  = (rt: string) => RESOURCE_NAMES[rt as keyof typeof RESOURCE_NAMES] ?? rt;
 const rKgPer = (rt: string) => RESOURCE_WEIGHT[rt as keyof typeof RESOURCE_WEIGHT] ?? 0.5;
@@ -370,6 +371,7 @@ export default function WarehousePanel({
                 return (
                   <div key={e.resourceType} className="border-b border-slate-800/40">
                     <div className="flex items-center px-4 py-2 hover:bg-slate-800/30 gap-2">
+                      <IconSlot size="xs" label={rName(e.resourceType)} />
                       <span className="flex-1 text-sm text-slate-300">{rName(e.resourceType)}</span>
                       <span className="text-slate-200 font-mono tabular-nums text-sm w-12 text-right">{e.quantity.toFixed(0)}</span>
                       {showSell && (
@@ -513,6 +515,7 @@ export default function WarehousePanel({
                                   title="Unload to warehouse"
                                   onClick={() => isUnloadOpen ? setUnloadPopup(null) : openUnloadPopup(c.id, cargo.resourceType)}
                                 >‹</button>
+                                <IconSlot size="xs" label={rName(cargo.resourceType)} />
                                 <span className="flex-1 text-xs text-slate-400">{rName(cargo.resourceType)}</span>
                                 <span className="text-slate-200 font-mono text-xs w-10 text-right">{cargo.quantity.toFixed(0)}</span>
                               </div>

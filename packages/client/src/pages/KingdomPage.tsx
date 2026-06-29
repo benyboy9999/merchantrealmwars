@@ -201,7 +201,7 @@ function KeepTab({ keep, qc }: { keep: KeepTabKeep; qc: ReturnType<typeof useQue
   useEffect(() => { setName(keep.name); }, [keep.name]);
 
   return (
-    <div className="p-6 max-w-lg">
+    <div className="p-6 max-w-xl">
       <div className="mb-6">
         <div className="text-xs uppercase tracking-wider text-slate-500 mb-3">Location</div>
         <div className="border border-slate-700 rounded p-4 bg-slate-800 space-y-2 text-sm">
@@ -278,13 +278,13 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
   });
 
   return (
-    <div className="p-6">
+    <div className="p-4 h-full flex flex-col">
       {/* Slot counter */}
       <div className="text-xs text-slate-600 mb-3">
         {keep.buildingSlotCount} / {KEEP_MAX_BUILDING_SLOTS} slots unlocked
       </div>
 
-      <div className="grid grid-cols-4 gap-2 mb-5 max-w-xl">
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 mb-4">
         {Array.from({ length: KEEP_MAX_BUILDING_SLOTS }, (_, i) => {
           const building   = buildingsBySlot.get(i);
           const isUnlocked = i < keep.buildingSlotCount;
@@ -361,18 +361,19 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
             ))}
           </select>
           {buildingType && costs.length > 0 && (
-            <div className="text-xs text-slate-500 mb-3">
-              Cost:{' '}
-              {costs.map((c, idx) => {
+            <div className="flex flex-col gap-1.5 mb-3">
+              {costs.map((c) => {
                 const have = ledgerMap.get(c.resource) ?? 0;
+                const rLabel = RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource;
+                const met = have >= c.quantity;
                 return (
-                  <span key={c.resource}>
-                    {idx > 0 && <span className="text-slate-700"> + </span>}
-                    <span className={have >= c.quantity ? 'text-slate-200' : 'text-red-400'}>
-                      {c.quantity} {RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource}
+                  <div key={c.resource} className="flex items-center gap-2 text-xs">
+                    <IconSlot size="xs" label={rLabel} />
+                    <span className={met ? 'text-slate-200' : 'text-red-400'}>
+                      {c.quantity} {rLabel}
                     </span>
-                    <span className="text-slate-700"> ({Math.floor(have)})</span>
-                  </span>
+                    <span className="text-slate-600 ml-auto">{Math.floor(have)} held</span>
+                  </div>
                 );
               })}
             </div>
@@ -534,7 +535,7 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
   }
 
   return (
-    <div className="p-6 max-w-xl">
+    <div className="p-4">
       <EfficiencyBar keep={keep} ledgerMap={ledgerMap} />
       <div className="space-y-1">
         {prodTypes.map((bTypeId) => {
@@ -562,8 +563,15 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
+                    <IconSlot size="xs" label={bTypeCode ? (BUILDING_NAMES[bTypeCode as keyof typeof BUILDING_NAMES] ?? bTypeCode) : String(bTypeId)} />
                     <span className="text-sm text-slate-200">{bTypeCode ? (BUILDING_NAMES[bTypeCode as keyof typeof BUILDING_NAMES] ?? bTypeCode) : String(bTypeId)}</span>
-                    {activeRecipe && <span className="text-xs text-slate-500">→ {RESOURCE_NAMES[activeRecipe.output as keyof typeof RESOURCE_NAMES] ?? activeRecipe.output}</span>}
+                    {activeRecipe && (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <span>→</span>
+                        <IconSlot size="xs" label={RESOURCE_NAMES[activeRecipe.output as keyof typeof RESOURCE_NAMES] ?? activeRecipe.output} />
+                        <span>{RESOURCE_NAMES[activeRecipe.output as keyof typeof RESOURCE_NAMES] ?? activeRecipe.output}</span>
+                      </div>
+                    )}
                   </div>
                   <span className="text-slate-600 text-xs">{isOpen ? '▲' : '▼'}</span>
                 </div>
@@ -685,7 +693,7 @@ function WorkersTab({ keep, ledgerMap, empireCreatedAt }: {
   const speedPct      = Math.round(penaltyFactor * bonusFactor * 100);
 
   return (
-    <div className="p-6 max-w-lg space-y-6">
+    <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
       {/* Worker pool */}
       <div>
@@ -768,6 +776,7 @@ function NeedRow({ resourceType, needed, held, isMet, tag }: {
   return (
     <div className="flex items-center justify-between px-4 py-2.5 text-sm">
       <div className="flex items-center gap-2">
+        <IconSlot size="xs" label={RESOURCE_NAMES[resourceType as keyof typeof RESOURCE_NAMES] ?? resourceType} />
         <span className={isMet ? 'text-slate-300' : 'text-red-400'}>
           {RESOURCE_NAMES[resourceType as keyof typeof RESOURCE_NAMES] ?? resourceType}
         </span>
