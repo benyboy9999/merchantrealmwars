@@ -430,73 +430,55 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
     }
 
     // ── Empty unlocked slot ──────────────────────────────────────────
-    const selectedCosts = buildingType
-      ? (BUILDING_CONSTRUCTION_COSTS[buildingType as keyof typeof BUILDING_CONSTRUCTION_COSTS] ?? [])
-      : [];
-    const canAffordBuild = selectedCosts.every((c) => (ledgerMap.get(c.resource) ?? 0) >= c.quantity);
-
     return (
-      <Modal open onClose={closeModal} title={`Slot ${selectedSlot + 1}`} subtitle="Choose a building to construct" size="md">
-        <div className="divide-y divide-slate-800">
+      <Modal open onClose={closeModal} title={`Slot ${selectedSlot + 1}`} subtitle="Choose a building to construct" size="lg">
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           {Object.keys(BUILDING_NAMES).map((bt) => {
             const bName  = BUILDING_NAMES[bt as keyof typeof BUILDING_NAMES];
             const costs  = BUILDING_CONSTRUCTION_COSTS[bt as keyof typeof BUILDING_CONSTRUCTION_COSTS] ?? [];
             const allMet = costs.every((c) => (ledgerMap.get(c.resource) ?? 0) >= c.quantity);
-            const isSel  = buildingType === bt;
             return (
               <div
                 key={bt}
-                className={`px-5 py-3 cursor-pointer transition-colors ${isSel ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}
-                onClick={() => { setBuildingType(isSel ? '' : bt); setBuildError(''); }}
+                className={`rounded-lg border p-3.5 flex flex-col gap-3 transition-colors ${
+                  allMet
+                    ? 'border-slate-600 bg-slate-800/60 hover:border-slate-500 hover:bg-slate-800'
+                    : 'border-slate-700/60 bg-slate-800/30'
+                }`}
               >
-                <div className="flex items-center gap-3">
+                {/* Header */}
+                <div className="flex items-center gap-2.5">
                   <IconSlot size="sm" label={bName} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-slate-200 font-medium">{bName}</div>
-                    <div className="flex gap-2 mt-0.5 flex-wrap">
-                      {costs.map((c) => {
-                        const rLabel = RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource;
-                        const met    = (ledgerMap.get(c.resource) ?? 0) >= c.quantity;
-                        return (
-                          <span key={c.resource} className={`text-xs ${met ? 'text-slate-500' : 'text-red-500'}`}>
-                            {c.quantity} {rLabel}
-                          </span>
-                        );
-                      })}
-                      {costs.length === 0 && <span className="text-xs text-slate-600">Free</span>}
-                    </div>
-                  </div>
+                  <span className="text-sm text-slate-200 font-medium flex-1">{bName}</span>
                   <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${allMet ? 'bg-emerald-500' : 'bg-slate-700'}`} />
                 </div>
 
-                {isSel && (
-                  <div className="mt-3 pl-10 space-y-3">
-                    {selectedCosts.length > 0 && (
-                      <div className="space-y-1.5">
-                        {selectedCosts.map((c) => {
-                          const rLabel = RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource;
-                          const have   = ledgerMap.get(c.resource) ?? 0;
-                          const met    = have >= c.quantity;
-                          return (
-                            <div key={c.resource} className="flex items-center gap-2 text-xs">
-                              <IconSlot size="xs" label={rLabel} />
-                              <span className={met ? 'text-slate-200' : 'text-red-400'}>{c.quantity} {rLabel}</span>
-                              <span className="text-slate-600 ml-auto">{Math.floor(have)} held</span>
-                            </div>
-                          );
-                        })}
+                {/* Cost breakdown — always visible */}
+                <div className="space-y-1.5">
+                  {costs.length === 0 && <span className="text-xs text-slate-600">No materials required</span>}
+                  {costs.map((c) => {
+                    const rLabel = RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource;
+                    const have   = ledgerMap.get(c.resource) ?? 0;
+                    const met    = have >= c.quantity;
+                    return (
+                      <div key={c.resource} className="flex items-center gap-2 text-xs">
+                        <IconSlot size="xs" label={rLabel} />
+                        <span className={met ? 'text-slate-200' : 'text-red-400'}>{c.quantity} {rLabel}</span>
+                        <span className="text-slate-600 ml-auto tabular-nums">{Math.floor(have)} held</span>
                       </div>
-                    )}
-                    {buildError && <p className="text-red-400 text-xs">{buildError}</p>}
-                    <Button
-                      variant="primary" size="sm"
-                      disabled={!canAffordBuild || construct.isPending}
-                      onClick={(e) => { e.stopPropagation(); construct.mutate({ bType: bt, slot: selectedSlot! }); }}
-                    >
-                      {construct.isPending ? 'Building…' : `Build ${bName}`}
-                    </Button>
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
+
+                {/* Build button — always visible */}
+                {buildError && buildingType === bt && <p className="text-red-400 text-xs">{buildError}</p>}
+                <Button
+                  variant="primary" size="sm" className="w-full mt-auto"
+                  disabled={!allMet || construct.isPending}
+                  onClick={() => { setBuildingType(bt); construct.mutate({ bType: bt, slot: selectedSlot! }); }}
+                >
+                  {construct.isPending && buildingType === bt ? 'Building…' : `Build ${bName}`}
+                </Button>
               </div>
             );
           })}

@@ -596,12 +596,13 @@ export default function WarehousePanel({
                     >‹‹</button>
                   )}
 
-                  {/* Action modal trigger */}
+                  {/* Send caravan — primary action trigger */}
                   <button
                     onClick={() => setActionCaId(activeCaravan.id)}
-                    title="Caravan actions"
-                    className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors text-xs flex-shrink-0"
-                  >▸</button>
+                    className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium border border-slate-600 bg-slate-800 text-slate-200 hover:border-azure-500 hover:text-azure-300 hover:bg-slate-700 transition-colors"
+                  >
+                    Send <span className="text-[10px] opacity-60">›</span>
+                  </button>
                 </div>
               );
             })()}
