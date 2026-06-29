@@ -71,10 +71,12 @@ export default function ChatPage() {
     const socket = getSocket();
 
     const handleMessage = (msg: ChatMessageItem) => {
-      // Prepend to cached array (which is newest-first from server)
+      // Cache shape is { messages: ChatMessageItem[] } — prepend to inner array
       qc.setQueryData(
         ['chat-messages', msg.roomId],
-        (old: ChatMessageItem[] | undefined) => (old ? [msg, ...old] : [msg]),
+        (old: { messages: ChatMessageItem[] } | undefined) => ({
+          messages: old ? [msg, ...old.messages] : [msg],
+        }),
       );
     };
 

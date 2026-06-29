@@ -45,9 +45,15 @@ export function createSocketServer(httpServer: HttpServer): Server {
 
     socket.on(WsEvent.CHAT_SEND, async (data: unknown) => {
       try {
-        const parsed     = SendChatMessageSchema.parse(data);
-        const empireId   = socket.data.empireId as number | undefined;
-        if (!empireId) return;
+        const parsed = SendChatMessageSchema.parse(data);
+        // empireId is set in the async init; fall back to a DB lookup if still missing
+        let empireId = socket.data.empireId as number | undefined;
+        if (!empireId) {
+          const emp = await db.empire.findUnique({ where: { playerId }, select: { id: true } });
+          if (!emp) return;
+          empireId = emp.id;
+          socket.data.empireId = empireId;
+        }
 
         // Verify membership
         const member = await db.chatRoomMember.findUnique({
