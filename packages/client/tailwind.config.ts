@@ -5,12 +5,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        parchment: { 50: '#fdf8f0', 100: '#f7edd6', 200: '#eedcb0' },
-        stone: { 600: '#57534e', 700: '#44403c', 800: '#292524', 900: '#1c1917' },
-        gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' },
+        // Interactive / brand blue — primary actions, highlights, focus rings
+        azure: {
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+        },
+        // Currency / value gold — gold balance, resource costs, economic values
+        gold: {
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+        },
       },
     },
   },
-  // Note: standard tailwind zinc colors are available (zinc-950=#09090b, zinc-900=#18181b, zinc-800=#27272a, etc.)
   plugins: [],
 } satisfies Config;

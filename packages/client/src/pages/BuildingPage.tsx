@@ -23,49 +23,49 @@ export default function BuildingPage() {
 
   const building = keepData?.keep.buildings.find((b) => b.id === buildingId);
 
-  if (!building) return <div className="p-8 text-stone-400 text-sm">Loading...</div>;
+  if (!building) return <div className="p-8 text-slate-400 text-sm">Loading...</div>;
 
   const buildingTypeCode = BUILDING_TYPE_BY_ID[building.buildingTypeId] as BuildingType | undefined;
   const workerCost = building.level * WORKERS_PER_LEVEL;
 
   return (
     <div className="p-8 max-w-lg">
-      <button onClick={() => navigate(`/kingdom/${keepId}/buildings`)} className="text-stone-500 hover:text-stone-300 text-xs mb-5">← Buildings</button>
+      <button onClick={() => navigate(`/kingdom/${keepId}/buildings`)} className="text-slate-500 hover:text-slate-300 text-xs mb-5">← Buildings</button>
 
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-parchment-100">
+          <h1 className="text-xl font-semibold text-slate-100">
             {buildingTypeCode ? (BUILDING_NAMES[buildingTypeCode as keyof typeof BUILDING_NAMES] ?? buildingTypeCode) : String(building.buildingTypeId)}
           </h1>
-          <div className="text-stone-500 text-sm mt-1">
+          <div className="text-slate-500 text-sm mt-1">
             Level {building.level}
-            <span className="mx-1.5 text-stone-700">·</span>
+            <span className="mx-1.5 text-slate-700">·</span>
             {building.health.toFixed(0)}% health
             {building.isDormant && <span className="text-red-400 ml-2">Dormant</span>}
           </div>
         </div>
         <button
           onClick={() => { if (window.confirm('Demolish this building?')) demolish.mutate(); }}
-          className="text-stone-500 hover:text-red-400 text-xs border border-stone-700 hover:border-red-800 px-3 py-1.5 rounded transition-colors"
+          className="text-slate-500 hover:text-red-400 text-xs border border-slate-700 hover:border-red-800 px-3 py-1.5 rounded transition-colors"
         >
           Demolish
         </button>
       </div>
 
-      <div className="border border-stone-700 rounded p-4 bg-stone-800 space-y-2 text-sm">
+      <div className="border border-slate-700 rounded p-4 bg-slate-800 space-y-2 text-sm">
         <div className="flex justify-between">
-          <span className="text-stone-500">Workers required</span>
-          <span className="text-parchment-200">{workerCost} ({WORKERS_PER_LEVEL} × Lv.{building.level})</span>
+          <span className="text-slate-500">Workers required</span>
+          <span className="text-slate-200">{workerCost} ({WORKERS_PER_LEVEL} × Lv.{building.level})</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-stone-500">Status</span>
-          <span className={building.isDormant ? 'text-red-400' : building.isActive ? 'text-stone-300' : 'text-stone-500'}>
+          <span className="text-slate-500">Status</span>
+          <span className={building.isDormant ? 'text-red-400' : building.isActive ? 'text-slate-300' : 'text-slate-500'}>
             {building.isDormant ? 'Dormant' : building.isActive ? 'Active' : 'Inactive'}
           </span>
         </div>
       </div>
 
-      <p className="text-stone-600 text-xs mt-4">Manage production orders from the Keep overview.</p>
+      <p className="text-slate-600 text-xs mt-4">Manage production orders from the Keep overview.</p>
     </div>
   );
 }

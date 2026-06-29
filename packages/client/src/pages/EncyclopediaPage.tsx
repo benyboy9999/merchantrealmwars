@@ -52,16 +52,16 @@ function RecipeRow({ recipe }: { recipe: Recipe }) {
       : recipe.inputs.map(i => `${i.quantity}× ${rName(i.resource)}`).join('  ·  ');
 
   return (
-    <div className="py-2.5 border-b border-stone-700 last:border-0">
+    <div className="py-2.5 border-b border-slate-700 last:border-0">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-parchment-100 text-sm font-medium">
+        <span className="text-slate-100 text-sm font-medium">
           {recipe.outputQty}× {rName(recipe.output)}
         </span>
-        <span className="text-stone-400 text-xs shrink-0">{fmtTime(recipe.timeMinutes)}</span>
+        <span className="text-slate-400 text-xs shrink-0">{fmtTime(recipe.timeMinutes)}</span>
       </div>
-      <div className="mt-0.5 text-xs text-stone-400 leading-relaxed">{inputs}</div>
+      <div className="mt-0.5 text-xs text-slate-400 leading-relaxed">{inputs}</div>
       {recipe.reqTech > 0 && (
-        <span className="mt-1.5 inline-block px-1.5 py-0.5 rounded text-xs bg-zinc-800 text-gold-400 border border-gold-500/20">
+        <span className="mt-1.5 inline-block px-1.5 py-0.5 rounded text-xs bg-slate-800 text-gold-400 border border-gold-500/20">
           Tech {recipe.reqTech}
         </span>
       )}
@@ -73,9 +73,9 @@ function BuildingCard({ buildingType, recipes }: { buildingType: string; recipes
   const tier = bTier(buildingType);
 
   return (
-    <div className="bg-stone-800 border border-stone-700 rounded-lg overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 bg-stone-900 border-b border-stone-700">
-        <span className="text-parchment-100 font-semibold text-sm">{bName(buildingType)}</span>
+    <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 bg-slate-900 border-b border-slate-700">
+        <span className="text-slate-100 font-semibold text-sm">{bName(buildingType)}</span>
         {tier >= 2 && (
           <span className="ml-auto px-1.5 py-0.5 rounded text-xs border border-gold-500/30 text-gold-400">
             T{tier}
@@ -95,9 +95,9 @@ function BuildingCard({ buildingType, recipes }: { buildingType: string; recipes
 
 function SummaryBar({ recipeCount, buildingCount }: { recipeCount: number; buildingCount: number }) {
   return (
-    <div className="flex gap-6 text-xs text-stone-500 mb-6">
-      <span><span className="text-stone-300 font-medium">{buildingCount}</span> buildings</span>
-      <span><span className="text-stone-300 font-medium">{recipeCount}</span> recipes</span>
+    <div className="flex gap-6 text-xs text-slate-500 mb-6">
+      <span><span className="text-slate-300 font-medium">{buildingCount}</span> buildings</span>
+      <span><span className="text-slate-300 font-medium">{recipeCount}</span> recipes</span>
     </div>
   );
 }
@@ -150,8 +150,8 @@ export default function EncyclopediaPage() {
     <div className="max-w-7xl mx-auto px-6 py-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-parchment-100 text-2xl font-bold mb-1">Encyclopedia</h1>
-        <p className="text-stone-400 text-sm">All buildings, items, and production chains</p>
+        <h1 className="text-slate-100 text-2xl font-bold mb-1">Encyclopedia</h1>
+        <p className="text-slate-400 text-sm">All buildings, items, and production chains</p>
       </div>
 
       {/* Specialisation filter */}
@@ -163,7 +163,7 @@ export default function EncyclopediaPage() {
             className={`px-3 py-1.5 rounded text-xs font-medium transition-colors border ${
               s.label === activeSpec
                 ? 'border-gold-500 bg-gold-500/10 text-gold-400'
-                : 'border-stone-600 bg-stone-800 text-stone-400 hover:border-stone-500 hover:text-stone-300'
+                : 'border-slate-600 bg-slate-800 text-slate-400 hover:border-slate-500 hover:text-slate-300'
             }`}
           >
             {s.label}
@@ -180,16 +180,16 @@ export default function EncyclopediaPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search items, buildings…"
-            className="w-72 bg-stone-800 border border-stone-600 rounded px-3 py-2 text-sm text-parchment-100 placeholder-stone-500 focus:outline-none focus:border-gold-500 pr-16"
+            className="w-72 bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-gold-500 pr-16"
           />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-600 text-xs pointer-events-none">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs pointer-events-none">
             ⌘K
           </span>
         </div>
         {search && (
           <button
             onClick={() => setSearch('')}
-            className="text-xs text-stone-400 hover:text-stone-200"
+            className="text-xs text-slate-400 hover:text-slate-200"
           >
             Clear
           </button>
@@ -200,7 +200,7 @@ export default function EncyclopediaPage() {
 
       {/* Results */}
       {byBuilding.length === 0 ? (
-        <div className="py-20 text-center text-stone-500 text-sm">No results</div>
+        <div className="py-20 text-center text-slate-500 text-sm">No results</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {byBuilding.map(([bt, recipes]) => (

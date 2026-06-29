@@ -83,7 +83,7 @@ function DestinationPicker({
       <div className="relative">
         <input
           type="text"
-          className="w-full bg-stone-900 border border-stone-700 rounded px-2 pr-6 py-1.5 text-parchment-100 text-xs focus:outline-none focus:border-stone-500 placeholder-stone-600"
+          className="w-full bg-slate-900 border border-slate-700 rounded px-2 pr-6 py-1.5 text-slate-100 text-xs focus:outline-none focus:border-slate-500 placeholder-slate-600"
           placeholder={!selectedLabel || open ? 'Search exchanges, keeps, plots…' : ''}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setOpen(true); if (!e.target.value) onChange(null); }}
@@ -92,31 +92,31 @@ function DestinationPicker({
         />
         {selectedLabel && !open && !search && (
           <div className="absolute inset-0 pointer-events-none flex items-center px-2 pr-6">
-            <span className="text-xs text-parchment-200 truncate">{selectedLabel}</span>
+            <span className="text-xs text-slate-200 truncate">{selectedLabel}</span>
           </div>
         )}
         {selectedLabel && (
           <button
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-600 hover:text-stone-400 text-xs"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 text-xs"
             onMouseDown={(e) => { e.preventDefault(); onChange(null); setSearch(''); }}
           >✕</button>
         )}
       </div>
 
       {open && allOptions.length > 0 && (
-        <div className="absolute z-50 w-full mt-0.5 bg-stone-900 border border-stone-700 rounded shadow-xl max-h-52 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-0.5 bg-slate-900 border border-slate-700 rounded shadow-xl max-h-52 overflow-y-auto">
           {(['Exchanges', 'Keeps', 'Plots'] as const).map((group) => {
             const opts = allOptions.filter((o) => o.group === group);
             if (opts.length === 0) return null;
             return (
               <div key={group}>
-                <div className="px-2 py-0.5 text-xs text-stone-600 uppercase tracking-wider bg-stone-900 sticky top-0">
+                <div className="px-2 py-0.5 text-xs text-slate-600 uppercase tracking-wider bg-slate-900 sticky top-0">
                   {group}
                 </div>
                 {opts.map((opt) => (
                   <button
                     key={`${opt.type}-${opt.id}`}
-                    className="w-full text-left px-3 py-1.5 text-xs text-stone-300 hover:bg-stone-800 hover:text-parchment-200 transition-colors"
+                    className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-200 transition-colors"
                     onMouseDown={() => { onChange({ type: opt.type, id: opt.id }); setSearch(''); setOpen(false); }}
                   >
                     {opt.label}
@@ -142,22 +142,22 @@ function TransferPopup({ label, maxQty, onConfirm, onClose, isPending = false }:
   const n = Number(qty);
   const valid = n > 0 && n <= maxQty;
   return (
-    <div className="mx-3 mb-2 mt-0.5 border border-stone-600 rounded bg-stone-900 px-3 py-2.5 text-xs">
-      <div className="text-stone-500 mb-2">{label}</div>
+    <div className="mx-3 mb-2 mt-0.5 border border-slate-600 rounded bg-slate-900 px-3 py-2.5 text-xs">
+      <div className="text-slate-500 mb-2">{label}</div>
       <div className="flex items-center gap-2">
         <input
           autoFocus type="number" min={1} max={Math.floor(maxQty)}
-          className="w-20 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-parchment-100 text-right focus:outline-none focus:border-stone-500"
+          className="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100 text-right focus:outline-none focus:border-slate-500"
           value={qty}
           onChange={(e) => setQty(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && valid && !isPending) onConfirm(n); if (e.key === 'Escape') onClose(); }}
         />
-        <span className="text-stone-600">/ {Math.floor(maxQty)}</span>
+        <span className="text-slate-600">/ {Math.floor(maxQty)}</span>
         <button
-          className="bg-stone-700 hover:bg-stone-600 disabled:opacity-40 text-parchment-100 px-3 py-1 rounded"
+          className="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-100 px-3 py-1 rounded"
           disabled={!valid || isPending} onClick={() => onConfirm(n)}
         >{isPending ? '…' : 'Transfer'}</button>
-        <button className="text-stone-600 hover:text-stone-400 px-1" disabled={isPending} onClick={onClose}>✕</button>
+        <button className="text-slate-600 hover:text-slate-400 px-1" disabled={isPending} onClick={onClose}>✕</button>
       </div>
     </div>
   );
@@ -347,18 +347,18 @@ export default function WarehousePanel({
   }
 
   return (
-    <div className={`grid grid-cols-2 divide-x divide-stone-700/60 overflow-hidden ${className}`}>
+    <div className={`grid grid-cols-2 divide-x divide-slate-700/60 overflow-hidden ${className}`}>
 
       {/* ── Left: inventory ──────────────────────────────────────────────── */}
       <div className="flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-stone-700/60 flex-shrink-0">
-          <span className="text-xs uppercase tracking-wider text-stone-500">{locationLabel}</span>
-          <span className="text-xs text-stone-600">{totalWeight.toFixed(1)} kg</span>
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
+          <span className="text-xs uppercase tracking-wider text-slate-500">{locationLabel}</span>
+          <span className="text-xs text-slate-600">{totalWeight.toFixed(1)} kg</span>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {inventory.length === 0 ? (
-            <div className="p-4 text-stone-600 text-sm">Nothing here yet.</div>
+            <div className="p-4 text-slate-600 text-sm">Nothing here yet.</div>
           ) : (
             <div>
               {inventory.filter((e) => e.quantity > 0).sort((a, b) => b.quantity - a.quantity).map((e) => {
@@ -368,19 +368,19 @@ export default function WarehousePanel({
                 const canLoad = hereCaravans.length > 0 && maxLoadable(e.resourceType, activeCaravanId) > 0;
 
                 return (
-                  <div key={e.resourceType} className="border-b border-stone-800/40">
-                    <div className="flex items-center px-4 py-2 hover:bg-stone-800/30 gap-2">
-                      <span className="flex-1 text-sm text-stone-300">{rName(e.resourceType)}</span>
-                      <span className="text-parchment-200 font-mono tabular-nums text-sm w-12 text-right">{e.quantity.toFixed(0)}</span>
+                  <div key={e.resourceType} className="border-b border-slate-800/40">
+                    <div className="flex items-center px-4 py-2 hover:bg-slate-800/30 gap-2">
+                      <span className="flex-1 text-sm text-slate-300">{rName(e.resourceType)}</span>
+                      <span className="text-slate-200 font-mono tabular-nums text-sm w-12 text-right">{e.quantity.toFixed(0)}</span>
                       {showSell && (
                         <button
-                          className={`text-xs px-1.5 py-0.5 border rounded transition-colors ${isSellOpen ? 'border-gold-600 text-gold-400' : 'border-stone-700 text-stone-500 hover:border-stone-500 hover:text-stone-300'}`}
+                          className={`text-xs px-1.5 py-0.5 border rounded transition-colors ${isSellOpen ? 'border-gold-600 text-gold-400' : 'border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300'}`}
                           onClick={() => { setLoadPopup(null); setSellPopup(sellPopup === e.resourceType ? null : e.resourceType); }}
                         >Sell</button>
                       )}
                       {hereCaravans.length > 0 && (
                         <button
-                          className={`w-6 h-6 flex items-center justify-center border rounded text-sm transition-colors ${isLoadOpen ? 'border-parchment-200 text-parchment-200' : 'border-stone-600 text-stone-400 hover:border-stone-400 hover:text-parchment-200'}`}
+                          className={`w-6 h-6 flex items-center justify-center border rounded text-sm transition-colors ${isLoadOpen ? 'border-slate-200 text-slate-200' : 'border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200'}`}
                           title="Load into caravan"
                           onClick={() => isLoadOpen ? setLoadPopup(null) : openLoadPopup(e.resourceType)}
                           disabled={!canLoad}
@@ -389,12 +389,12 @@ export default function WarehousePanel({
                     </div>
 
                     {isLoadOpen && (
-                      <div className="mx-3 mb-2 mt-0.5 border border-stone-600 rounded bg-stone-900 px-3 py-2.5 text-xs">
+                      <div className="mx-3 mb-2 mt-0.5 border border-slate-600 rounded bg-slate-900 px-3 py-2.5 text-xs">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-stone-500">Load into</span>
+                          <span className="text-slate-500">Load into</span>
                           {hereCaravans.length > 1 ? (
                             <select
-                              className="bg-stone-800 border border-stone-700 rounded px-2 py-0.5 text-parchment-100 text-xs focus:outline-none"
+                              className="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs focus:outline-none"
                               value={loadPopup.caravanId}
                               onChange={(ev) => {
                                 const cId = parseInt(ev.target.value);
@@ -405,7 +405,7 @@ export default function WarehousePanel({
                               {hereCaravans.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                           ) : (
-                            <span className="text-parchment-200">{hereCaravans[0]?.name}</span>
+                            <span className="text-slate-200">{hereCaravans[0]?.name}</span>
                           )}
                         </div>
                         <TransferPopup
@@ -426,7 +426,7 @@ export default function WarehousePanel({
                     )}
 
                     {isSellOpen && onSell && (
-                      <div className="mx-3 mb-2 mt-0.5 border border-stone-600 rounded bg-stone-900 px-3 py-2.5 text-xs">
+                      <div className="mx-3 mb-2 mt-0.5 border border-slate-600 rounded bg-slate-900 px-3 py-2.5 text-xs">
                         <TransferPopup
                           label={`Sell ${rName(e.resourceType)} to NPC (1g/unit)`}
                           maxQty={e.quantity}
@@ -443,8 +443,8 @@ export default function WarehousePanel({
         </div>
 
         {goldBalance !== undefined && (
-          <div className="flex justify-between items-center px-4 py-2 border-t border-stone-700/60 flex-shrink-0">
-            <span className="text-xs text-stone-600">Gold</span>
+          <div className="flex justify-between items-center px-4 py-2 border-t border-slate-700/60 flex-shrink-0">
+            <span className="text-xs text-slate-600">Gold</span>
             <span className="text-gold-400 font-mono text-sm">{goldBalance.toFixed(0)}g</span>
           </div>
         )}
@@ -452,8 +452,8 @@ export default function WarehousePanel({
 
       {/* ── Right: caravans ──────────────────────────────────────────────── */}
       <div className="flex flex-col overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-stone-700/60 flex-shrink-0">
-          <span className="text-xs uppercase tracking-wider text-stone-500">Caravans</span>
+        <div className="px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
+          <span className="text-xs uppercase tracking-wider text-slate-500">Caravans</span>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -463,7 +463,7 @@ export default function WarehousePanel({
             </div>
           )}
           {!caravansError && allCaravans.length === 0 && (
-            <div className="p-4 text-stone-600 text-sm">No caravans.</div>
+            <div className="p-4 text-slate-600 text-sm">No caravans.</div>
           )}
 
           {/* Here caravans — idle at this location */}
@@ -475,31 +475,31 @@ export default function WarehousePanel({
             const d          = dest[c.id] ?? null;
 
             return (
-              <div key={c.id} className="border-b border-stone-800/60">
+              <div key={c.id} className="border-b border-slate-800/60">
                 {/* Clickable caravan header */}
                 <button
-                  className="w-full px-4 pt-3 pb-2 text-left hover:bg-stone-800/30 transition-colors"
+                  className="w-full px-4 pt-3 pb-2 text-left hover:bg-slate-800/30 transition-colors"
                   onClick={() => toggleExpand(c.id)}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-parchment-200">{c.name}</span>
+                    <span className="text-sm text-slate-200">{c.name}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-stone-600">{c.animalCount} mule{c.animalCount !== 1 ? 's' : ''}</span>
-                      <span className={`text-stone-600 text-xs transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
+                      <span className="text-xs text-slate-600">{c.animalCount} mule{c.animalCount !== 1 ? 's' : ''}</span>
+                      <span className={`text-slate-600 text-xs transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
                     </div>
                   </div>
-                  <div className="flex justify-between text-xs text-stone-600 mb-1">
+                  <div className="flex justify-between text-xs text-slate-600 mb-1">
                     <span>{items.length === 0 ? 'Empty' : `${items.length} item${items.length !== 1 ? 's' : ''}`}</span>
                     <span>{cargoKg.toFixed(0)} / {maxKg} kg</span>
                   </div>
-                  <div className="h-0.5 bg-stone-700 rounded">
-                    <div className="h-0.5 rounded bg-stone-500" style={{ width: `${Math.min(100, cargoKg / maxKg * 100)}%` }} />
+                  <div className="h-0.5 bg-slate-700 rounded">
+                    <div className="h-0.5 rounded bg-slate-500" style={{ width: `${Math.min(100, cargoKg / maxKg * 100)}%` }} />
                   </div>
                 </button>
 
                 {/* Expanded panel: cargo detail + dispatch */}
                 {isExpanded && (
-                  <div className="border-t border-stone-800/40">
+                  <div className="border-t border-slate-800/40">
                     {/* Cargo items */}
                     {items.length > 0 && (
                       <div className="px-4 py-2 space-y-0.5">
@@ -509,15 +509,15 @@ export default function WarehousePanel({
                             <div key={cargo.resourceType}>
                               <div className="flex items-center gap-2 py-1">
                                 <button
-                                  className={`w-5 h-5 flex items-center justify-center border rounded text-xs transition-colors flex-shrink-0 ${isUnloadOpen ? 'border-parchment-200 text-parchment-200' : 'border-stone-600 text-stone-500 hover:border-stone-400 hover:text-parchment-200'}`}
+                                  className={`w-5 h-5 flex items-center justify-center border rounded text-xs transition-colors flex-shrink-0 ${isUnloadOpen ? 'border-slate-200 text-slate-200' : 'border-slate-600 text-slate-500 hover:border-slate-400 hover:text-slate-200'}`}
                                   title="Unload to warehouse"
                                   onClick={() => isUnloadOpen ? setUnloadPopup(null) : openUnloadPopup(c.id, cargo.resourceType)}
                                 >‹</button>
-                                <span className="flex-1 text-xs text-stone-400">{rName(cargo.resourceType)}</span>
-                                <span className="text-parchment-200 font-mono text-xs w-10 text-right">{cargo.quantity.toFixed(0)}</span>
+                                <span className="flex-1 text-xs text-slate-400">{rName(cargo.resourceType)}</span>
+                                <span className="text-slate-200 font-mono text-xs w-10 text-right">{cargo.quantity.toFixed(0)}</span>
                               </div>
                               {isUnloadOpen && (
-                                <div className="mb-1 border border-stone-600 rounded bg-stone-900 px-3 py-2">
+                                <div className="mb-1 border border-slate-600 rounded bg-slate-900 px-3 py-2">
                                   <TransferPopup
                                     label={`Unload to ${locationLabel}`}
                                     maxQty={cargo.quantity}
@@ -540,8 +540,8 @@ export default function WarehousePanel({
                     )}
 
                     {/* Dispatch section */}
-                    <div className="px-4 pb-3 pt-2 border-t border-stone-800/40 space-y-2">
-                      <div className="text-xs text-stone-600 uppercase tracking-wider">Send to</div>
+                    <div className="px-4 pb-3 pt-2 border-t border-slate-800/40 space-y-2">
+                      <div className="text-xs text-slate-600 uppercase tracking-wider">Send to</div>
 
                       <DestinationPicker
                         value={d}
@@ -553,7 +553,7 @@ export default function WarehousePanel({
                       />
 
                       <button
-                        className="w-full text-xs py-1.5 border border-stone-600 rounded text-stone-400 hover:text-parchment-100 hover:border-stone-500 hover:bg-stone-800/40 disabled:opacity-40 transition-colors"
+                        className="w-full text-xs py-1.5 border border-slate-600 rounded text-slate-400 hover:text-slate-100 hover:border-slate-500 hover:bg-slate-800/40 disabled:opacity-40 transition-colors"
                         disabled={!d || caravanDispatch.isPending}
                         onClick={() => d && caravanDispatch.mutate({ id: c.id, dt: d.type, di: d.id })}
                       >
@@ -571,9 +571,9 @@ export default function WarehousePanel({
 
           {/* Idle elsewhere — can dispatch, cannot load/unload */}
           {idleElsewhereCaravans.length > 0 && (
-            <div className={hereCaravans.length > 0 ? 'border-t border-stone-800' : ''}>
+            <div className={hereCaravans.length > 0 ? 'border-t border-slate-800' : ''}>
               <div className="px-4 py-1.5">
-                <span className="text-xs text-stone-700 uppercase tracking-wider">Idle</span>
+                <span className="text-xs text-slate-700 uppercase tracking-wider">Idle</span>
               </div>
               {idleElsewhereCaravans.map((c) => {
                 const elseItems  = c.warehouse?.items ?? [];
@@ -584,42 +584,42 @@ export default function WarehousePanel({
                 const atLabel    = caravanLocationName(c);
 
                 return (
-                  <div key={c.id} className="border-b border-stone-800/60">
+                  <div key={c.id} className="border-b border-slate-800/60">
                     <button
-                      className="w-full px-4 pt-3 pb-2 text-left hover:bg-stone-800/30 transition-colors"
+                      className="w-full px-4 pt-3 pb-2 text-left hover:bg-slate-800/30 transition-colors"
                       onClick={() => toggleExpand(c.id)}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-stone-400">{c.name}</span>
+                        <span className="text-sm text-slate-400">{c.name}</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-stone-600">at {atLabel}</span>
-                          <span className={`text-stone-600 text-xs transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
+                          <span className="text-xs text-slate-600">at {atLabel}</span>
+                          <span className={`text-slate-600 text-xs transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
                         </div>
                       </div>
-                      <div className="flex justify-between text-xs text-stone-600 mb-1">
+                      <div className="flex justify-between text-xs text-slate-600 mb-1">
                         <span>{elseItems.length === 0 ? 'Empty' : `${elseItems.length} item${elseItems.length !== 1 ? 's' : ''}`}</span>
                         <span>{cargoKg.toFixed(0)} / {maxKg} kg</span>
                       </div>
-                      <div className="h-0.5 bg-stone-700 rounded">
-                        <div className="h-0.5 rounded bg-stone-800" style={{ width: `${Math.min(100, cargoKg / maxKg * 100)}%` }} />
+                      <div className="h-0.5 bg-slate-700 rounded">
+                        <div className="h-0.5 rounded bg-slate-800" style={{ width: `${Math.min(100, cargoKg / maxKg * 100)}%` }} />
                       </div>
                     </button>
 
                     {isExpanded && (
-                      <div className="border-t border-stone-800/40">
+                      <div className="border-t border-slate-800/40">
                         {elseItems.length > 0 && (
                           <div className="px-4 py-2 space-y-0.5">
                             {elseItems.map((cargo) => (
                               <div key={cargo.resourceType} className="flex items-center gap-2 py-1">
-                                <span className="flex-1 text-xs text-stone-400">{rName(cargo.resourceType)}</span>
-                                <span className="text-parchment-200 font-mono text-xs w-10 text-right">{cargo.quantity.toFixed(0)}</span>
+                                <span className="flex-1 text-xs text-slate-400">{rName(cargo.resourceType)}</span>
+                                <span className="text-slate-200 font-mono text-xs w-10 text-right">{cargo.quantity.toFixed(0)}</span>
                               </div>
                             ))}
                           </div>
                         )}
 
-                        <div className="px-4 pb-3 pt-2 border-t border-stone-800/40 space-y-2">
-                          <div className="text-xs text-stone-600 uppercase tracking-wider">Send to</div>
+                        <div className="px-4 pb-3 pt-2 border-t border-slate-800/40 space-y-2">
+                          <div className="text-xs text-slate-600 uppercase tracking-wider">Send to</div>
                           <DestinationPicker
                             value={d}
                             onChange={(v) => setDest((p) => ({ ...p, [c.id]: v }))}
@@ -629,7 +629,7 @@ export default function WarehousePanel({
                             excludeExchangeId={c.locationType === 'EXCHANGE' ? c.locationId : undefined}
                           />
                           <button
-                            className="w-full text-xs py-1.5 border border-stone-600 rounded text-stone-400 hover:text-parchment-100 hover:border-stone-500 hover:bg-stone-800/40 disabled:opacity-40 transition-colors"
+                            className="w-full text-xs py-1.5 border border-slate-600 rounded text-slate-400 hover:text-slate-100 hover:border-slate-500 hover:bg-slate-800/40 disabled:opacity-40 transition-colors"
                             disabled={!d || caravanDispatch.isPending}
                             onClick={() => d && caravanDispatch.mutate({ id: c.id, dt: d.type, di: d.id })}
                           >
@@ -649,9 +649,9 @@ export default function WarehousePanel({
 
           {/* In transit — read-only progress */}
           {inTransitCaravans.length > 0 && (
-            <div className={(hereCaravans.length > 0 || idleElsewhereCaravans.length > 0) ? 'border-t border-stone-800' : ''}>
+            <div className={(hereCaravans.length > 0 || idleElsewhereCaravans.length > 0) ? 'border-t border-slate-800' : ''}>
               <div className="px-4 py-1.5">
-                <span className="text-xs text-stone-700 uppercase tracking-wider">In Transit</span>
+                <span className="text-xs text-slate-700 uppercase tracking-wider">In Transit</span>
               </div>
               {inTransitCaravans.map((c) => (
                 <AwayCaravan
@@ -702,12 +702,12 @@ function AwayCaravan({ caravan: c, onArrived }: {
     : `at ${destTypeLabel(c.locationType)}`;
 
   return (
-    <div className="px-4 py-2.5 border-b border-stone-800/40">
+    <div className="px-4 py-2.5 border-b border-slate-800/40">
       <div className="flex items-center justify-between mb-1.5 text-xs">
-        <span className="text-stone-500">{c.name}</span>
-        <span className="text-stone-600">{locationLabel}</span>
+        <span className="text-slate-500">{c.name}</span>
+        <span className="text-slate-600">{locationLabel}</span>
       </div>
-      {inTransit && <ProgressBar pct={pct} color="bg-stone-600" height="h-0.5" />}
+      {inTransit && <ProgressBar pct={pct} color="bg-slate-600" height="h-0.5" />}
     </div>
   );
 }

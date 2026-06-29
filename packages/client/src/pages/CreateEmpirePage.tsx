@@ -34,16 +34,16 @@ export default function CreateEmpirePage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
       <div className="w-full max-w-sm space-y-8 px-4">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-zinc-100 tracking-tight">Welcome</h1>
-          <p className="text-zinc-400 text-sm">Name your empire to begin</p>
+          <h1 className="text-3xl font-bold text-slate-100 tracking-tight">Welcome</h1>
+          <p className="text-slate-400 text-sm">Name your empire to begin</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 space-y-5">
+        <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-xl p-8 space-y-5">
           <div className="space-y-2">
-            <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider">
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider">
               Empire Name
             </label>
             <input
@@ -52,7 +52,7 @@ export default function CreateEmpirePage() {
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Iron Crown Trading Co."
               maxLength={40}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-azure-500 transition-colors"
               autoFocus
             />
           </div>
@@ -62,7 +62,7 @@ export default function CreateEmpirePage() {
           <button
             type="submit"
             disabled={loading || name.trim().length < 2}
-            className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-semibold py-2.5 rounded-lg transition-colors"
+            className="w-full bg-azure-500 hover:bg-azure-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold py-2.5 rounded-lg transition-colors"
           >
             {loading ? 'Creating…' : 'Found Empire'}
           </button>

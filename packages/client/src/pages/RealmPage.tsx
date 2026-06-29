@@ -5,6 +5,7 @@ import { SQRT3, hexToPixel, hexDistance, pixelToHex, axialRound } from '../utils
 import { api } from '../services/api.js';
 import { useAuthStore } from '../stores/auth.js';
 import { REGION_IDS, KEEP_FOUNDING_COST, RESOURCE_NAMES } from '@merchant-realms/shared';
+import { Modal, ModalSection, Button } from '../components/ui/index.js';
 
 interface Camera { x: number; y: number; zoom: number; }
 
@@ -336,43 +337,40 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
     const hexKey  = (dot.plotId as string).replace('exchange-', '');
     const regionId = EXCHANGE_HEX_TO_REGION_ID[hexKey] ?? REGION_IDS.CENTRAL;
     return (
-      <Overlay onClose={onClose}>
-        <PanelHeader title={dot.plotName} subtitle="Regional Exchange" onClose={onClose} />
-        <PanelActions>
-          <ActionButton variant="gold" onClick={() => { navigate(`/exchange?region=${regionId}`); onClose(); }}>
+      <Modal open onClose={onClose} title={dot.plotName} subtitle="Regional Exchange" size="sm">
+        <ModalSection>
+          <PlotActionButton variant="primary" onClick={() => { navigate(`/exchange?region=${regionId}`); onClose(); }}>
             Visit Exchange
-          </ActionButton>
-        </PanelActions>
-      </Overlay>
+          </PlotActionButton>
+        </ModalSection>
+      </Modal>
     );
   }
 
   if (dot.type === 'center') {
     return (
-      <Overlay onClose={onClose}>
-        <PanelHeader title={dot.plotName} subtitle="District Centre" onClose={onClose} />
-        <PanelSection label="Send Caravan Here">
+      <Modal open onClose={onClose} title={dot.plotName} subtitle="District Centre" size="sm">
+        <ModalSection label="Send Caravan Here">
           {dispatchMut.isError && (
             <p className="text-red-400 text-xs mb-2">{(dispatchMut.error as Error).message}</p>
           )}
           {idleCaravans.length === 0 ? (
-            <p className="text-stone-600 text-xs italic">No idle caravans available</p>
+            <p className="text-slate-600 text-xs italic">No idle caravans available</p>
           ) : (
             <div className="flex flex-col gap-1.5">
               {idleCaravans.map((c) => (
-                <button
+                <PlotActionButton
                   key={c.id}
                   disabled={dispatchMut.isPending}
                   onClick={() => dispatchMut.mutate(c.id)}
-                  className="w-full text-left text-sm px-3 py-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-parchment-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {dispatchMut.isPending ? 'Sending…' : `Send ${c.name} →`}
-                </button>
+                </PlotActionButton>
               ))}
             </div>
           )}
-        </PanelSection>
-      </Overlay>
+        </ModalSection>
+      </Modal>
     );
   }
 
@@ -399,26 +397,55 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
     (cost) => (combined.get(cost.resource) ?? 0) >= cost.quantity
   );
 
-  return (
-    <Overlay onClose={onClose}>
-      <PanelHeader title={dot.plotName} subtitle={dot.districtName} onClose={onClose} />
+  const caravanSection = (
+    <ModalSection label="Send Caravan Here">
+      {dispatchMut.isError && (
+        <p className="text-red-400 text-xs mb-2">{(dispatchMut.error as Error).message}</p>
+      )}
+      {idleCaravans.length === 0 ? (
+        <p className="text-slate-600 text-xs italic">No idle caravans available</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {idleCaravans.map((c) => (
+            <PlotActionButton
+              key={c.id}
+              disabled={dispatchMut.isPending}
+              onClick={() => dispatchMut.mutate(c.id)}
+            >
+              {dispatchMut.isPending ? 'Sending…' : `Send ${c.name} →`}
+            </PlotActionButton>
+          ))}
+        </div>
+      )}
+    </ModalSection>
+  );
 
-      <PanelActions>
-        {myKeeps.map((k) => (
-          <ActionButton key={k.id} variant="blue" onClick={() => { navigate(`/kingdom/${k.id}`); onClose(); }}>
-            View Keep — {k.name}
-          </ActionButton>
-        ))}
-        {isEmpty && caravansHere.length === 0 && (
-          <p className="text-stone-600 text-xs text-center py-1">Empty plot — send a caravan here to settle</p>
-        )}
-      </PanelActions>
+  return (
+    <Modal open onClose={onClose} title={dot.plotName} subtitle={dot.districtName} size="sm">
+      {/* My keeps on this plot */}
+      {myKeeps.length > 0 && (
+        <ModalSection>
+          <div className="flex flex-col gap-1.5">
+            {myKeeps.map((k) => (
+              <PlotActionButton key={k.id} variant="primary" onClick={() => { navigate(`/kingdom/${k.id}`); onClose(); }}>
+                View Keep — {k.name}
+              </PlotActionButton>
+            ))}
+          </div>
+        </ModalSection>
+      )}
+
+      {isEmpty && caravansHere.length === 0 && myKeeps.length === 0 && (
+        <ModalSection>
+          <p className="text-slate-600 text-xs text-center py-1">Empty plot — send a caravan here to settle</p>
+        </ModalSection>
+      )}
 
       {canSettleFirstKeep && (
-        <PanelSection label="Settle Your First Keep">
-          <p className="text-stone-500 text-xs mb-3">Free — must be in the Central region. Your keep will arrive stocked with building materials.</p>
+        <ModalSection label="Settle Your First Keep">
+          <p className="text-slate-500 text-xs mb-3">Free — must be in the Central region. Your keep will arrive stocked with building materials.</p>
           <input
-            className="w-full bg-stone-900 border border-stone-700 rounded px-3 py-2 text-parchment-100 text-sm mb-2 focus:outline-none focus:border-stone-500"
+            className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm mb-2 focus:outline-none focus:border-azure-500"
             placeholder={dot.plotName}
             value={keepName}
             maxLength={40}
@@ -428,38 +455,34 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
           {settleMut.isError && (
             <p className="text-red-400 text-xs mb-2">{(settleMut.error as Error).message}</p>
           )}
-          <ActionButton
-            variant="gold"
-            disabled={settleMut.isPending}
-            onClick={() => settleMut.mutate()}
-          >
+          <PlotActionButton variant="primary" disabled={settleMut.isPending} onClick={() => settleMut.mutate()}>
             {settleMut.isPending ? 'Founding…' : 'Found Keep Here'}
-          </ActionButton>
-        </PanelSection>
+          </PlotActionButton>
+        </ModalSection>
       )}
 
       {!isFirstKeep && isEmpty && caravansHere.length > 0 && (
-        <PanelSection label="Settle a Keep">
+        <ModalSection label="Settle a Keep">
           <div className="mb-3 space-y-1">
             {KEEP_FOUNDING_COST.map((cost) => {
               const have = combined.get(cost.resource) ?? 0;
               const met  = have >= cost.quantity;
               return (
                 <div key={cost.resource} className="flex items-center justify-between text-xs">
-                  <span className="text-stone-400">
+                  <span className="text-slate-400">
                     {RESOURCE_NAMES[cost.resource as keyof typeof RESOURCE_NAMES] ?? cost.resource}
                   </span>
-                  <span className={met ? 'text-parchment-200' : 'text-red-400'}>
+                  <span className={met ? 'text-slate-200' : 'text-red-400'}>
                     {Math.floor(have)} / {cost.quantity}
                   </span>
                 </div>
               );
             })}
           </div>
-          {canSettle && (
+          {canSettle ? (
             <>
               <input
-                className="w-full bg-stone-900 border border-stone-700 rounded px-3 py-2 text-parchment-100 text-sm mb-2 focus:outline-none focus:border-stone-500"
+                className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm mb-2 focus:outline-none focus:border-azure-500"
                 placeholder={dot.plotName}
                 value={keepName}
                 maxLength={40}
@@ -469,144 +492,45 @@ function PlotPanel({ dot, onClose }: { dot: PlotDot; onClose: () => void }) {
               {settleMut.isError && (
                 <p className="text-red-400 text-xs mb-2">{(settleMut.error as Error).message}</p>
               )}
-              <ActionButton
-                variant="gold"
-                disabled={settleMut.isPending}
-                onClick={() => settleMut.mutate()}
-              >
+              <PlotActionButton variant="primary" disabled={settleMut.isPending} onClick={() => settleMut.mutate()}>
                 {settleMut.isPending ? 'Founding…' : 'Found Keep Here'}
-              </ActionButton>
+              </PlotActionButton>
             </>
-          )}
-          {!canSettle && (
-            <p className="text-stone-600 text-xs italic">Not enough materials to settle here</p>
-          )}
-        </PanelSection>
-      )}
-
-      {!isEmpty && (
-        <PanelSection label="Send Caravan Here">
-          {dispatchMut.isError && (
-            <p className="text-red-400 text-xs mb-2">{(dispatchMut.error as Error).message}</p>
-          )}
-          {idleCaravans.length === 0 ? (
-            <p className="text-stone-600 text-xs italic">No idle caravans available</p>
           ) : (
-            <div className="flex flex-col gap-1.5">
-              {idleCaravans.map((c) => (
-                <button
-                  key={c.id}
-                  disabled={dispatchMut.isPending}
-                  onClick={() => dispatchMut.mutate(c.id)}
-                  className="w-full text-left text-sm px-3 py-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-parchment-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {dispatchMut.isPending ? 'Sending…' : `Send ${c.name} →`}
-                </button>
-              ))}
-            </div>
+            <p className="text-slate-600 text-xs italic">Not enough materials to settle here</p>
           )}
-        </PanelSection>
+        </ModalSection>
       )}
 
-      {isEmpty && caravansHere.length === 0 && idleCaravans.length > 0 && (
-        <PanelSection label="Send Caravan Here">
-          {dispatchMut.isError && (
-            <p className="text-red-400 text-xs mb-2">{(dispatchMut.error as Error).message}</p>
-          )}
-          <div className="flex flex-col gap-1.5">
-            {idleCaravans.map((c) => (
-              <button
-                key={c.id}
-                disabled={dispatchMut.isPending}
-                onClick={() => dispatchMut.mutate(c.id)}
-                className="w-full text-left text-sm px-3 py-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-parchment-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {dispatchMut.isPending ? 'Sending…' : `Send ${c.name} →`}
-              </button>
-            ))}
-          </div>
-        </PanelSection>
-      )}
+      {/* Send caravan section — shown when plot is occupied or empty with idle caravans */}
+      {(!isEmpty || (isEmpty && caravansHere.length === 0 && idleCaravans.length > 0)) && caravanSection}
 
       {otherKeeps.length > 0 && (
-        <PanelSection label="Occupied by">
+        <ModalSection label="Occupied by">
           {otherKeeps.map((k) => (
-            <div key={k.id} className="py-1.5 border-b border-stone-800 last:border-0">
-              <span className="text-stone-400 text-xs">{k.name}</span>
+            <div key={k.id} className="py-1.5 border-b border-slate-800 last:border-0">
+              <span className="text-slate-400 text-xs">{k.name}</span>
             </div>
           ))}
-        </PanelSection>
+        </ModalSection>
       )}
-    </Overlay>
+    </Modal>
   );
 }
 
-// ── Panel sub-components (modular, easy to extend) ────────────────────────────
-
-function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={onClose}>
-      <div
-        className="bg-stone-900 border border-stone-700 rounded-t-xl sm:rounded-xl w-full sm:w-96 shadow-2xl overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function PanelHeader({ title, subtitle, onClose }: { title: string; subtitle: string; onClose: () => void }) {
-  return (
-    <div className="flex items-start justify-between px-5 pt-5 pb-4 border-b border-stone-800">
-      <div>
-        <h2 className="text-parchment-100 font-semibold text-base leading-tight">{title}</h2>
-        <p className="text-stone-500 text-xs mt-0.5">{subtitle}</p>
-      </div>
-      <button onClick={onClose} className="text-stone-500 hover:text-stone-300 text-xl leading-none ml-4 mt-0.5 transition-colors">×</button>
-    </div>
-  );
-}
-
-function PanelSection({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="px-5 py-4 border-b border-stone-800">
-      <h3 className="text-[10px] font-medium text-stone-500 uppercase tracking-wider mb-2.5">{label}</h3>
-      {children}
-    </div>
-  );
-}
-
-function PanelActions({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="px-5 py-4 flex flex-col gap-2">
-      {children}
-    </div>
-  );
-}
-
-function ActionButton({
-  children, onClick, variant, disabled,
+// Local helpers that wrap Modal for the plot panel action buttons
+function PlotActionButton({
+  children, onClick, variant = 'secondary', disabled,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
-  variant: 'gold' | 'blue' | 'muted';
+  variant?: 'primary' | 'secondary' | 'ghost';
   disabled?: boolean;
 }) {
-  const base = 'w-full text-sm rounded px-3 py-2 transition-colors font-medium';
-  const styles = {
-    gold:  'bg-amber-800 hover:bg-amber-700 text-amber-100',
-    blue:  'bg-blue-800 hover:bg-blue-700 text-blue-100',
-    muted: 'text-stone-500 hover:text-stone-300',
-  };
   return (
-    <button
-      className={`${base} ${styles[variant]} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-      onClick={onClick}
-      disabled={disabled}
-    >
+    <Button variant={variant} size="md" onClick={onClick} disabled={disabled} className="w-full justify-start">
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -850,9 +774,9 @@ export default function RealmPage() {
 
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 48px)' }}>
-      <div className="flex items-center gap-4 px-6 py-3 border-b border-stone-800 shrink-0">
-        <h1 className="text-sm font-semibold text-parchment-100">Realm Map</h1>
-        <span className="text-xs text-stone-500">Scroll to zoom · Drag to pan · Click a plot</span>
+      <div className="flex items-center gap-4 px-6 py-3 border-b border-slate-800 shrink-0">
+        <h1 className="text-sm font-semibold text-slate-100">Realm Map</h1>
+        <span className="text-xs text-slate-500">Scroll to zoom · Drag to pan · Click a plot</span>
       </div>
       {districtsError && (
         <div className="flex-1 flex items-center justify-center">
@@ -861,7 +785,7 @@ export default function RealmPage() {
       )}
       {districtsLoading && !districtsData && (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-stone-500 text-sm">Loading realm map…</span>
+          <span className="text-slate-500 text-sm">Loading realm map…</span>
         </div>
       )}
       <canvas

@@ -12,7 +12,7 @@ export default function AdminPage() {
     <div className="p-6 max-w-5xl">
       <h1 className="text-2xl font-bold text-gold-400 mb-5">Admin</h1>
 
-      <div className="flex gap-1 mb-6 border-b border-stone-700">
+      <div className="flex gap-1 mb-6 border-b border-slate-700">
         {(['controls', 'players'] as Tab[]).map((t) => (
           <button
             key={t}
@@ -20,7 +20,7 @@ export default function AdminPage() {
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
               tab === t
                 ? 'border-gold-400 text-gold-400'
-                : 'border-transparent text-stone-400 hover:text-parchment-200'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             {t}
@@ -55,16 +55,16 @@ function ControlsTab() {
 
   return (
     <div className="max-w-2xl space-y-4">
-      <div className="bg-stone-800 border border-stone-700 rounded-lg p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <span className="text-stone-500">Last tick</span>
-            <div className="text-parchment-200 font-mono mt-0.5">
+            <span className="text-slate-500">Last tick</span>
+            <div className="text-slate-200 font-mono mt-0.5">
               {last ? `#${last.tickNumber} (${last.durationMs}ms)` : 'None yet'}
             </div>
           </div>
           <div>
-            <span className="text-stone-500">Admin bypass</span>
+            <span className="text-slate-500">Admin bypass</span>
             <div className={`font-semibold mt-0.5 ${status?.bypassEnabled ? 'text-green-400' : 'text-red-400'}`}>
               {status?.bypassEnabled ? 'ON — no resource constraints' : 'OFF — normal rules'}
             </div>
@@ -73,52 +73,52 @@ function ControlsTab() {
       </div>
 
       <button
-        className="w-full bg-gold-600 hover:bg-gold-500 text-stone-900 font-bold py-3 rounded-lg text-sm"
+        className="w-full bg-azure-500 hover:bg-azure-400 text-white font-bold py-3 rounded-lg text-sm"
         onClick={() => tick.mutate()} disabled={tick.isPending}
       >
         {tick.isPending ? 'Running tick...' : '⚡ Run Tick Now'}
       </button>
       {tick.data && (
-        <div className="text-xs text-stone-400 text-center">
+        <div className="text-xs text-slate-400 text-center">
           Tick {tick.data.tickNumber} — {tick.data.durationMs}ms · produced: {tick.data.produced} · delivered: {tick.data.delivered}
         </div>
       )}
 
       <button
-        className="w-full bg-stone-700 hover:bg-stone-600 text-parchment-200 font-medium py-3 rounded-lg text-sm"
+        className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-3 rounded-lg text-sm"
         onClick={() => completeProduction.mutate()} disabled={completeProduction.isPending}
       >
         ⚒ Complete All Production Queues
       </button>
       {completeProduction.data && (
-        <div className="text-xs text-stone-400 text-center">
+        <div className="text-xs text-slate-400 text-center">
           {completeProduction.data.completed} batch{completeProduction.data.completed !== 1 ? 'es' : ''} completed
         </div>
       )}
 
       <button
-        className="w-full bg-stone-700 hover:bg-stone-600 text-parchment-200 font-medium py-3 rounded-lg text-sm"
+        className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-3 rounded-lg text-sm"
         onClick={() => completeCaravans.mutate()} disabled={completeCaravans.isPending}
       >
         🚚 Instant Complete All Caravans
       </button>
       {completeCaravans.data && (
-        <div className="text-xs text-stone-400 text-center">
+        <div className="text-xs text-slate-400 text-center">
           {completeCaravans.data.completed} caravan{completeCaravans.data.completed !== 1 ? 's' : ''} delivered
         </div>
       )}
 
       <div className="flex gap-3 pt-2">
         <button
-          className={`flex-1 py-2 rounded-lg text-sm font-medium border ${status?.bypassEnabled ? 'border-green-600 text-green-400' : 'border-stone-600 text-stone-400'}`}
+          className={`flex-1 py-2 rounded-lg text-sm font-medium border ${status?.bypassEnabled ? 'border-green-600 text-green-400' : 'border-slate-600 text-slate-400'}`}
           onClick={() => bypass.mutate(true)}
         >Bypass ON</button>
         <button
-          className={`flex-1 py-2 rounded-lg text-sm font-medium border ${!status?.bypassEnabled ? 'border-red-600 text-red-400' : 'border-stone-600 text-stone-400'}`}
+          className={`flex-1 py-2 rounded-lg text-sm font-medium border ${!status?.bypassEnabled ? 'border-red-600 text-red-400' : 'border-slate-600 text-slate-400'}`}
           onClick={() => bypass.mutate(false)}
         >Bypass OFF</button>
       </div>
-      <p className="text-xs text-stone-600 text-center">Bypass ON = no resource constraints, workers, or feed requirements</p>
+      <p className="text-xs text-slate-600 text-center">Bypass ON = no resource constraints, workers, or feed requirements</p>
     </div>
   );
 }
@@ -131,7 +131,7 @@ function PlayersTab({ selectedId, onSelect }: { selectedId: number | null; onSel
     queryFn:  () => api.adminPlayers(),
   });
 
-  if (isLoading) return <div className="text-stone-500 text-sm">Loading players…</div>;
+  if (isLoading) return <div className="text-slate-500 text-sm">Loading players…</div>;
   if (isError) return <QueryError error={error} label="players" />;
 
   return (
@@ -144,18 +144,18 @@ function PlayersTab({ selectedId, onSelect }: { selectedId: number | null; onSel
             onClick={() => onSelect(selectedId === p.id ? null : p.id)}
             className={`w-full text-left px-3 py-2.5 rounded-lg border transition-colors ${
               selectedId === p.id
-                ? 'bg-stone-700 border-gold-600'
-                : 'bg-stone-800 border-stone-700 hover:border-stone-500'
+                ? 'bg-slate-700 border-gold-600'
+                : 'bg-slate-800 border-slate-700 hover:border-slate-500'
             }`}
           >
             <div className="flex items-center gap-2">
-              <span className="text-parchment-100 text-sm font-medium truncate">
-                {p.empire?.name ?? <span className="text-stone-500 italic">No empire</span>}
+              <span className="text-slate-100 text-sm font-medium truncate">
+                {p.empire?.name ?? <span className="text-slate-500 italic">No empire</span>}
               </span>
               {p.isAdmin && <span className="text-xs text-gold-400 shrink-0">ADMIN</span>}
             </div>
-            <div className="text-xs text-stone-500 truncate mt-0.5">{p.email}</div>
-            <div className="flex gap-3 mt-1 text-xs text-stone-400">
+            <div className="text-xs text-slate-500 truncate mt-0.5">{p.email}</div>
+            <div className="flex gap-3 mt-1 text-xs text-slate-400">
               <span>{(p.empire?.goldBalance ?? 0).toLocaleString()}g</span>
               <span>{p.empire?._count.keeps ?? 0} keeps</span>
               <span>{p.empire?._count.caravans ?? 0} caravans</span>
@@ -163,7 +163,7 @@ function PlayersTab({ selectedId, onSelect }: { selectedId: number | null; onSel
           </button>
         ))}
         {data?.players.length === 0 && (
-          <div className="text-stone-500 text-sm">No players yet</div>
+          <div className="text-slate-500 text-sm">No players yet</div>
         )}
       </div>
 
@@ -229,7 +229,7 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
     onError: (e: Error) => setMsg(`Error: ${e.message}`),
   });
 
-  if (isLoading) return <div className="text-stone-500 text-sm">Loading…</div>;
+  if (isLoading) return <div className="text-slate-500 text-sm">Loading…</div>;
   if (isError) return <QueryError error={error} label="player detail" />;
   const p = data?.player;
   if (!p) return null;
@@ -240,14 +240,14 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="bg-stone-800 border border-stone-700 rounded-lg p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-parchment-100 font-semibold text-base">
-              {empire?.name ?? <span className="text-stone-500 italic">No empire</span>}
+            <div className="text-slate-100 font-semibold text-base">
+              {empire?.name ?? <span className="text-slate-500 italic">No empire</span>}
             </div>
-            <div className="text-stone-400 text-sm mt-0.5">{p.email}</div>
-            <div className="flex gap-4 mt-2 text-xs text-stone-500">
+            <div className="text-slate-400 text-sm mt-0.5">{p.email}</div>
+            <div className="flex gap-4 mt-2 text-xs text-slate-500">
               <span>Joined {new Date(p.createdAt).toLocaleDateString()}</span>
               <span>Auth: {p.googleId ? 'Google' : 'Email'}</span>
               {p.isAdmin && <span className="text-gold-400">ADMIN</span>}
@@ -255,7 +255,7 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
           </div>
           <div className="text-right">
             <div className="text-gold-400 font-mono text-lg">{(empire?.goldBalance ?? 0).toLocaleString()}g</div>
-            <div className="text-xs text-stone-500 mt-1">
+            <div className="text-xs text-slate-500 mt-1">
               {keeps.length} keep{keeps.length !== 1 ? 's' : ''} · {empire?.caravans.length ?? 0} caravans
             </div>
           </div>
@@ -276,7 +276,7 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
           <select
             value={goldOp}
             onChange={(e) => setGoldOp(e.target.value as 'set' | 'add')}
-            className="bg-stone-700 border border-stone-600 rounded px-2 py-1.5 text-sm text-parchment-200"
+            className="bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200"
           >
             <option value="add">Add</option>
             <option value="set">Set to</option>
@@ -286,12 +286,12 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
             value={goldInput}
             onChange={(e) => setGoldInput(e.target.value)}
             placeholder="Amount"
-            className="flex-1 bg-stone-700 border border-stone-600 rounded px-3 py-1.5 text-sm text-parchment-100 placeholder-stone-500 focus:outline-none focus:border-gold-500"
+            className="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-gold-500"
           />
           <button
             onClick={() => setGold.mutate()}
             disabled={!goldInput || setGold.isPending}
-            className="bg-gold-700 hover:bg-gold-600 disabled:bg-stone-700 disabled:text-stone-500 text-stone-900 font-medium px-4 py-1.5 rounded text-sm"
+            className="bg-azure-500 hover:bg-azure-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium px-4 py-1.5 rounded text-sm"
           >
             Apply
           </button>
@@ -305,7 +305,7 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
             <select
               value={resKeep}
               onChange={(e) => setResKeep(e.target.value)}
-              className="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1.5 text-sm text-parchment-200"
+              className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200"
             >
               <option value="">Select keep…</option>
               {keeps.map((k) => (
@@ -317,19 +317,19 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
                 value={resType}
                 onChange={(e) => setResType(e.target.value.toUpperCase())}
                 placeholder="Resource type (e.g. OAK)"
-                className="flex-1 bg-stone-700 border border-stone-600 rounded px-3 py-1.5 text-sm text-parchment-100 placeholder-stone-500 focus:outline-none focus:border-gold-500 font-mono"
+                className="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-gold-500 font-mono"
               />
               <input
                 type="number"
                 value={resQty}
                 onChange={(e) => setResQty(e.target.value)}
                 placeholder="Qty"
-                className="w-20 bg-stone-700 border border-stone-600 rounded px-3 py-1.5 text-sm text-parchment-100 focus:outline-none focus:border-gold-500"
+                className="w-20 bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-gold-500"
               />
               <button
                 onClick={() => grantResources.mutate()}
                 disabled={!resKeep || !resType || !resQty || grantResources.isPending}
-                className="bg-stone-600 hover:bg-stone-500 disabled:bg-stone-700 disabled:text-stone-500 text-parchment-200 font-medium px-4 py-1.5 rounded text-sm"
+                className="bg-slate-600 hover:bg-slate-500 disabled:bg-slate-700 disabled:text-slate-500 text-slate-200 font-medium px-4 py-1.5 rounded text-sm"
               >
                 Grant
               </button>
@@ -343,17 +343,17 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
         <Section title="Keeps & Storage">
           <div className="space-y-2">
             {keeps.map((k) => (
-              <div key={k.id} className="bg-stone-700/50 border border-stone-700 rounded p-3">
-                <div className="text-parchment-200 text-sm font-medium">{k.name}</div>
+              <div key={k.id} className="bg-slate-700/50 border border-slate-700 rounded p-3">
+                <div className="text-slate-200 text-sm font-medium">{k.name}</div>
                 {k.plot && (
-                  <div className="text-xs text-stone-500 mt-0.5">{k.plot.district?.name}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{k.plot.district?.name}</div>
                 )}
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2">
                   {(k.warehouse?.items.length ?? 0) === 0 && (
-                    <span className="text-xs text-stone-600">Empty storage</span>
+                    <span className="text-xs text-slate-600">Empty storage</span>
                   )}
                   {(k.warehouse?.items ?? []).map((r) => (
-                    <span key={r.id} className="text-xs text-stone-300 font-mono">
+                    <span key={r.id} className="text-xs text-slate-300 font-mono">
                       {r.resourceType}: {Number(r.quantity).toLocaleString()}
                     </span>
                   ))}
@@ -369,13 +369,13 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
         <Section title="Caravans">
           <div className="space-y-1.5">
             {empire!.caravans.map((c) => (
-              <div key={c.id} className="flex items-center gap-3 text-sm bg-stone-700/50 border border-stone-700 rounded px-3 py-2">
-                <span className="text-parchment-200">{c.name}</span>
-                <span className={`text-xs px-1.5 py-0.5 rounded ${c.status === 'IN_TRANSIT' ? 'bg-amber-900/50 text-amber-400' : 'bg-stone-700 text-stone-400'}`}>
+              <div key={c.id} className="flex items-center gap-3 text-sm bg-slate-700/50 border border-slate-700 rounded px-3 py-2">
+                <span className="text-slate-200">{c.name}</span>
+                <span className={`text-xs px-1.5 py-0.5 rounded ${c.status === 'IN_TRANSIT' ? 'bg-amber-900/50 text-azure-400' : 'bg-slate-700 text-slate-400'}`}>
                   {c.status === 'IN_TRANSIT' ? 'In transit' : `${c.locationType.toLowerCase()} · idle`}
                 </span>
                 {(c.warehouse?.items.length ?? 0) > 0 && (
-                  <span className="text-xs text-stone-500 ml-auto">
+                  <span className="text-xs text-slate-500 ml-auto">
                     {(c.warehouse?.items ?? []).map((x) => `${x.resourceType}×${x.quantity}`).join(', ')}
                   </span>
                 )}
@@ -391,7 +391,7 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
           <button
             onClick={() => starterCaravan.mutate()}
             disabled={starterCaravan.isPending}
-            className="bg-stone-700 hover:bg-stone-600 text-parchment-200 text-sm font-medium px-3 py-1.5 rounded"
+            className="bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium px-3 py-1.5 rounded"
           >
             + Starter Caravan
           </button>
@@ -400,8 +400,8 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
             disabled={toggleAdmin.isPending}
             className={`text-sm font-medium px-3 py-1.5 rounded border ${
               summary?.isAdmin
-                ? 'border-gold-700 text-gold-400 hover:bg-gold-950/30'
-                : 'border-stone-600 text-stone-400 hover:bg-stone-700'
+                ? 'border-azure-600 text-azure-400 hover:bg-azure-900/30'
+                : 'border-slate-600 text-slate-400 hover:bg-slate-700'
             }`}
           >
             {summary?.isAdmin ? 'Revoke Admin' : 'Grant Admin'}
@@ -417,7 +417,7 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
             <div className="ml-auto flex items-center gap-2">
               <span className="text-xs text-red-400">Delete all data?</span>
               <button onClick={() => deletePlayer.mutate()} className="text-sm text-red-400 hover:text-red-300 font-medium">Yes, delete</button>
-              <button onClick={() => setConfirmDelete(false)} className="text-sm text-stone-400 hover:text-stone-300">Cancel</button>
+              <button onClick={() => setConfirmDelete(false)} className="text-sm text-slate-400 hover:text-slate-300">Cancel</button>
             </div>
           )}
         </div>
@@ -428,8 +428,8 @@ function PlayerDetail({ playerId, summary, onDelete }: { playerId: number; summa
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-stone-800 border border-stone-700 rounded-lg p-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">{title}</h3>
+    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">{title}</h3>
       {children}
     </div>
   );

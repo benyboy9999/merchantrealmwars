@@ -3,6 +3,7 @@ import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useNavigate } from 'react-router-dom';
 import { api, type AuthResponse } from '../services/api.js';
 import { useAuthStore } from '../stores/auth.js';
+import { Button, Input, Card } from '../components/ui/index.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env['VITE_GOOGLE_CLIENT_ID'] as string;
 
@@ -10,12 +11,12 @@ export default function LoginPage() {
   const navigate  = useNavigate();
   const setAuth   = useAuthStore((s) => s.setAuth);
 
-  const [mode, setMode]       = useState<'login' | 'register'>('login');
-  const [email, setEmail]     = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [error, setError]     = useState('');
-  const [loading, setLoading] = useState(false);
+  const [mode, setMode]           = useState<'login' | 'register'>('login');
+  const [email, setEmail]         = useState('');
+  const [password, setPassword]   = useState('');
+  const [confirm, setConfirm]     = useState('');
+  const [error, setError]         = useState('');
+  const [loading, setLoading]     = useState(false);
 
   function handleAuthSuccess(data: AuthResponse) {
     setAuth(data.accessToken, data.refreshToken, data.empireId, data.empireName);
@@ -35,12 +36,10 @@ export default function LoginPage() {
   async function handleEmailSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-
     if (mode === 'register') {
       if (password !== confirm) { setError('Passwords do not match'); return; }
       if (password.length < 8)  { setError('Password must be at least 8 characters'); return; }
     }
-
     setLoading(true);
     try {
       const data = mode === 'register'
@@ -54,15 +53,16 @@ export default function LoginPage() {
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="w-full max-w-sm space-y-6 px-4">
 
-          <div className="text-center space-y-1">
-            <h1 className="text-3xl font-bold text-zinc-100 tracking-tight">Merchant Realms</h1>
-            <p className="text-zinc-500 text-sm">Sign in to enter the world</p>
+          {/* Brand header */}
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-100">Merchant Realms</h1>
+            <p className="text-slate-500 text-sm">Sign in to enter the world</p>
           </div>
 
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-5">
+          <Card variant="elevated" className="p-6 space-y-5">
 
             {/* Google */}
             <div className="flex justify-center">
@@ -78,37 +78,34 @@ export default function LoginPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="flex-1 h-px bg-zinc-800" />
-              <span className="text-zinc-600 text-xs uppercase tracking-widest">or</span>
-              <div className="flex-1 h-px bg-zinc-800" />
+              <div className="flex-1 h-px bg-slate-700" />
+              <span className="text-slate-600 text-xs uppercase tracking-widest">or</span>
+              <div className="flex-1 h-px bg-slate-700" />
             </div>
 
             {/* Email / password */}
             <form onSubmit={handleEmailSubmit} className="space-y-3">
-              <input
+              <Input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Email"
                 required
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors text-sm"
               />
-              <input
+              <Input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
                 required
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors text-sm"
               />
               {mode === 'register' && (
-                <input
+                <Input
                   type="password"
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   placeholder="Confirm password"
                   required
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors text-sm"
                 />
               )}
 
@@ -118,26 +115,28 @@ export default function LoginPage() {
                 </p>
               )}
 
-              <button
+              <Button
                 type="submit"
+                variant="primary"
+                size="lg"
                 disabled={loading}
-                className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
+                className="w-full"
               >
                 {loading ? 'Please wait…' : mode === 'register' ? 'Create account' : 'Sign in'}
-              </button>
+              </Button>
             </form>
 
-            <p className="text-center text-xs text-zinc-500">
+            <p className="text-center text-xs text-slate-500">
               {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
               <button
                 onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
-                className="text-amber-500 hover:text-amber-400 transition-colors"
+                className="text-azure-400 hover:text-azure-300 transition-colors"
               >
                 {mode === 'login' ? 'Register' : 'Sign in'}
               </button>
             </p>
 
-          </div>
+          </Card>
         </div>
       </div>
     </GoogleOAuthProvider>

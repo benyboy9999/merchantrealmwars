@@ -101,21 +101,21 @@ export default function ExchangePage() {
       )}
 
       {/* ── Region tabs ──────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-stone-700/60 flex-shrink-0 bg-stone-950/40">
+      <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-700/60 flex-shrink-0 bg-slate-950/40">
         {REGIONS.map((r) => (
           <button
             key={r.id}
             onClick={() => switchRegion(r.id)}
             className={`px-3 py-1 rounded text-sm transition-colors ${
               regionId === r.id
-                ? 'bg-stone-700 text-parchment-100 font-medium'
-                : 'text-stone-500 hover:text-stone-300 hover:bg-stone-800/50'
+                ? 'bg-slate-700 text-slate-100 font-medium'
+                : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
             }`}
           >
             {r.name}
           </button>
         ))}
-        <span className="ml-auto text-xs text-stone-600">
+        <span className="ml-auto text-xs text-slate-600">
           {REGIONS.find((r) => r.id === regionId)?.name} Exchange
         </span>
       </div>
@@ -131,28 +131,28 @@ export default function ExchangePage() {
         showSell
         onSell={(rt, qty) => sellNpc.mutate({ rt, qty })}
         onInventoryChange={invalidate}
-        className="h-[40%] border-b border-stone-700/60"
+        className="h-[40%] border-b border-slate-700/60"
       />
 
       {/* ── Bottom half: listings browser ───────────────────────────────── */}
-      <div className="flex-1 grid grid-cols-2 divide-x divide-stone-700/60 overflow-hidden min-h-0">
+      <div className="flex-1 grid grid-cols-2 divide-x divide-slate-700/60 overflow-hidden min-h-0">
 
         {/* Left: resource list with listing counts */}
         <div className="flex flex-col overflow-hidden">
-          <div className="px-4 py-2 border-b border-stone-700/60 flex-shrink-0">
-            <span className="text-xs uppercase tracking-wider text-stone-500">
+          <div className="px-4 py-2 border-b border-slate-700/60 flex-shrink-0">
+            <span className="text-xs uppercase tracking-wider text-slate-500">
               Listings · {allListings.length} active
             </span>
           </div>
           <div className="flex-1 overflow-y-auto">
             {visibleResources.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-stone-600 text-sm">
+              <div className="flex items-center justify-center h-full text-slate-600 text-sm">
                 No listings or warehouse items
               </div>
             ) : (
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-stone-900/95">
-                  <tr className="text-xs text-stone-600 border-b border-stone-800">
+                <thead className="sticky top-0 bg-slate-900/95">
+                  <tr className="text-xs text-slate-600 border-b border-slate-800">
                     <th className="text-left px-4 py-1.5 font-normal">Material</th>
                     <th className="text-right px-4 py-1.5 font-normal">Warehouse</th>
                     <th className="text-right px-4 py-1.5 font-normal">Listings</th>
@@ -169,20 +169,20 @@ export default function ExchangePage() {
                     return (
                       <tr
                         key={rt}
-                        className={`border-b border-stone-800/40 cursor-pointer transition-colors ${
-                          selected === rt ? 'bg-stone-700/40' : 'hover:bg-stone-800/40'
+                        className={`border-b border-slate-800/40 cursor-pointer transition-colors ${
+                          selected === rt ? 'bg-slate-700/40' : 'hover:bg-slate-800/40'
                         }`}
                         onClick={() => { setSelected(rt); setBuyListingId(null); setBuyQty(''); }}
                       >
-                        <td className="px-4 py-1.5 text-stone-300">{rName(rt)}</td>
-                        <td className={`px-4 py-1.5 text-right font-mono tabular-nums ${inWh > 0 ? 'text-parchment-200' : 'text-stone-700'}`}>
+                        <td className="px-4 py-1.5 text-slate-300">{rName(rt)}</td>
+                        <td className={`px-4 py-1.5 text-right font-mono tabular-nums ${inWh > 0 ? 'text-slate-200' : 'text-slate-700'}`}>
                           {inWh > 0 ? inWh.toFixed(0) : '—'}
                         </td>
-                        <td className="px-4 py-1.5 text-right text-stone-500">
-                          {rtListings.length > 0 ? rtListings.length : <span className="text-stone-700">—</span>}
+                        <td className="px-4 py-1.5 text-right text-slate-500">
+                          {rtListings.length > 0 ? rtListings.length : <span className="text-slate-700">—</span>}
                         </td>
                         <td className="px-4 py-1.5 text-right font-mono tabular-nums text-gold-400">
-                          {bestPrice !== null ? `${bestPrice}g` : <span className="text-stone-700">—</span>}
+                          {bestPrice !== null ? `${bestPrice}g` : <span className="text-slate-700">—</span>}
                         </td>
                       </tr>
                     );
@@ -196,18 +196,18 @@ export default function ExchangePage() {
         {/* Right: listing detail + actions */}
         <div className="flex flex-col overflow-hidden">
           {!selected ? (
-            <div className="flex items-center justify-center h-full text-stone-600 text-sm">
+            <div className="flex items-center justify-center h-full text-slate-600 text-sm">
               Select a material to view listings
             </div>
           ) : (
             <>
               {/* Resource header */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-stone-700/60 flex-shrink-0">
-                <span className="text-parchment-100 font-medium">{rName(selected)}</span>
-                <span className="text-xs text-stone-500">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
+                <span className="text-slate-100 font-medium">{rName(selected)}</span>
+                <span className="text-xs text-slate-500">
                   {warehouseQty > 0
-                    ? <span>Warehouse: <span className="text-parchment-200">{warehouseQty.toFixed(0)}</span></span>
-                    : <span className="text-stone-600">Not in warehouse</span>}
+                    ? <span>Warehouse: <span className="text-slate-200">{warehouseQty.toFixed(0)}</span></span>
+                    : <span className="text-slate-600">Not in warehouse</span>}
                 </span>
               </div>
 
@@ -215,15 +215,15 @@ export default function ExchangePage() {
 
                 {/* Active listings for this resource */}
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-stone-500 mb-2">
-                    Active Listings {resourceListings.length > 0 && <span className="text-stone-600">({resourceListings.length})</span>}
+                  <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">
+                    Active Listings {resourceListings.length > 0 && <span className="text-slate-600">({resourceListings.length})</span>}
                   </div>
                   {resourceListings.length === 0 ? (
-                    <p className="text-stone-600 text-xs">No listings for this material in this exchange.</p>
+                    <p className="text-slate-600 text-xs">No listings for this material in this exchange.</p>
                   ) : (
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-xs text-stone-600 border-b border-stone-800">
+                        <tr className="text-xs text-slate-600 border-b border-slate-800">
                           <th className="text-left py-1 font-normal">Available</th>
                           <th className="text-right py-1 font-normal">Price</th>
                           <th className="text-right py-1 font-normal">Total</th>
@@ -240,24 +240,24 @@ export default function ExchangePage() {
                             return (
                               <tr
                                 key={listing.id}
-                                className={`border-b border-stone-800/30 text-xs ${isSelected ? 'bg-stone-700/40' : ''}`}
+                                className={`border-b border-slate-800/30 text-xs ${isSelected ? 'bg-slate-700/40' : ''}`}
                               >
-                                <td className="py-1.5 text-stone-300 font-mono tabular-nums">
+                                <td className="py-1.5 text-slate-300 font-mono tabular-nums">
                                   {remaining.toFixed(0)}
-                                  {isNpc && <span className="ml-1.5 text-stone-600">[NPC]</span>}
+                                  {isNpc && <span className="ml-1.5 text-slate-600">[NPC]</span>}
                                 </td>
                                 <td className="py-1.5 text-right font-mono tabular-nums text-gold-400">
                                   {listing.pricePerUnit}g
                                 </td>
-                                <td className="py-1.5 text-right text-stone-500">
+                                <td className="py-1.5 text-right text-slate-500">
                                   {(remaining * listing.pricePerUnit).toFixed(0)}g
                                 </td>
                                 <td className="py-1.5 pl-2 flex gap-1 justify-end">
                                   <button
                                     className={`px-2 py-0.5 rounded text-xs transition-colors ${
                                       isSelected
-                                        ? 'bg-gold-600 text-stone-900 font-semibold'
-                                        : 'bg-stone-700 hover:bg-stone-600 text-parchment-200'
+                                        ? 'bg-azure-500 text-white font-semibold'
+                                        : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
                                     }`}
                                     onClick={() => {
                                       setBuyListingId(isSelected ? null : listing.id);
@@ -268,7 +268,7 @@ export default function ExchangePage() {
                                   </button>
                                   {listing.empireId !== null && (
                                     <button
-                                      className="px-2 py-0.5 rounded text-xs bg-stone-800 hover:bg-red-900/40 text-stone-500 hover:text-red-400 transition-colors"
+                                      className="px-2 py-0.5 rounded text-xs bg-slate-800 hover:bg-red-900/40 text-slate-500 hover:text-red-400 transition-colors"
                                       onClick={() => cancelListing.mutate(listing.id)}
                                     >
                                       Cancel
@@ -285,30 +285,30 @@ export default function ExchangePage() {
 
                 {/* Buy form — shown when a listing row is selected */}
                 {activeBuyListing && (
-                  <div className="bg-stone-800/40 rounded p-3 space-y-2">
-                    <div className="text-xs uppercase tracking-wider text-stone-500">Confirm Purchase</div>
-                    <div className="text-xs text-stone-500">
+                  <div className="bg-slate-800/40 rounded p-3 space-y-2">
+                    <div className="text-xs uppercase tracking-wider text-slate-500">Confirm Purchase</div>
+                    <div className="text-xs text-slate-500">
                       Price: <span className="text-gold-400">{activeBuyListing.pricePerUnit}g/unit</span>
-                      {' · '}Available: <span className="text-parchment-200">{(activeBuyListing.quantity - activeBuyListing.fulfilledQty).toFixed(0)}</span>
+                      {' · '}Available: <span className="text-slate-200">{(activeBuyListing.quantity - activeBuyListing.fulfilledQty).toFixed(0)}</span>
                     </div>
                     <div className="flex gap-2 items-center">
                       <input
                         type="number" min={1} max={activeBuyListing.quantity - activeBuyListing.fulfilledQty}
-                        className="w-24 bg-stone-900 border border-stone-700 rounded px-2 py-1 text-parchment-100 text-sm focus:outline-none focus:border-stone-500"
+                        className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
                         placeholder="Qty"
                         value={buyQty}
                         onChange={(e) => setBuyQty(e.target.value)}
                       />
                       {buyQty && (
-                        <span className="text-stone-500 text-xs">
+                        <span className="text-slate-500 text-xs">
                           = <span className="text-gold-400">{(Number(buyQty) * activeBuyListing.pricePerUnit).toFixed(0)}g</span>
-                          <span className="text-stone-600 ml-1">(have {goldBalance.toFixed(0)}g)</span>
+                          <span className="text-slate-600 ml-1">(have {goldBalance.toFixed(0)}g)</span>
                         </span>
                       )}
                     </div>
                     <div className="flex gap-2">
                       <button
-                        className="bg-gold-600 hover:bg-gold-500 disabled:opacity-40 text-stone-900 font-semibold px-4 py-1.5 rounded text-sm"
+                        className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-4 py-1.5 rounded text-sm"
                         disabled={
                           !buyQty || Number(buyQty) <= 0 ||
                           Number(buyQty) > activeBuyListing.quantity - activeBuyListing.fulfilledQty ||
@@ -320,7 +320,7 @@ export default function ExchangePage() {
                         Confirm
                       </button>
                       <button
-                        className="text-stone-500 hover:text-stone-300 px-3 py-1.5 rounded text-sm"
+                        className="text-slate-500 hover:text-slate-300 px-3 py-1.5 rounded text-sm"
                         onClick={() => { setBuyListingId(null); setBuyQty(''); }}
                       >
                         Cancel
@@ -336,41 +336,41 @@ export default function ExchangePage() {
                   </div>
                 )}
 
-                <div className="border-t border-stone-800" />
+                <div className="border-t border-slate-800" />
 
                 {/* Create listing form */}
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-stone-500 mb-2">List for Sale</div>
+                  <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">List for Sale</div>
                   {warehouseQty <= 0 ? (
-                    <p className="text-stone-600 text-xs">You need {rName(selected)} in this exchange's warehouse to create a listing.</p>
+                    <p className="text-slate-600 text-xs">You need {rName(selected)} in this exchange's warehouse to create a listing.</p>
                   ) : (
                     <div className="space-y-2">
-                      <div className="text-xs text-stone-600">
-                        In warehouse: <span className="text-parchment-200">{warehouseQty.toFixed(0)}</span>
+                      <div className="text-xs text-slate-600">
+                        In warehouse: <span className="text-slate-200">{warehouseQty.toFixed(0)}</span>
                       </div>
                       <div className="flex gap-2 items-center flex-wrap">
                         <input
                           type="number" min={1} max={warehouseQty}
-                          className="w-24 bg-stone-900 border border-stone-700 rounded px-2 py-1 text-parchment-100 text-sm focus:outline-none focus:border-stone-500"
+                          className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
                           placeholder="Qty"
                           value={listQty}
                           onChange={(e) => setListQty(e.target.value)}
                         />
                         <input
                           type="number" min={0.01} step={0.01}
-                          className="w-24 bg-stone-900 border border-stone-700 rounded px-2 py-1 text-parchment-100 text-sm focus:outline-none focus:border-stone-500"
+                          className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
                           placeholder="Price/unit"
                           value={listPrice}
                           onChange={(e) => setListPrice(e.target.value)}
                         />
                         {listQty && listPrice && (
-                          <span className="text-stone-500 text-xs">
+                          <span className="text-slate-500 text-xs">
                             = <span className="text-gold-400">{(Number(listQty) * Number(listPrice)).toFixed(0)}g</span> total
                           </span>
                         )}
                       </div>
                       <button
-                        className="bg-stone-700 hover:bg-stone-600 disabled:opacity-40 text-parchment-100 px-4 py-1.5 rounded text-sm"
+                        className="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-100 px-4 py-1.5 rounded text-sm"
                         disabled={
                           !listQty || !listPrice ||
                           Number(listQty) <= 0 || Number(listQty) > warehouseQty ||

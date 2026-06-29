@@ -42,14 +42,14 @@ function ReconnectOverlay() {
   if (!isDown) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/90 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-sm">
       <div className="text-center space-y-3">
-        <div className="text-parchment-100 text-xl font-semibold">Server offline</div>
-        <div className="text-stone-400 text-sm">Waiting for server to come back up…</div>
+        <div className="text-slate-100 text-xl font-semibold">Server offline</div>
+        <div className="text-slate-400 text-sm">Waiting for server to come back up…</div>
         <div className="flex justify-center gap-1 pt-1">
-          <span className="w-2 h-2 rounded-full bg-stone-600 animate-bounce [animation-delay:-0.3s]" />
-          <span className="w-2 h-2 rounded-full bg-stone-600 animate-bounce [animation-delay:-0.15s]" />
-          <span className="w-2 h-2 rounded-full bg-stone-600 animate-bounce" />
+          <span className="w-2 h-2 rounded-full bg-slate-600 animate-bounce [animation-delay:-0.3s]" />
+          <span className="w-2 h-2 rounded-full bg-slate-600 animate-bounce [animation-delay:-0.15s]" />
+          <span className="w-2 h-2 rounded-full bg-slate-600 animate-bounce" />
         </div>
       </div>
     </div>
@@ -82,7 +82,7 @@ export default function App() {
         <Route path="/*" element={
           <RequireAuth>
             <RequireEmpire>
-              <div className="min-h-screen bg-zinc-950 text-zinc-100">
+              <div className="min-h-screen bg-slate-950 text-slate-100">
                 <NavBar />
                 <main>
                   <Routes>

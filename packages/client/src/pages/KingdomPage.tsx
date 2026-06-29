@@ -3,6 +3,7 @@ import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useProductionProgress } from '../hooks/useLivePercent.js';
 import ProgressBar from '../components/ProgressBar.js';
+import { Badge, IconSlot } from '../components/ui/index.js';
 import { api } from '../services/api.js';
 import {
   BUILDING_NAMES, RESOURCE_NAMES, RECIPES_BY_BUILDING, RECIPE_BY_KEY, RECIPE_BY_ID,
@@ -47,7 +48,7 @@ export default function KingdomPage() {
   if (!keepId && keepsLoading) {
     return (
       <div className="h-[calc(100vh-48px)] flex items-center justify-center">
-        <span className="text-stone-500 text-sm">Loading…</span>
+        <span className="text-slate-500 text-sm">Loading…</span>
       </div>
     );
   }
@@ -55,27 +56,27 @@ export default function KingdomPage() {
   return (
     <div className="h-[calc(100vh-48px)] flex overflow-hidden">
       {/* ── Left sidebar: keep list ──────────────────────────────────────── */}
-      <aside className="w-52 flex-shrink-0 border-r border-stone-700/60 flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-stone-700/60">
-          <span className="text-xs uppercase tracking-wider text-stone-500">My Keeps</span>
+      <aside className="w-52 flex-shrink-0 border-r border-slate-700/60 flex flex-col overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-700/60">
+          <span className="text-xs uppercase tracking-wider text-slate-500">My Keeps</span>
         </div>
         <div className="flex-1 overflow-y-auto">
           {keepsError && (
             <div className="p-4 text-red-400 text-xs">Error loading keeps</div>
           )}
           {!keepsError && keeps.length === 0 && !keepsLoading && (
-            <div className="p-4 text-stone-600 text-sm">No keeps yet.</div>
+            <div className="p-4 text-slate-600 text-sm">No keeps yet.</div>
           )}
           {keeps.map((k) => (
             <button
               key={k.id}
-              className={`w-full text-left px-4 py-3 border-b border-stone-800/60 transition-colors ${
-                k.id === keepId ? 'bg-stone-800 text-parchment-100' : 'text-stone-400 hover:bg-stone-800/50'
+              className={`w-full text-left px-4 py-3 border-b border-slate-800/60 transition-colors ${
+                k.id === keepId ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:bg-slate-800/50'
               }`}
               onClick={() => navigate(`/kingdom/${k.id}/${currentTab}`)}
             >
               <div className="text-sm">{k.name}</div>
-              <div className="text-xs text-stone-600 mt-0.5">{k.plot?.name ?? ''}</div>
+              <div className="text-xs text-slate-600 mt-0.5">{k.plot?.name ?? ''}</div>
             </button>
           ))}
         </div>
@@ -84,7 +85,7 @@ export default function KingdomPage() {
       {/* ── Right panel ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {!keepId ? (
-          <div className="flex items-center justify-center h-full text-stone-600 text-sm">
+          <div className="flex items-center justify-center h-full text-slate-600 text-sm">
             No keeps — found one to get started.
           </div>
         ) : (
@@ -112,7 +113,7 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc, empireCreatedAt }: {
   });
 
   if (isError) return <div className="p-6 text-red-400 text-sm">Failed to load keep — check server connection.</div>;
-  if (isLoading || !data) return <div className="p-6 text-stone-500 text-sm">Loading…</div>;
+  if (isLoading || !data) return <div className="p-6 text-slate-500 text-sm">Loading…</div>;
 
   const { keep, storage } = data;
   const ledgerMap = new Map((keep.warehouse?.items ?? []).map((e) => [e.resourceType, e.quantity]));
@@ -136,28 +137,28 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc, empireCreatedAt }: {
   return (
     <>
       {/* Keep header + stats */}
-      <div className="border-b border-stone-700/60 px-6 py-3 flex-shrink-0">
+      <div className="border-b border-slate-700/60 px-6 py-3 flex-shrink-0">
         <div className="flex items-baseline gap-3 mb-2">
-          <h1 className="text-lg font-semibold text-parchment-100">{keep.name}</h1>
-          <span className="text-stone-500 text-sm">{keep.plot?.name ?? ''}</span>
+          <h1 className="text-lg font-semibold text-slate-100">{keep.name}</h1>
+          <span className="text-slate-500 text-sm">{keep.plot?.name ?? ''}</span>
         </div>
-        <div className="flex gap-5 text-xs text-stone-500 flex-wrap">
-          <span>Workers <span className="text-stone-300 ml-1">{totalWorkers} total · {usedWorkers} used · {freeWorkers} free</span>
+        <div className="flex gap-5 text-xs text-slate-500 flex-wrap">
+          <span>Workers <span className="text-slate-300 ml-1">{totalWorkers} total · {usedWorkers} used · {freeWorkers} free</span>
             {usedWorkers > totalWorkers && <span className="text-red-400 ml-1">({usedWorkers - totalWorkers} short)</span>}
           </span>
-          <span>Storage <span className="text-stone-300 ml-1">{storage.usedWeight} / {storage.maxWeight} kg</span></span>
+          <span>Storage <span className="text-slate-300 ml-1">{storage.usedWeight} / {storage.maxWeight} kg</span></span>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-stone-700/60 flex-shrink-0">
+      <div className="flex border-b border-slate-700/60 flex-shrink-0">
         {tabs.map((t) => (
           <button
             key={t.key}
             className={`px-5 py-2.5 text-sm transition-colors border-b-2 ${
               currentTab === t.key
-                ? 'border-parchment-200 text-parchment-100'
-                : 'border-transparent text-stone-500 hover:text-stone-300'
+                ? 'border-azure-400 text-slate-100'
+                : 'border-transparent text-slate-500 hover:text-slate-300'
             }`}
             onClick={() => onTabChange(t.key)}
           >
@@ -202,32 +203,32 @@ function KeepTab({ keep, qc }: { keep: KeepTabKeep; qc: ReturnType<typeof useQue
   return (
     <div className="p-6 max-w-lg">
       <div className="mb-6">
-        <div className="text-xs uppercase tracking-wider text-stone-500 mb-3">Location</div>
-        <div className="border border-stone-700 rounded p-4 bg-stone-800 space-y-2 text-sm">
+        <div className="text-xs uppercase tracking-wider text-slate-500 mb-3">Location</div>
+        <div className="border border-slate-700 rounded p-4 bg-slate-800 space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-stone-500">Plot</span>
-            <span className="text-parchment-200">{keep.plot?.name ?? '—'}</span>
+            <span className="text-slate-500">Plot</span>
+            <span className="text-slate-200">{keep.plot?.name ?? '—'}</span>
           </div>
           {keep.plot && (
             <div className="flex justify-between">
-              <span className="text-stone-500">Coordinates</span>
-              <span className="text-parchment-200">({keep.plot.x}, {keep.plot.y})</span>
+              <span className="text-slate-500">Coordinates</span>
+              <span className="text-slate-200">({keep.plot.x}, {keep.plot.y})</span>
             </div>
           )}
         </div>
       </div>
 
       <div>
-        <div className="text-xs uppercase tracking-wider text-stone-500 mb-3">Rename Keep</div>
+        <div className="text-xs uppercase tracking-wider text-slate-500 mb-3">Rename Keep</div>
         <div className="flex gap-2">
           <input
-            className="flex-1 bg-stone-900 border border-stone-700 rounded px-3 py-2 text-parchment-100 text-sm focus:outline-none focus:border-stone-500"
+            className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && name && rename.mutate()}
           />
           <button
-            className="bg-stone-700 hover:bg-stone-600 disabled:opacity-40 text-parchment-100 px-4 py-2 rounded text-sm"
+            className="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-100 px-4 py-2 rounded text-sm"
             disabled={!name || name === keep.name || rename.isPending}
             onClick={() => rename.mutate()}
           >
@@ -279,7 +280,7 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
   return (
     <div className="p-6">
       {/* Slot counter */}
-      <div className="text-xs text-stone-600 mb-3">
+      <div className="text-xs text-slate-600 mb-3">
         {keep.buildingSlotCount} / {KEEP_MAX_BUILDING_SLOTS} slots unlocked
       </div>
 
@@ -295,14 +296,14 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
                 key={i}
                 className={`border rounded p-2.5 min-h-[72px] flex flex-col justify-between transition-colors ${
                   isNextLock
-                    ? 'border-stone-600 bg-stone-900/60 cursor-pointer hover:border-stone-500'
-                    : 'border-stone-800 bg-stone-900/20 cursor-default opacity-40'
+                    ? 'border-slate-600 bg-slate-900/60 cursor-pointer hover:border-slate-500'
+                    : 'border-slate-800 bg-slate-900/20 cursor-default opacity-40'
                 }`}
                 onClick={() => isNextLock && setSelectedSlot(selectedSlot === -1 ? null : -1)}
               >
-                <div className="text-stone-600 text-xs">Slot {i + 1}</div>
+                <div className="text-slate-600 text-xs">Slot {i + 1}</div>
                 {isNextLock && (
-                  <div className="text-xs text-stone-500 mt-1">
+                  <div className="text-xs text-slate-500 mt-1">
                     🔒 {unlockCost} {RESOURCE_NAMES[KEEP_SLOT_UNLOCK_RESOURCE as keyof typeof RESOURCE_NAMES]}
                   </div>
                 )}
@@ -310,26 +311,35 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
             );
           }
 
+          const bName = building
+            ? (BUILDING_NAMES[BUILDING_TYPE_BY_ID[building.buildingTypeId] as keyof typeof BUILDING_NAMES] ?? String(building.buildingTypeId))
+            : null;
+
           return (
             <div
               key={i}
-              className={`border rounded p-2.5 min-h-[72px] cursor-pointer transition-colors ${
+              className={`border rounded-lg p-2.5 min-h-[88px] cursor-pointer transition-all ${
                 building
-                  ? 'border-stone-600 bg-stone-800 hover:bg-stone-700'
+                  ? 'border-slate-600 bg-slate-800 hover:bg-slate-700 hover:border-slate-500'
                   : selectedSlot === i
-                    ? 'border-stone-500 bg-stone-800'
-                    : 'border-stone-700 border-dashed bg-stone-800/30 hover:border-stone-600'
+                    ? 'border-azure-600/60 bg-slate-800'
+                    : 'border-slate-700 border-dashed bg-slate-800/30 hover:border-slate-600'
               }`}
               onClick={() => building ? navigate(`/kingdom/${keepId}/buildings/${building.id}`) : setSelectedSlot(i === selectedSlot ? null : i)}
             >
               {building ? (
-                <>
-                  <div className="text-sm text-parchment-200 leading-tight">{BUILDING_NAMES[BUILDING_TYPE_BY_ID[building.buildingTypeId] as keyof typeof BUILDING_NAMES] ?? String(building.buildingTypeId)}</div>
-                  <div className="text-xs text-stone-500 mt-1">Lv.{building.level}</div>
-                  {building.isDormant && <div className="text-xs text-red-500 mt-0.5">Dormant</div>}
-                </>
+                <div className="flex flex-col gap-1.5 h-full">
+                  <IconSlot size="sm" label={bName ?? ''} className="mb-0.5" />
+                  <div className="text-xs text-slate-200 leading-tight font-medium">{bName}</div>
+                  <div className="flex items-center gap-1.5 mt-auto">
+                    <span className="text-xs text-slate-600">Lv.{building.level}</span>
+                    {building.isDormant && <Badge variant="error" className="text-[10px] px-1 py-px">Dormant</Badge>}
+                  </div>
+                </div>
               ) : (
-                <div className="text-stone-700 text-xs text-center pt-3">Slot {i + 1}</div>
+                <div className="flex items-center justify-center h-full min-h-[60px] text-slate-700 text-xs">
+                  Slot {i + 1}
+                </div>
               )}
             </div>
           );
@@ -338,10 +348,10 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
 
       {/* Build dialog (for unlocked empty slots) */}
       {selectedSlot !== null && selectedSlot >= 0 && (
-        <div className="border border-stone-700 rounded p-4 bg-stone-800 max-w-sm mb-3">
-          <div className="text-xs uppercase tracking-wider text-stone-500 mb-3">Construct in Slot {selectedSlot + 1}</div>
+        <div className="border border-slate-700 rounded p-4 bg-slate-800 max-w-sm mb-3">
+          <div className="text-xs uppercase tracking-wider text-slate-500 mb-3">Construct in Slot {selectedSlot + 1}</div>
           <select
-            className="w-full bg-stone-900 border border-stone-700 rounded px-3 py-2 text-parchment-100 text-sm mb-3 focus:outline-none"
+            className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm mb-3 focus:outline-none"
             value={buildingType}
             onChange={(e) => { setBuildingType(e.target.value); setBuildError(''); }}
           >
@@ -351,17 +361,17 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
             ))}
           </select>
           {buildingType && costs.length > 0 && (
-            <div className="text-xs text-stone-500 mb-3">
+            <div className="text-xs text-slate-500 mb-3">
               Cost:{' '}
               {costs.map((c, idx) => {
                 const have = ledgerMap.get(c.resource) ?? 0;
                 return (
                   <span key={c.resource}>
-                    {idx > 0 && <span className="text-stone-700"> + </span>}
-                    <span className={have >= c.quantity ? 'text-parchment-200' : 'text-red-400'}>
+                    {idx > 0 && <span className="text-slate-700"> + </span>}
+                    <span className={have >= c.quantity ? 'text-slate-200' : 'text-red-400'}>
                       {c.quantity} {RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource}
                     </span>
-                    <span className="text-stone-700"> ({Math.floor(have)})</span>
+                    <span className="text-slate-700"> ({Math.floor(have)})</span>
                   </span>
                 );
               })}
@@ -370,13 +380,13 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
           {buildError && <div className="text-red-400 text-xs mb-2">{buildError}</div>}
           <div className="flex gap-2">
             <button
-              className="bg-gold-600 hover:bg-gold-500 disabled:opacity-40 text-stone-900 font-semibold px-4 py-1.5 rounded text-sm"
+              className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-4 py-1.5 rounded text-sm"
               disabled={!buildingType || !canAfford || construct.isPending}
               onClick={() => buildingType && construct.mutate({ bType: buildingType, slot: selectedSlot })}
             >
               Build
             </button>
-            <button className="text-stone-500 hover:text-stone-300 text-sm" onClick={() => { setSelectedSlot(null); setBuildError(''); }}>
+            <button className="text-slate-500 hover:text-slate-300 text-sm" onClick={() => { setSelectedSlot(null); setBuildError(''); }}>
               Cancel
             </button>
           </div>
@@ -385,24 +395,24 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
 
       {/* Unlock dialog (for the next locked slot) */}
       {selectedSlot === -1 && keep.buildingSlotCount < KEEP_MAX_BUILDING_SLOTS && (
-        <div className="border border-stone-700 rounded p-4 bg-stone-800 max-w-sm">
-          <div className="text-xs uppercase tracking-wider text-stone-500 mb-2">Unlock Slot {nextLockedSlot + 1}</div>
-          <div className="text-sm text-stone-400 mb-3">
+        <div className="border border-slate-700 rounded p-4 bg-slate-800 max-w-sm">
+          <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">Unlock Slot {nextLockedSlot + 1}</div>
+          <div className="text-sm text-slate-400 mb-3">
             Cost:{' '}
-            <span className={scaffoldingHeld >= unlockCost ? 'text-parchment-200' : 'text-red-400'}>
+            <span className={scaffoldingHeld >= unlockCost ? 'text-slate-200' : 'text-red-400'}>
               {unlockCost} {RESOURCE_NAMES[KEEP_SLOT_UNLOCK_RESOURCE as keyof typeof RESOURCE_NAMES]}
             </span>
-            <span className="text-stone-600 ml-1">({Math.floor(scaffoldingHeld)} held)</span>
+            <span className="text-slate-600 ml-1">({Math.floor(scaffoldingHeld)} held)</span>
           </div>
           <div className="flex gap-2">
             <button
-              className="bg-gold-600 hover:bg-gold-500 disabled:opacity-40 text-stone-900 font-semibold px-4 py-1.5 rounded text-sm"
+              className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-4 py-1.5 rounded text-sm"
               disabled={!canAffordUnlock || unlockSlot.isPending}
               onClick={() => unlockSlot.mutate()}
             >
               Unlock
             </button>
-            <button className="text-stone-500 hover:text-stone-300 text-sm" onClick={() => setSelectedSlot(null)}>
+            <button className="text-slate-500 hover:text-slate-300 text-sm" onClick={() => setSelectedSlot(null)}>
               Cancel
             </button>
           </div>
@@ -426,7 +436,7 @@ function BuildingProgressBar({ task }: { task: ProductionTask | null | undefined
   return (
     <div className="w-full">
       <ProgressBar pct={pct} color="bg-gold-600/50" height="h-1" />
-      <div className="flex justify-between text-xs text-stone-600 mt-0.5">
+      <div className="flex justify-between text-xs text-slate-600 mt-0.5">
         <span>{(pct * 100).toFixed(0)}%</span>
         {task && <span>{label}</span>}
       </div>
@@ -464,14 +474,14 @@ function EfficiencyBar({ keep, ledgerMap }: {
   if (unmetRequired.length > 0) hints.push(`${unmetRequired.length} supply missing`);
   if (metOptional.length > 0)   hints.push(`+${metOptional.length} optional bonus`);
 
-  const color = efficiency < 70 ? 'text-red-400' : efficiency < 100 ? 'text-amber-400' : efficiency > 100 ? 'text-green-400' : 'text-stone-400';
+  const color = efficiency < 70 ? 'text-red-400' : efficiency < 100 ? 'text-azure-400' : efficiency > 100 ? 'text-green-400' : 'text-slate-400';
 
   return (
-    <div className="flex items-center justify-between mb-4 px-3 py-2 border border-stone-800 rounded bg-stone-900/50 text-sm">
-      <span className="text-stone-500">Production rate</span>
+    <div className="flex items-center justify-between mb-4 px-3 py-2 border border-slate-800 rounded bg-slate-900/50 text-sm">
+      <span className="text-slate-500">Production rate</span>
       <div className="flex items-center gap-3">
         {hints.length > 0 && (
-          <span className="text-xs text-stone-600">{hints.join(' · ')}</span>
+          <span className="text-xs text-slate-600">{hints.join(' · ')}</span>
         )}
         <span className={`font-mono font-semibold ${color}`}>{efficiency}%</span>
       </div>
@@ -520,7 +530,7 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
   }
 
   if (prodTypes.length === 0) {
-    return <div className="p-6 text-stone-600 text-sm">No production buildings — construct one in the Buildings tab.</div>;
+    return <div className="p-6 text-slate-600 text-sm">No production buildings — construct one in the Buildings tab.</div>;
   }
 
   return (
@@ -545,17 +555,17 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
           const activeTask      = buildingsOfType.find((b) => b.productionTask != null)?.productionTask ?? null;
 
           return (
-            <div key={bTypeId} className="border border-stone-700 rounded bg-stone-800">
+            <div key={bTypeId} className="border border-slate-700 rounded bg-slate-800">
               <button
-                className="w-full flex flex-col px-4 py-3 hover:bg-stone-700/30 transition-colors text-left"
+                className="w-full flex flex-col px-4 py-3 hover:bg-slate-700/30 transition-colors text-left"
                 onClick={() => { setExpandedType(isOpen ? null : bTypeId); setRecipeKey(''); setTargetQty(''); setOrderType('INFINITE'); }}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm text-parchment-200">{bTypeCode ? (BUILDING_NAMES[bTypeCode as keyof typeof BUILDING_NAMES] ?? bTypeCode) : String(bTypeId)}</span>
-                    {activeRecipe && <span className="text-xs text-stone-500">→ {RESOURCE_NAMES[activeRecipe.output as keyof typeof RESOURCE_NAMES] ?? activeRecipe.output}</span>}
+                    <span className="text-sm text-slate-200">{bTypeCode ? (BUILDING_NAMES[bTypeCode as keyof typeof BUILDING_NAMES] ?? bTypeCode) : String(bTypeId)}</span>
+                    {activeRecipe && <span className="text-xs text-slate-500">→ {RESOURCE_NAMES[activeRecipe.output as keyof typeof RESOURCE_NAMES] ?? activeRecipe.output}</span>}
                   </div>
-                  <span className="text-stone-600 text-xs">{isOpen ? '▲' : '▼'}</span>
+                  <span className="text-slate-600 text-xs">{isOpen ? '▲' : '▼'}</span>
                 </div>
                 {activeRecipe && (
                   <BuildingProgressBar task={activeTask} />
@@ -563,27 +573,27 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
               </button>
 
               {isOpen && (
-                <div className="border-t border-stone-700 px-4 py-3">
+                <div className="border-t border-slate-700 px-4 py-3">
                   {orders.length === 0 ? (
-                    <p className="text-stone-600 text-xs mb-3">No orders.</p>
+                    <p className="text-slate-600 text-xs mb-3">No orders.</p>
                   ) : (
                     <div className="space-y-1.5 mb-3">
                       {orders.map((order) => (
                         <div key={order.id} className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2">
-                            <span className="text-stone-400">{RECIPE_BY_ID[order.recipeId] ?? String(order.recipeId)}</span>
-                            <span className={`text-xs px-1.5 py-0.5 rounded bg-stone-700 ${order.orderType === 'INFINITE' ? 'text-stone-400' : 'text-amber-400'}`}>
+                            <span className="text-slate-400">{RECIPE_BY_ID[order.recipeId] ?? String(order.recipeId)}</span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded bg-slate-700 ${order.orderType === 'INFINITE' ? 'text-slate-400' : 'text-azure-400'}`}>
                               {order.orderType === 'INFINITE' ? '∞' : `${order.producedQuantity.toFixed(0)}/${order.targetQuantity}`}
                             </span>
                           </div>
-                          <button onClick={() => removeOrder.mutate(order.id)} className="text-stone-600 hover:text-red-400 text-xs ml-3">✕</button>
+                          <button onClick={() => removeOrder.mutate(order.id)} className="text-slate-600 hover:text-red-400 text-xs ml-3">✕</button>
                         </div>
                       ))}
                     </div>
                   )}
-                  <div className="border-t border-stone-700/60 pt-3">
+                  <div className="border-t border-slate-700/60 pt-3">
                     <select
-                      className="w-full bg-stone-900 border border-stone-700 rounded px-3 py-2 text-parchment-100 text-sm mb-2 focus:outline-none"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm mb-2 focus:outline-none"
                       value={recipeKey}
                       onChange={(e) => setRecipeKey(e.target.value)}
                     >
@@ -598,7 +608,7 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
                     <div className="flex gap-2 mb-2">
                       {(['INFINITE', 'NUMERICAL'] as const).map((t) => (
                         <button key={t}
-                          className={`flex-1 py-1.5 rounded text-xs border transition-colors ${orderType === t ? 'border-stone-500 text-parchment-200' : 'border-stone-700 text-stone-500 hover:border-stone-600'}`}
+                          className={`flex-1 py-1.5 rounded text-xs border transition-colors ${orderType === t ? 'border-slate-500 text-slate-200' : 'border-slate-700 text-slate-500 hover:border-slate-600'}`}
                           onClick={() => setOrderType(t)}
                         >
                           {t === 'INFINITE' ? '∞ Infinite' : '# Quantity'}
@@ -608,14 +618,14 @@ function ProductionTab({ keep, keepId, ledgerMap, qc }: {
                     {orderType === 'NUMERICAL' && (
                       <input
                         type="number"
-                        className="w-full bg-stone-900 border border-stone-700 rounded px-3 py-2 text-parchment-100 text-sm mb-2 focus:outline-none"
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm mb-2 focus:outline-none"
                         placeholder="Target quantity..."
                         value={targetQty}
                         onChange={(e) => setTargetQty(e.target.value)}
                       />
                     )}
                     <button
-                      className="bg-gold-600 hover:bg-gold-500 disabled:opacity-40 text-stone-900 font-semibold px-4 py-1.5 rounded text-sm"
+                      className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-4 py-1.5 rounded text-sm"
                       disabled={!recipeKey || (orderType === 'NUMERICAL' && !targetQty) || addOrder.isPending}
                       onClick={() => recipeKey && addOrder.mutate(bTypeId)}
                     >
@@ -679,19 +689,19 @@ function WorkersTab({ keep, ledgerMap, empireCreatedAt }: {
 
       {/* Worker pool */}
       <div>
-        <div className="text-xs uppercase tracking-wider text-stone-500 mb-3">Worker Pool</div>
-        <div className="border border-stone-700 rounded bg-stone-800 divide-y divide-stone-700/60 text-sm">
+        <div className="text-xs uppercase tracking-wider text-slate-500 mb-3">Worker Pool</div>
+        <div className="border border-slate-700 rounded bg-slate-800 divide-y divide-slate-700/60 text-sm">
           <div className="flex justify-between px-4 py-2.5">
-            <span className="text-stone-400">Total (from Housing)</span>
-            <span className="text-parchment-200 font-mono">{totalWorkers}</span>
+            <span className="text-slate-400">Total (from Housing)</span>
+            <span className="text-slate-200 font-mono">{totalWorkers}</span>
           </div>
           <div className="flex justify-between px-4 py-2.5">
-            <span className="text-stone-400">Employed</span>
-            <span className={`font-mono ${usedWorkers > totalWorkers ? 'text-red-400' : 'text-parchment-200'}`}>{usedWorkers}</span>
+            <span className="text-slate-400">Employed</span>
+            <span className={`font-mono ${usedWorkers > totalWorkers ? 'text-red-400' : 'text-slate-200'}`}>{usedWorkers}</span>
           </div>
           <div className="flex justify-between px-4 py-2.5">
-            <span className="text-stone-400">Idle</span>
-            <span className="text-stone-400 font-mono">{freeWorkers}</span>
+            <span className="text-slate-400">Idle</span>
+            <span className="text-slate-400 font-mono">{freeWorkers}</span>
           </div>
           {workerShortfall > 0 && (
             <div className="px-4 py-2 text-xs text-red-400">
@@ -704,39 +714,39 @@ function WorkersTab({ keep, ledgerMap, empireCreatedAt }: {
       {/* Consumption */}
       <div>
         <div className="flex items-baseline justify-between mb-3">
-          <div className="text-xs uppercase tracking-wider text-stone-500">T1 Labourer Consumption</div>
-          <div className="text-xs text-stone-600">per {cycleLabel} cycle · {totalWorkers} workers</div>
+          <div className="text-xs uppercase tracking-wider text-slate-500">T1 Labourer Consumption</div>
+          <div className="text-xs text-slate-600">per {cycleLabel} cycle · {totalWorkers} workers</div>
         </div>
 
         {totalWorkers === 0 ? (
-          <p className="text-stone-600 text-sm">No workers — build Housing to house labourers.</p>
+          <p className="text-slate-600 text-sm">No workers — build Housing to house labourers.</p>
         ) : (
           <>
-            <div className="text-xs text-stone-600 uppercase tracking-wider mb-1.5">Required</div>
-            <div className="border border-stone-700 rounded bg-stone-800 divide-y divide-stone-700/60 mb-4">
+            <div className="text-xs text-slate-600 uppercase tracking-wider mb-1.5">Required</div>
+            <div className="border border-slate-700 rounded bg-slate-800 divide-y divide-slate-700/60 mb-4">
               {needs.filter((n) => n.isNecessary).map((n) => (
                 <NeedRow key={n.resourceType} resourceType={n.resourceType} needed={n.needed} held={n.held} isMet={n.isMet} tag={n.isMet ? null : { label: '−15% speed', color: 'red' }} />
               ))}
             </div>
 
-            <div className="text-xs text-stone-600 uppercase tracking-wider mb-1.5">Optional</div>
-            <div className="border border-stone-700 rounded bg-stone-800 divide-y divide-stone-700/60 mb-4">
+            <div className="text-xs text-slate-600 uppercase tracking-wider mb-1.5">Optional</div>
+            <div className="border border-slate-700 rounded bg-slate-800 divide-y divide-slate-700/60 mb-4">
               {needs.filter((n) => !n.isNecessary).map((n) => (
                 <NeedRow key={n.resourceType} resourceType={n.resourceType} needed={n.needed} held={n.held} isMet={n.isMet} tag={n.isMet ? { label: '+5% speed', color: 'green' } : null} />
               ))}
             </div>
 
             {/* Speed modifier summary */}
-            <div className="border border-stone-700 rounded p-3 bg-stone-800/50 flex items-center justify-between text-sm">
-              <span className="text-stone-500">Production speed modifier</span>
+            <div className="border border-slate-700 rounded p-3 bg-slate-800/50 flex items-center justify-between text-sm">
+              <span className="text-slate-500">Production speed modifier</span>
               <div className="flex items-center gap-3">
                 {unmetRequired.length > 0 && (
-                  <span className="text-xs text-stone-600">{unmetRequired.length} missing × −15%</span>
+                  <span className="text-xs text-slate-600">{unmetRequired.length} missing × −15%</span>
                 )}
                 {metOptional.length > 0 && (
-                  <span className="text-xs text-stone-600">{metOptional.length} bonus × +5%</span>
+                  <span className="text-xs text-slate-600">{metOptional.length} bonus × +5%</span>
                 )}
-                <span className={`font-mono font-semibold ${speedPct < 100 ? 'text-red-400' : speedPct > 100 ? 'text-green-400' : 'text-stone-400'}`}>
+                <span className={`font-mono font-semibold ${speedPct < 100 ? 'text-red-400' : speedPct > 100 ? 'text-green-400' : 'text-slate-400'}`}>
                   {speedPct}%
                 </span>
               </div>
@@ -758,7 +768,7 @@ function NeedRow({ resourceType, needed, held, isMet, tag }: {
   return (
     <div className="flex items-center justify-between px-4 py-2.5 text-sm">
       <div className="flex items-center gap-2">
-        <span className={isMet ? 'text-stone-300' : 'text-red-400'}>
+        <span className={isMet ? 'text-slate-300' : 'text-red-400'}>
           {RESOURCE_NAMES[resourceType as keyof typeof RESOURCE_NAMES] ?? resourceType}
         </span>
         {tag && (
@@ -771,8 +781,8 @@ function NeedRow({ resourceType, needed, held, isMet, tag }: {
         )}
       </div>
       <div className="text-xs font-mono text-right">
-        <span className={held < needed ? 'text-red-400' : 'text-stone-400'}>{Math.floor(held)}</span>
-        <span className="text-stone-600"> / {needed % 1 === 0 ? needed : needed.toFixed(1)} needed</span>
+        <span className={held < needed ? 'text-red-400' : 'text-slate-400'}>{Math.floor(held)}</span>
+        <span className="text-slate-600"> / {needed % 1 === 0 ? needed : needed.toFixed(1)} needed</span>
       </div>
     </div>
   );
