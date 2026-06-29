@@ -691,6 +691,6 @@
     "overheadWeightT1":       1,
     "overheadWeightT2":       2,
     "overheadWeightT3":       3,
-    "maxBuildingLevel":       5
+    "maxBuildingLevel":       200
   }
 }

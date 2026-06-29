@@ -10,7 +10,7 @@ import {
   RECIPE_BY_KEY, RECIPE_BY_ID, BUILDING_MAX_LEVEL,
 } from '@merchant-realms/shared';
 import type { BuildingType } from '@merchant-realms/shared';
-import { calculateRepairCost, calculateUpgradeCost } from '@merchant-realms/engine';
+import { calculateRepairCost, calculateUpgradeCost, calculateUpgradeHealth } from '@merchant-realms/engine';
 import { startTask, cancelCompletion } from '../../services/production-timers.js';
 
 export const keepRouter = Router();
@@ -336,9 +336,10 @@ keepRouter.post('/:keepId/buildings/:buildingId/upgrade', async (req, res, next)
           data:  { quantity: { decrement: quantity } },
         });
       }
+      const newHealth = calculateUpgradeHealth(building.health, building.level);
       const b = await tx.building.update({
         where: { id: building.id },
-        data:  { level: { increment: 1 }, health: 100 },
+        data:  { level: { increment: 1 }, health: newHealth },
       });
       // Warehouse buildings increase storage cap by one tier per level
       if (building.buildingTypeId === BUILDING_TYPE_IDS.WAREHOUSE) {
