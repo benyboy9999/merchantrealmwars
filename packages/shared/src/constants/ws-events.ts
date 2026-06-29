@@ -8,6 +8,7 @@ export const WsEvent = {
   CARAVAN_CANCELLED: 'caravan:cancelled',
   EXCHANGE_ORDER_MATCHED: 'exchange:order:matched',
   CHAT_MESSAGE: 'chat:message',
+  CHAT_NEW_DM: 'chat:new_dm',
   REGION_CONTROL_CHANGED: 'region:control:changed',
   PRODUCTION_COMPLETED: 'production:completed',
   PRODUCTION_BLOCKED: 'production:blocked',

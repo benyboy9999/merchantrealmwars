@@ -191,6 +191,16 @@ export const api = {
   deleteWishlistItem: (wishlistId: number, resourceType: string) =>
     del<{ ok: boolean }>(`/api/wishlists/${wishlistId}/items/${encodeURIComponent(resourceType)}`),
 
+  // Chat
+  chatRooms:   () => get<{ rooms: ChatRoom[] }>('/api/chat/rooms'),
+  chatMessages:(roomId: number, limit = 100) =>
+    get<{ messages: ChatMessageItem[] }>(`/api/chat/rooms/${roomId}/messages?limit=${limit}`),
+  createDm:    (empireId: number) =>
+    post<{ room: { id: number; isNew: boolean } }>('/api/chat/dms', { empireId }),
+  muteRoom:    (roomId: number, muted: boolean) =>
+    req<{ ok: boolean }>(`/api/chat/rooms/${roomId}/mute`, { method: 'PATCH', body: JSON.stringify({ muted }) }),
+  chatSearch:  (q: string) => get<{ empires: { id: number; name: string }[] }>(`/api/chat/search?q=${encodeURIComponent(q)}`),
+
   // Admin — server controls
   adminStatus:          () => get<AdminStatus>('/admin/status'),
   adminTick:            () => post<TickResult>('/admin/tick'),
@@ -285,6 +295,23 @@ export interface WishlistItemData {
 }
 export interface WishlistWithItems {
   id: number; empireId: number; name: string; createdAt: string; items: WishlistItemData[];
+}
+
+export interface ChatRoom {
+  id: number;
+  type: 'GENERAL' | 'DM';
+  name: string | null;
+  isMuted: boolean;
+  partner?: { id: number; name: string };
+}
+
+export interface ChatMessageItem {
+  id: number;
+  roomId: number;
+  empireId: number | null;
+  empireName: string | null;
+  content: string;
+  createdAt: string;
 }
 
 export interface AdminPlayer {

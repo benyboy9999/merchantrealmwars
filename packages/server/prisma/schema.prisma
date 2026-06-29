@@ -55,11 +55,6 @@ enum GuildRole {
   MEMBER
 }
 
-enum ChatChannelType {
-  GLOBAL
-  GUILD
-  REGION
-}
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 
@@ -76,7 +71,6 @@ model Player {
   empire        Empire?
   refreshTokens RefreshToken[]
   guildMember   GuildMember?
-  chatMessages  ChatMessage[]
   ledsGuilds    Guild[]        @relation("GuildLeader")
 }
 
@@ -204,6 +198,8 @@ model Empire {
   soldTrades      MarketTrade[] @relation("TradesSeller")
   purchasedTrades MarketTrade[] @relation("TradesBuyer")
   wishlists       Wishlist[]
+  chatRoomMembers ChatRoomMember[]
+  chatMessages    ChatMessage[]
 }
 
 // ── Wishlists ──────────────────────────────────────────────────────────────
@@ -422,17 +418,43 @@ model DistrictControl {
 
 // ── Chat ───────────────────────────────────────────────────────────────────
 
+model ChatRoom {
+  id        Int              @id @default(autoincrement())
+  type      String           // GENERAL | DM
+  name      String?
+  createdAt DateTime         @default(now())
+
+  members  ChatRoomMember[]
+  messages ChatMessage[]
+
+  @@index([type])
+}
+
+model ChatRoomMember {
+  id         Int       @id @default(autoincrement())
+  chatRoomId Int
+  empireId   Int
+  mutedAt    DateTime?
+  joinedAt   DateTime  @default(now())
+
+  chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  empire   Empire   @relation(fields: [empireId], references: [id], onDelete: Cascade)
+
+  @@unique([chatRoomId, empireId])
+  @@index([empireId])
+}
+
 model ChatMessage {
-  id          Int             @id @default(autoincrement())
-  senderId    Int
-  channelType ChatChannelType
-  channelId   Int?
-  content     String          @db.VarChar(500)
-  sentAt      DateTime        @default(now())
+  id         Int      @id @default(autoincrement())
+  chatRoomId Int
+  empireId   Int?
+  content    String   @db.VarChar(500)
+  createdAt  DateTime @default(now())
 
-  sender Player @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  empire   Empire?  @relation(fields: [empireId], references: [id], onDelete: SetNull)
 
-  @@index([channelType, channelId, sentAt])
+  @@index([chatRoomId, createdAt])
 }
 
 // ── System ─────────────────────────────────────────────────────────────────

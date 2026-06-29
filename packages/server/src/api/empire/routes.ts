@@ -3,6 +3,7 @@ import { CreateEmpireSchema, MULE_CAPACITY_KG, REGION_IDS } from '@merchant-real
 import { db } from '../../db/client.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { issueTokens, saveRefreshToken } from '../../utils/tokens.js';
+import { getChatIo } from '../../services/chat-socket.js';
 
 export const empireRouter = Router();
 
@@ -74,6 +75,17 @@ empireRouter.post('/', async (req, res, next) => {
         });
       }
     });
+
+    // Add new empire to the General chat room
+    const generalRoom = await db.chatRoom.findFirst({ where: { type: 'GENERAL' } });
+    if (generalRoom) {
+      await db.chatRoomMember.upsert({
+        where:  { chatRoomId_empireId: { chatRoomId: generalRoom.id, empireId: empire.id } },
+        create: { chatRoomId: generalRoom.id, empireId: empire.id },
+        update: {},
+      });
+      void getChatIo()?.in(`player:${req.auth!.playerId}`).socketsJoin(`chat:${generalRoom.id}`);
+    }
 
     // Re-issue tokens so the JWT carries the new empireId.
     // Without this, all subsequent empire-gated requests would carry empireId:null.

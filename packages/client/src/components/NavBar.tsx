@@ -11,6 +11,7 @@ const settingsItems = [
 const navLinks = [
   { to: '/realm',    label: 'Realm'    },
   { to: '/exchange', label: 'Exchange' },
+  { to: '/chat',     label: 'Chat'     },
   { to: '/admin',    label: 'Admin'    },
 ];
 

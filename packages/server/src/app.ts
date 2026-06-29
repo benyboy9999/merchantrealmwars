@@ -18,6 +18,7 @@ import { inventoryRouter }  from './api/inventory/routes.js';
 import { adminRouter }      from './api/admin/routes.js';
 import { wishlistRouter }   from './api/wishlist/routes.js';
 import { createSocketServer } from './ws/index.js';
+import { initChatSocket } from './services/chat-socket.js';
 import { db } from './db/client.js';
 import { startTickJob }   from './jobs/tick-job.js';
 import { startControlJob } from './jobs/control-job.js';
@@ -67,6 +68,7 @@ app.use(errorHandler);
 
 const httpServer = createServer(app);
 const io = createSocketServer(httpServer);
+initChatSocket(io);
 
 initCaravanTimers(io);
 void rescheduleInTransitCaravans();

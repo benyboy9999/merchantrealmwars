@@ -12,10 +12,7 @@ export function createSocketServer(httpServer: HttpServer): Server {
 
   io.use((socket, next) => {
     const token = socket.handshake.auth['token'] as string | undefined;
-    if (!token) {
-      next(new Error('Authentication required'));
-      return;
-    }
+    if (!token) { next(new Error('Authentication required')); return; }
     try {
       const payload = jwt.verify(token, config.JWT_SECRET) as { playerId: number };
       socket.data = { playerId: payload.playerId };
@@ -30,49 +27,52 @@ export function createSocketServer(httpServer: HttpServer): Server {
     void socket.join(`player:${playerId}`);
     void socket.join('global');
 
+    // Join the player's empire's chat rooms
+    void (async () => {
+      try {
+        const empire = await db.empire.findUnique({
+          where:   { playerId },
+          select:  { id: true, chatRoomMembers: { select: { chatRoomId: true } } },
+        });
+        if (empire) {
+          socket.data.empireId = empire.id;
+          for (const m of empire.chatRoomMembers) {
+            void socket.join(`chat:${m.chatRoomId}`);
+          }
+        }
+      } catch { /* ignore — socket still functions */ }
+    })();
+
     socket.on(WsEvent.CHAT_SEND, async (data: unknown) => {
       try {
-        const parsed = SendChatMessageSchema.parse(data);
-        const player = await db.player.findUnique({
-          where: { id: playerId },
-          select: { username: true },
+        const parsed     = SendChatMessageSchema.parse(data);
+        const empireId   = socket.data.empireId as number | undefined;
+        if (!empireId) return;
+
+        // Verify membership
+        const member = await db.chatRoomMember.findUnique({
+          where: { chatRoomId_empireId: { chatRoomId: parsed.roomId, empireId } },
         });
-        if (!player) return;
+        if (!member) return;
+
+        const empire = await db.empire.findUnique({ where: { id: empireId }, select: { name: true } });
 
         const message = await db.chatMessage.create({
-          data: {
-            senderId: playerId,
-            channelType: parsed.channelType,
-            channelId: parsed.channelId,
-            content: parsed.content,
-          },
+          data: { chatRoomId: parsed.roomId, empireId, content: parsed.content },
         });
 
-        const payload = {
-          id: message.id,
-          senderId: playerId,
-          senderUsername: player.username,
-          channelType: message.channelType,
-          channelId: message.channelId,
-          content: message.content,
-          sentAt: message.sentAt,
-        };
-
-        if (parsed.channelType === 'GLOBAL') {
-          io.to('global').emit(WsEvent.CHAT_MESSAGE, payload);
-        } else if (parsed.channelType === 'GUILD' && parsed.channelId) {
-          io.to(`guild:${parsed.channelId}`).emit(WsEvent.CHAT_MESSAGE, payload);
-        } else if (parsed.channelType === 'REGION' && parsed.channelId) {
-          io.to(`region:${parsed.channelId}`).emit(WsEvent.CHAT_MESSAGE, payload);
-        }
-      } catch {
-        // Swallow invalid messages
-      }
+        io.to(`chat:${parsed.roomId}`).emit(WsEvent.CHAT_MESSAGE, {
+          id:         message.id,
+          roomId:     message.chatRoomId,
+          empireId,
+          empireName: empire?.name ?? null,
+          content:    message.content,
+          createdAt:  message.createdAt,
+        });
+      } catch { /* swallow invalid messages */ }
     });
 
-    socket.on('disconnect', () => {
-      // Future: update player last-seen
-    });
+    socket.on('disconnect', () => { /* future: update last-seen */ });
   });
 
   return io;

@@ -6,6 +6,7 @@ import KingdomPage from './pages/KingdomPage.js';
 import RealmPage from './pages/RealmPage.js';
 import BuildingPage from './pages/BuildingPage.js';
 import ExchangePage from './pages/ExchangePage.js';
+import ChatPage from './pages/ChatPage.js';
 import AdminPage from './pages/AdminPage.js';
 import EncyclopediaPage from './pages/EncyclopediaPage.js';
 import LoginPage from './pages/LoginPage.js';
@@ -96,6 +97,7 @@ export default function App() {
                     <Route path="/kingdom/:keepId/:tab"                          element={<Page><KingdomPage /></Page>} />
                     <Route path="/kingdom/:keepId/buildings/:buildingId"          element={<Page><BuildingPage /></Page>} />
                     <Route path="/realm"                                          element={<RealmPage />} />
+                    <Route path="/chat"                                           element={<ChatPage />} />
                     <Route path="/exchange"                                       element={<Page><ExchangePage /></Page>} />
                     <Route path="/admin"                                          element={<Page><AdminPage /></Page>} />
                     <Route path="/encyclopedia"                                   element={<Page><EncyclopediaPage /></Page>} />
