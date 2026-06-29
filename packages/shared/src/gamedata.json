@@ -675,8 +675,8 @@
     "defaultWorkersPerLevel":   75,
     "muleCapacityKg":           500,
     "consumptionCycleMinutes":  480,
-    "maxBuildingSlots":         20,
-    "defaultBuildingSlots":     7,
+    "maxBuildingSlots":         24,
+    "defaultBuildingSlots":     6,
     "slotUnlockResource":       "CONSTRUCTION_KIT",
     "keepFoundingCost": [
       { "resource": "OAK",       "quantity": 5 },

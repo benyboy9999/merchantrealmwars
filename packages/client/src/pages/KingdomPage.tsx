@@ -3,7 +3,7 @@ import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useProductionProgress } from '../hooks/useLivePercent.js';
 import ProgressBar from '../components/ProgressBar.js';
-import { Badge, IconSlot } from '../components/ui/index.js';
+import { Badge, IconSlot, Modal, ModalSection, Button } from '../components/ui/index.js';
 import { api } from '../services/api.js';
 import {
   BUILDING_NAMES, RESOURCE_NAMES, RECIPES_BY_BUILDING, RECIPE_BY_KEY, RECIPE_BY_ID,
@@ -170,7 +170,7 @@ function KeepDetail({ keepId, currentTab, onTabChange, qc, empireCreatedAt }: {
       {/* Tab content */}
       <div className={`flex-1 ${currentTab === 'warehouse' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
         {currentTab === 'keep'       && <KeepTab keep={keep} qc={qc} />}
-        {currentTab === 'buildings'  && <BuildingsTab keep={keep} keepId={keepId} ledgerMap={ledgerMap} qc={qc} navigate={navigate} />}
+        {currentTab === 'buildings'  && <BuildingsTab keep={keep} keepId={keepId} ledgerMap={ledgerMap} qc={qc} />}
         {currentTab === 'warehouse'  && (
           <WarehousePanel
             locationType="KEEP"
@@ -242,183 +242,338 @@ function KeepTab({ keep, qc }: { keep: KeepTabKeep; qc: ReturnType<typeof useQue
 
 // ── Buildings tab ─────────────────────────────────────────────────────────────
 
-function BuildingsTab({ keep, keepId, ledgerMap, qc, navigate }: {
-  keep: { id: number; buildingSlotCount: number; buildings: Array<{ id: number; buildingTypeId: number; level: number; slotIndex: number; isActive: boolean; isDormant: boolean; health: number }> };
+function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
+  keep: { id: number; buildingSlotCount: number; buildings: Array<{ id: number; buildingTypeId: number; level: number; slotIndex: number; isActive: boolean; isDormant: boolean; health: number; workersAssigned: number }> };
   keepId: number;
   ledgerMap: Map<string, number>;
   qc: ReturnType<typeof useQueryClient>;
-  navigate: ReturnType<typeof useNavigate>;
 }) {
-  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
-  const [buildingType, setBuildingType] = useState('');
-  const [buildError, setBuildError] = useState('');
+  const [selectedSlot,   setSelectedSlot]   = useState<number | null>(null);
+  const [buildingType,   setBuildingType]   = useState('');
+  const [buildError,     setBuildError]     = useState('');
+  const [demolishConfirm, setDemolishConfirm] = useState(false);
 
   const buildingsBySlot = new Map(keep.buildings.map((b) => [b.slotIndex, b]));
-  const costs = buildingType
-    ? (BUILDING_CONSTRUCTION_COSTS[buildingType as keyof typeof BUILDING_CONSTRUCTION_COSTS] ?? [])
-    : [];
-  const canAfford = costs.every((c) => (ledgerMap.get(c.resource) ?? 0) >= c.quantity);
-
-  // Next locked slot: the first slot index >= buildingSlotCount
   const nextLockedSlot  = keep.buildingSlotCount;
-  const unlockNumber    = nextLockedSlot - KEEP_DEFAULT_BUILDING_SLOTS + 1; // 1-indexed
-  const unlockCost      = unlockNumber; // n-th unlock costs n Scaffolding
+  const unlockNumber    = nextLockedSlot - KEEP_DEFAULT_BUILDING_SLOTS + 1;
+  const unlockCost      = unlockNumber;
   const scaffoldingHeld = ledgerMap.get(KEEP_SLOT_UNLOCK_RESOURCE) ?? 0;
   const canAffordUnlock = scaffoldingHeld >= unlockCost && keep.buildingSlotCount < KEEP_MAX_BUILDING_SLOTS;
 
   const construct = useMutation({
     mutationFn: ({ bType, slot }: { bType: string; slot: number }) => api.buildBuilding(keepId, bType, slot),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['keep', keepId] }); setSelectedSlot(null); setBuildingType(''); setBuildError(''); },
-    onError: (err: Error) => setBuildError(err.message),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['keep', keepId] }); closeModal(); },
+    onError:   (err: Error) => setBuildError(err.message),
   });
-
   const unlockSlot = useMutation({
     mutationFn: () => api.unlockSlot(keepId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['keep', keepId] }); closeModal(); },
+  });
+  const demolish = useMutation({
+    mutationFn: (buildingId: number) => api.demolish(keepId, buildingId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['keep', keepId] }); closeModal(); },
+  });
+  const repair = useMutation({
+    mutationFn: (buildingId: number) => api.repairBuilding(keepId, buildingId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['keep', keepId] }),
   });
 
-  return (
-    <div className="p-4 h-full flex flex-col">
-      {/* Slot counter */}
-      <div className="text-xs text-slate-600 mb-3">
-        {keep.buildingSlotCount} / {KEEP_MAX_BUILDING_SLOTS} slots unlocked
-      </div>
+  function closeModal() {
+    setSelectedSlot(null);
+    setBuildingType('');
+    setBuildError('');
+    setDemolishConfirm(false);
+  }
 
-      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 mb-4">
-        {Array.from({ length: KEEP_MAX_BUILDING_SLOTS }, (_, i) => {
-          const building   = buildingsBySlot.get(i);
-          const isUnlocked = i < keep.buildingSlotCount;
-          const isNextLock = i === nextLockedSlot;
+  // Render the correct modal body for the selected slot
+  function renderModal() {
+    if (selectedSlot === null) return null;
+    const building   = buildingsBySlot.get(selectedSlot) ?? null;
+    const isUnlocked = selectedSlot < keep.buildingSlotCount;
 
-          if (!isUnlocked) {
+    // ── Has a building ───────────────────────────────────────────────
+    if (building) {
+      const btCode = BUILDING_TYPE_BY_ID[building.buildingTypeId] as BuildingType;
+      const bName  = BUILDING_NAMES[btCode as keyof typeof BUILDING_NAMES] ?? String(building.buildingTypeId);
+      const constCost = BUILDING_CONSTRUCTION_COSTS[btCode as keyof typeof BUILDING_CONSTRUCTION_COSTS] ?? [];
+      const missingFraction = Math.max(0, (100 - building.health) / 100);
+      const repairCost = constCost
+        .map((c) => ({ ...c, quantity: Math.ceil(c.quantity * building.level * missingFraction) }))
+        .filter((c) => c.quantity > 0);
+      const canAffordRepair = repairCost.every((c) => (ledgerMap.get(c.resource) ?? 0) >= c.quantity);
+      const healthColor = building.health > 80 ? 'bg-emerald-600' : building.health > 50 ? 'bg-amber-600' : 'bg-red-500';
+      const healthText  = building.health > 80 ? 'text-emerald-400' : building.health > 50 ? 'text-amber-400' : 'text-red-400';
+
+      return (
+        <Modal open onClose={closeModal} title={bName} subtitle={`Slot ${selectedSlot + 1} · Level ${building.level}`} size="sm">
+          {/* Overview */}
+          <ModalSection label="Overview">
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-xs text-slate-500 mb-1.5">
+                  <span>Durability</span>
+                  <span className={healthText}>{building.health.toFixed(0)}%</span>
+                </div>
+                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${healthColor}`} style={{ width: `${building.health}%` }} />
+                </div>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Status</span>
+                <span className={building.isDormant ? 'text-red-400' : building.isActive ? 'text-emerald-400' : 'text-slate-400'}>
+                  {building.isDormant ? 'Dormant' : building.isActive ? 'Active' : 'Idle'}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Workers</span>
+                <span className="text-slate-300">{building.workersAssigned} / {building.level * WORKERS_PER_LEVEL}</span>
+              </div>
+            </div>
+          </ModalSection>
+
+          {/* Repair — only shown when health is degraded */}
+          {building.health < 100 && (
+            <ModalSection label="Repair">
+              {repairCost.length === 0 ? (
+                <p className="text-xs text-slate-500">No resources needed.</p>
+              ) : (
+                <div className="space-y-2">
+                  {repairCost.map((c) => {
+                    const rLabel = RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource;
+                    const have   = ledgerMap.get(c.resource) ?? 0;
+                    const met    = have >= c.quantity;
+                    return (
+                      <div key={c.resource} className="flex items-center gap-2 text-xs">
+                        <IconSlot size="xs" label={rLabel} />
+                        <span className={met ? 'text-slate-200' : 'text-red-400'}>{c.quantity} {rLabel}</span>
+                        <span className="text-slate-600 ml-auto">{Math.floor(have)} held</span>
+                      </div>
+                    );
+                  })}
+                  {repair.isError && <p className="text-red-400 text-xs">{(repair.error as Error).message}</p>}
+                  <Button
+                    variant="primary" size="sm" className="w-full mt-1"
+                    disabled={!canAffordRepair || repair.isPending}
+                    onClick={() => repair.mutate(building.id)}
+                  >
+                    {repair.isPending ? 'Repairing…' : 'Repair to 100%'}
+                  </Button>
+                </div>
+              )}
+            </ModalSection>
+          )}
+
+          {/* Upgrade placeholder */}
+          <ModalSection label="Upgrade">
+            <p className="text-xs text-slate-600 italic">Upgrade system coming soon.</p>
+          </ModalSection>
+
+          {/* Demolish */}
+          <ModalSection label="Demolish">
+            {demolishConfirm ? (
+              <div className="space-y-2">
+                <p className="text-xs text-red-400">This will permanently destroy the building. Resources are not returned.</p>
+                <div className="flex gap-2 items-center">
+                  <Button
+                    variant="danger" size="sm"
+                    disabled={demolish.isPending}
+                    onClick={() => demolish.mutate(building.id)}
+                  >
+                    {demolish.isPending ? 'Demolishing…' : 'Confirm'}
+                  </Button>
+                  <button className="text-xs text-slate-500 hover:text-slate-300 transition-colors" onClick={() => setDemolishConfirm(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="danger" size="sm" onClick={() => setDemolishConfirm(true)}>
+                Demolish Building
+              </Button>
+            )}
+          </ModalSection>
+        </Modal>
+      );
+    }
+
+    // ── Locked slot ──────────────────────────────────────────────────
+    if (!isUnlocked) {
+      const isNext = selectedSlot === nextLockedSlot;
+      return (
+        <Modal open onClose={closeModal} title="Locked Slot" subtitle={`Slot ${selectedSlot + 1}`} size="sm">
+          <ModalSection>
+            <div className="space-y-4">
+              <p className="text-sm text-slate-400">
+                {isNext
+                  ? 'Unlock this slot to construct a building here.'
+                  : `Slot ${nextLockedSlot + 1} must be unlocked first.`}
+              </p>
+              <div className="flex items-center gap-2 text-xs">
+                <IconSlot size="xs" label={RESOURCE_NAMES[KEEP_SLOT_UNLOCK_RESOURCE as keyof typeof RESOURCE_NAMES] ?? KEEP_SLOT_UNLOCK_RESOURCE} />
+                <span className={scaffoldingHeld >= unlockCost ? 'text-slate-200' : 'text-red-400'}>
+                  {unlockCost} {RESOURCE_NAMES[KEEP_SLOT_UNLOCK_RESOURCE as keyof typeof RESOURCE_NAMES]}
+                </span>
+                <span className="text-slate-600 ml-auto">{Math.floor(scaffoldingHeld)} held</span>
+              </div>
+              {unlockSlot.isError && <p className="text-red-400 text-xs">{(unlockSlot.error as Error).message}</p>}
+              <Button
+                variant="primary" size="md" className="w-full"
+                disabled={!canAffordUnlock || unlockSlot.isPending || !isNext}
+                onClick={() => unlockSlot.mutate()}
+              >
+                {unlockSlot.isPending ? 'Unlocking…' : 'Unlock Slot'}
+              </Button>
+            </div>
+          </ModalSection>
+        </Modal>
+      );
+    }
+
+    // ── Empty unlocked slot ──────────────────────────────────────────
+    const selectedCosts = buildingType
+      ? (BUILDING_CONSTRUCTION_COSTS[buildingType as keyof typeof BUILDING_CONSTRUCTION_COSTS] ?? [])
+      : [];
+    const canAffordBuild = selectedCosts.every((c) => (ledgerMap.get(c.resource) ?? 0) >= c.quantity);
+
+    return (
+      <Modal open onClose={closeModal} title={`Slot ${selectedSlot + 1}`} subtitle="Choose a building to construct" size="md">
+        <div className="divide-y divide-slate-800">
+          {Object.keys(BUILDING_NAMES).map((bt) => {
+            const bName  = BUILDING_NAMES[bt as keyof typeof BUILDING_NAMES];
+            const costs  = BUILDING_CONSTRUCTION_COSTS[bt as keyof typeof BUILDING_CONSTRUCTION_COSTS] ?? [];
+            const allMet = costs.every((c) => (ledgerMap.get(c.resource) ?? 0) >= c.quantity);
+            const isSel  = buildingType === bt;
             return (
               <div
-                key={i}
-                className={`border rounded p-2.5 min-h-[72px] flex flex-col justify-between transition-colors ${
-                  isNextLock
-                    ? 'border-slate-600 bg-slate-900/60 cursor-pointer hover:border-slate-500'
-                    : 'border-slate-800 bg-slate-900/20 cursor-default opacity-40'
-                }`}
-                onClick={() => isNextLock && setSelectedSlot(selectedSlot === -1 ? null : -1)}
+                key={bt}
+                className={`px-5 py-3 cursor-pointer transition-colors ${isSel ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}
+                onClick={() => { setBuildingType(isSel ? '' : bt); setBuildError(''); }}
               >
-                <div className="text-slate-600 text-xs">Slot {i + 1}</div>
-                {isNextLock && (
-                  <div className="text-xs text-slate-500 mt-1">
-                    🔒 {unlockCost} {RESOURCE_NAMES[KEEP_SLOT_UNLOCK_RESOURCE as keyof typeof RESOURCE_NAMES]}
+                <div className="flex items-center gap-3">
+                  <IconSlot size="sm" label={bName} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-slate-200 font-medium">{bName}</div>
+                    <div className="flex gap-2 mt-0.5 flex-wrap">
+                      {costs.map((c) => {
+                        const rLabel = RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource;
+                        const met    = (ledgerMap.get(c.resource) ?? 0) >= c.quantity;
+                        return (
+                          <span key={c.resource} className={`text-xs ${met ? 'text-slate-500' : 'text-red-500'}`}>
+                            {c.quantity} {rLabel}
+                          </span>
+                        );
+                      })}
+                      {costs.length === 0 && <span className="text-xs text-slate-600">Free</span>}
+                    </div>
+                  </div>
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${allMet ? 'bg-emerald-500' : 'bg-slate-700'}`} />
+                </div>
+
+                {isSel && (
+                  <div className="mt-3 pl-10 space-y-3">
+                    {selectedCosts.length > 0 && (
+                      <div className="space-y-1.5">
+                        {selectedCosts.map((c) => {
+                          const rLabel = RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource;
+                          const have   = ledgerMap.get(c.resource) ?? 0;
+                          const met    = have >= c.quantity;
+                          return (
+                            <div key={c.resource} className="flex items-center gap-2 text-xs">
+                              <IconSlot size="xs" label={rLabel} />
+                              <span className={met ? 'text-slate-200' : 'text-red-400'}>{c.quantity} {rLabel}</span>
+                              <span className="text-slate-600 ml-auto">{Math.floor(have)} held</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {buildError && <p className="text-red-400 text-xs">{buildError}</p>}
+                    <Button
+                      variant="primary" size="sm"
+                      disabled={!canAffordBuild || construct.isPending}
+                      onClick={(e) => { e.stopPropagation(); construct.mutate({ bType: bt, slot: selectedSlot! }); }}
+                    >
+                      {construct.isPending ? 'Building…' : `Build ${bName}`}
+                    </Button>
                   </div>
                 )}
               </div>
             );
+          })}
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <div className="p-4 h-full flex flex-col gap-3">
+      {/* 24-slot grid — 4 cols mobile, 6 cols sm+ */}
+      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+        {Array.from({ length: KEEP_MAX_BUILDING_SLOTS }, (_, i) => {
+          const building   = buildingsBySlot.get(i);
+          const isUnlocked = i < keep.buildingSlotCount;
+
+          // ── Locked slot (uniform appearance) ──
+          if (!isUnlocked) {
+            return (
+              <button
+                key={i}
+                onClick={() => setSelectedSlot(i)}
+                className="border border-slate-800 rounded-lg bg-slate-900/20 min-h-[72px] flex items-center justify-center hover:border-slate-700 hover:bg-slate-900/40 transition-colors opacity-40 hover:opacity-60"
+                title="Locked"
+              >
+                <span className="text-slate-600 text-base">🔒</span>
+              </button>
+            );
           }
 
-          const bName = building
-            ? (BUILDING_NAMES[BUILDING_TYPE_BY_ID[building.buildingTypeId] as keyof typeof BUILDING_NAMES] ?? String(building.buildingTypeId))
-            : null;
+          // ── Empty unlocked slot ──
+          if (!building) {
+            return (
+              <button
+                key={i}
+                onClick={() => setSelectedSlot(i)}
+                className="border border-slate-700 border-dashed rounded-lg bg-slate-800/20 min-h-[72px] flex items-center justify-center hover:border-slate-600 hover:bg-slate-800/40 transition-colors"
+                title={`Slot ${i + 1} — empty`}
+              >
+                <span className="text-slate-700 text-xl leading-none">+</span>
+              </button>
+            );
+          }
+
+          // ── Occupied slot ──
+          const btCode = BUILDING_TYPE_BY_ID[building.buildingTypeId] as BuildingType;
+          const bName  = BUILDING_NAMES[btCode as keyof typeof BUILDING_NAMES] ?? String(building.buildingTypeId);
+          const healthColor = building.health > 80 ? 'bg-emerald-600' : building.health > 50 ? 'bg-amber-500' : 'bg-red-500';
 
           return (
-            <div
+            <button
               key={i}
-              className={`border rounded-lg p-2.5 min-h-[88px] cursor-pointer transition-all ${
-                building
-                  ? 'border-slate-600 bg-slate-800 hover:bg-slate-700 hover:border-slate-500'
-                  : selectedSlot === i
-                    ? 'border-azure-600/60 bg-slate-800'
-                    : 'border-slate-700 border-dashed bg-slate-800/30 hover:border-slate-600'
-              }`}
-              onClick={() => building ? navigate(`/kingdom/${keepId}/buildings/${building.id}`) : setSelectedSlot(i === selectedSlot ? null : i)}
+              onClick={() => setSelectedSlot(i)}
+              className="border border-slate-600 rounded-lg bg-slate-800 hover:bg-slate-700 hover:border-slate-500 min-h-[72px] p-2 flex flex-col gap-1 text-left transition-all"
             >
-              {building ? (
-                <div className="flex flex-col gap-1.5 h-full">
-                  <IconSlot size="sm" label={bName ?? ''} className="mb-0.5" />
-                  <div className="text-xs text-slate-200 leading-tight font-medium">{bName}</div>
-                  <div className="flex items-center gap-1.5 mt-auto">
-                    <span className="text-xs text-slate-600">Lv.{building.level}</span>
-                    {building.isDormant && <Badge variant="error" className="text-[10px] px-1 py-px">Dormant</Badge>}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-full min-h-[60px] text-slate-700 text-xs">
-                  Slot {i + 1}
-                </div>
-              )}
-            </div>
+              <div className="flex items-start gap-1.5">
+                <IconSlot size="xs" label={bName} className="flex-shrink-0 mt-px" />
+                <span className="text-xs text-slate-200 font-medium leading-tight line-clamp-2 flex-1">{bName}</span>
+              </div>
+              <div className="flex items-center gap-1.5 mt-auto">
+                <span className="text-[10px] text-slate-600">Lv.{building.level}</span>
+                {building.isDormant && <Badge variant="error" className="text-[10px] px-1 py-0 leading-tight">D</Badge>}
+              </div>
+              <div className="h-0.5 bg-slate-700 rounded-full overflow-hidden w-full">
+                <div className={`h-full rounded-full transition-all ${healthColor}`} style={{ width: `${building.health}%` }} />
+              </div>
+            </button>
           );
         })}
       </div>
 
-      {/* Build dialog (for unlocked empty slots) */}
-      {selectedSlot !== null && selectedSlot >= 0 && (
-        <div className="border border-slate-700 rounded p-4 bg-slate-800 max-w-sm mb-3">
-          <div className="text-xs uppercase tracking-wider text-slate-500 mb-3">Construct in Slot {selectedSlot + 1}</div>
-          <select
-            className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm mb-3 focus:outline-none"
-            value={buildingType}
-            onChange={(e) => { setBuildingType(e.target.value); setBuildError(''); }}
-          >
-            <option value="">Select building...</option>
-            {Object.keys(BUILDING_NAMES).map((bt) => (
-              <option key={bt} value={bt}>{BUILDING_NAMES[bt as keyof typeof BUILDING_NAMES]}</option>
-            ))}
-          </select>
-          {buildingType && costs.length > 0 && (
-            <div className="flex flex-col gap-1.5 mb-3">
-              {costs.map((c) => {
-                const have = ledgerMap.get(c.resource) ?? 0;
-                const rLabel = RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource;
-                const met = have >= c.quantity;
-                return (
-                  <div key={c.resource} className="flex items-center gap-2 text-xs">
-                    <IconSlot size="xs" label={rLabel} />
-                    <span className={met ? 'text-slate-200' : 'text-red-400'}>
-                      {c.quantity} {rLabel}
-                    </span>
-                    <span className="text-slate-600 ml-auto">{Math.floor(have)} held</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {buildError && <div className="text-red-400 text-xs mb-2">{buildError}</div>}
-          <div className="flex gap-2">
-            <button
-              className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-4 py-1.5 rounded text-sm"
-              disabled={!buildingType || !canAfford || construct.isPending}
-              onClick={() => buildingType && construct.mutate({ bType: buildingType, slot: selectedSlot })}
-            >
-              Build
-            </button>
-            <button className="text-slate-500 hover:text-slate-300 text-sm" onClick={() => { setSelectedSlot(null); setBuildError(''); }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Slot counter */}
+      <div className="text-xs text-slate-700">
+        {keep.buildingSlotCount} / {KEEP_MAX_BUILDING_SLOTS} slots unlocked
+      </div>
 
-      {/* Unlock dialog (for the next locked slot) */}
-      {selectedSlot === -1 && keep.buildingSlotCount < KEEP_MAX_BUILDING_SLOTS && (
-        <div className="border border-slate-700 rounded p-4 bg-slate-800 max-w-sm">
-          <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">Unlock Slot {nextLockedSlot + 1}</div>
-          <div className="text-sm text-slate-400 mb-3">
-            Cost:{' '}
-            <span className={scaffoldingHeld >= unlockCost ? 'text-slate-200' : 'text-red-400'}>
-              {unlockCost} {RESOURCE_NAMES[KEEP_SLOT_UNLOCK_RESOURCE as keyof typeof RESOURCE_NAMES]}
-            </span>
-            <span className="text-slate-600 ml-1">({Math.floor(scaffoldingHeld)} held)</span>
-          </div>
-          <div className="flex gap-2">
-            <button
-              className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-4 py-1.5 rounded text-sm"
-              disabled={!canAffordUnlock || unlockSlot.isPending}
-              onClick={() => unlockSlot.mutate()}
-            >
-              Unlock
-            </button>
-            <button className="text-slate-500 hover:text-slate-300 text-sm" onClick={() => setSelectedSlot(null)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      {renderModal()}
     </div>
   );
 }

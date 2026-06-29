@@ -210,7 +210,7 @@ model Keep {
   empireId          Int
   plotId            Int
   name              String
-  buildingSlotCount Int      @default(7)
+  buildingSlotCount Int      @default(6)
   createdAt         DateTime @default(now())
   // Nullable during migration only — always set on keeps created after migration.
   warehouseId       Int?     @unique

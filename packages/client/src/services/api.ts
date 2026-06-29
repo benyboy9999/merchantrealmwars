@@ -136,6 +136,7 @@ export const api = {
   buildBuilding:(keepId: number, buildingType: string, slotIndex: number) =>
     post<{ building: Building }>(`/api/keeps/${keepId}/buildings`, { buildingType, slotIndex }),
   demolish:     (keepId: number, buildingId: number) => del(`/api/keeps/${keepId}/buildings/${buildingId}`),
+  repairBuilding:(keepId: number, buildingId: number) => post<{ ok: boolean; repairCost: Array<{ resource: string; quantity: number }> }>(`/api/keeps/${keepId}/buildings/${buildingId}/repair`),
   unlockSlot:   (keepId: number) => post<{ keep: Keep; cost: number; resource: string }>(`/api/keeps/${keepId}/unlock-slot`),
   setWorkers:   (keepId: number, buildingId: number, count: number) =>
     patch<{ building: Building }>(`/api/keeps/${keepId}/buildings/${buildingId}/workers`, { count }),
