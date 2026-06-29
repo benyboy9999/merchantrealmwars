@@ -201,44 +201,28 @@ export default function ChatPage() {
                 const prev      = messages[i - 1];
                 const isMe      = msg.empireId === myEmpireId;
                 const isGrouped = !!prev && prev.empireId === msg.empireId;
+                const name      = isMe ? (myEmpireName ?? 'You') : (msg.empireName ?? 'Unknown');
                 const time      = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-                return isMe ? (
-                  /* ── My message (right) ───────────────────── */
-                  <div key={msg.id} className={`flex justify-end items-end gap-2 ${isGrouped ? 'mt-0.5' : 'mt-4'}`}>
-                    <div className="max-w-[68%] flex flex-col items-end">
-                      {!isGrouped && (
-                        <div className="flex items-baseline gap-2 mb-1 flex-row-reverse">
-                          <span className="text-xs font-semibold text-azure-400">
-                            {myEmpireName ?? 'You'}
-                          </span>
-                          <span className="text-[10px] text-slate-600">{time}</span>
-                        </div>
-                      )}
-                      <div className="bg-azure-600 text-white text-sm px-4 py-2.5 rounded-2xl rounded-tr-sm leading-relaxed break-words">
-                        {msg.content}
-                      </div>
+                return (
+                  <div key={msg.id} className={`flex items-start gap-3 ${isGrouped ? 'mt-0.5' : 'mt-4'}`}>
+                    <div className="w-8 flex-shrink-0">
+                      {!isGrouped && <EmpireAvatar name={name} />}
                     </div>
-                    <div className="w-8 flex-shrink-0 flex items-end pb-0.5">
-                      {!isGrouped && <EmpireAvatar name={myEmpireName} />}
-                    </div>
-                  </div>
-                ) : (
-                  /* ── Other's message (left) ───────────────── */
-                  <div key={msg.id} className={`flex items-end gap-2 ${isGrouped ? 'mt-0.5' : 'mt-4'}`}>
-                    <div className="w-8 flex-shrink-0 flex items-end pb-0.5">
-                      {!isGrouped && <EmpireAvatar name={msg.empireName} />}
-                    </div>
-                    <div className="max-w-[68%] flex flex-col items-start">
+                    <div className="flex-1 min-w-0">
                       {!isGrouped && (
                         <div className="flex items-baseline gap-2 mb-1">
-                          <span className="text-xs font-semibold text-slate-300">
-                            {msg.empireName ?? 'Unknown'}
+                          <span className={`text-xs font-semibold ${isMe ? 'text-azure-400' : 'text-slate-300'}`}>
+                            {name}
                           </span>
                           <span className="text-[10px] text-slate-600">{time}</span>
                         </div>
                       )}
-                      <div className="bg-slate-800 text-slate-200 text-sm px-4 py-2.5 rounded-2xl rounded-tl-sm leading-relaxed break-words border border-slate-700/40">
+                      <div className={`inline-block max-w-[80%] text-sm px-3 py-2 rounded leading-relaxed break-words ${
+                        isMe
+                          ? 'bg-azure-700/60 text-slate-100 border border-azure-600/40'
+                          : 'bg-slate-800 text-slate-200 border border-slate-700/40'
+                      }`}>
                         {msg.content}
                       </div>
                     </div>
@@ -332,7 +316,7 @@ export default function ChatPage() {
 
 function EmpireAvatar({ name }: { name: string | null }) {
   return (
-    <div className="w-8 h-8 rounded-full bg-slate-700 border border-slate-600/60 flex items-center justify-center text-xs font-bold text-slate-300 select-none flex-shrink-0">
+    <div className="w-8 h-8 rounded bg-slate-700 border border-slate-600/60 flex items-center justify-center text-xs font-bold text-slate-300 select-none flex-shrink-0">
       {name?.[0]?.toUpperCase() ?? '?'}
     </div>
   );
