@@ -412,9 +412,9 @@ export default function ExchangePage() {
                             onClick={() => {
                               setSelected(item.resourceType);
                               setBuyQty(String(item.quantity));
-                              setBottomTab('listings');
+                              setTradeMode('buy');
                             }}
-                            title="Click to open in buy menu"
+                            title="Click to open in buy panel"
                           >
                             <td className="px-3 py-1.5">
                               <div className="flex items-center gap-2">
@@ -574,26 +574,47 @@ export default function ExchangePage() {
                       <p className="text-slate-600 text-xs">No listings available — nothing to buy.</p>
                     ) : (
                       <>
-                        <div className="flex gap-2 items-center">
-                          <input
-                            type="number" min={1}
-                            className="w-32 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
-                            placeholder="Quantity"
-                            value={buyQty}
-                            onChange={(e) => setBuyQty(e.target.value)}
-                          />
-                          {costPreview && (
-                            <span className="text-xs text-slate-500">
-                              {costPreview.shortfall > 0
-                                ? <span className="text-amber-400">Only {(buyQtyNum - costPreview.shortfall).toFixed(0)} available</span>
-                                : <>= <span className="text-gold-400 font-mono">{costPreview.cost.toFixed(0)}g</span></>
-                              }
-                              <span className="ml-2 text-slate-600">(have {goldBalance.toFixed(0)}g)</span>
-                            </span>
-                          )}
-                        </div>
+                        <input
+                          type="number" min={1}
+                          className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
+                          placeholder="Quantity"
+                          value={buyQty}
+                          onChange={(e) => setBuyQty(e.target.value)}
+                        />
+                        {costPreview ? (
+                          <div className="space-y-1.5 text-xs">
+                            {costPreview.shortfall > 0 ? (
+                              <div className="flex justify-between text-amber-400">
+                                <span>Available supply</span>
+                                <span className="font-mono">{(buyQtyNum - costPreview.shortfall).toFixed(0)} / {buyQtyNum}</span>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex justify-between text-slate-500">
+                                  <span>Estimated cost</span>
+                                  <span className="text-gold-400 font-mono">{costPreview.cost.toFixed(0)}g</span>
+                                </div>
+                                <div className="flex justify-between text-slate-500">
+                                  <span>Your balance</span>
+                                  <span className={`font-mono ${costPreview.cost > goldBalance ? 'text-red-400' : 'text-slate-300'}`}>{goldBalance.toFixed(0)}g</span>
+                                </div>
+                                <div className="flex justify-between text-slate-500">
+                                  <span>After purchase</span>
+                                  <span className="text-slate-400 font-mono">{(goldBalance - costPreview.cost).toFixed(0)}g</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 text-xs">
+                            <div className="flex justify-between text-slate-600">
+                              <span>Your balance</span>
+                              <span className="font-mono">{goldBalance.toFixed(0)}g</span>
+                            </div>
+                          </div>
+                        )}
                         <button
-                          className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-5 py-1.5 rounded text-sm transition-colors"
+                          className="w-full bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold py-2 rounded text-sm transition-colors"
                           disabled={
                             !buyQty || buyQtyNum <= 0 ||
                             !costPreview || costPreview.shortfall > 0 ||
@@ -611,50 +632,45 @@ export default function ExchangePage() {
                 ) : (
                   /* Sell mode */
                   <div className="space-y-3">
-                    {warehouseQty <= 0 ? (
-                      <p className="text-slate-600 text-xs">
-                        You have no {rName(selected)} in this exchange warehouse to list.
-                      </p>
-                    ) : (
-                      <>
-                        <div className="text-xs text-slate-500 bg-slate-800/60 rounded px-3 py-2">
-                          In warehouse: <span className="text-slate-200 font-mono">{warehouseQty.toFixed(0)}</span>
+                    <input
+                      type="number" min={1} max={warehouseQty || undefined}
+                      className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
+                      placeholder="Quantity"
+                      value={listQty}
+                      onChange={(e) => setListQty(e.target.value)}
+                    />
+                    <input
+                      type="number" min={0.01} step={0.01}
+                      className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
+                      placeholder="Price per unit (gold)"
+                      value={listPrice}
+                      onChange={(e) => setListPrice(e.target.value)}
+                    />
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between text-slate-500">
+                        <span>In warehouse</span>
+                        <span className={`font-mono ${warehouseQty <= 0 ? 'text-red-400' : 'text-slate-300'}`}>{warehouseQty.toFixed(0)}</span>
+                      </div>
+                      {listQty && listPrice && Number(listQty) > 0 && Number(listPrice) > 0 && (
+                        <div className="flex justify-between text-slate-500">
+                          <span>Listing value</span>
+                          <span className="text-gold-400 font-mono">{(Number(listQty) * Number(listPrice)).toFixed(0)}g</span>
                         </div>
-                        <div className="flex gap-2 flex-wrap items-center">
-                          <input
-                            type="number" min={1} max={warehouseQty}
-                            className="w-28 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
-                            placeholder="Quantity"
-                            value={listQty}
-                            onChange={(e) => setListQty(e.target.value)}
-                          />
-                          <input
-                            type="number" min={0.01} step={0.01}
-                            className="w-28 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
-                            placeholder="Price / unit"
-                            value={listPrice}
-                            onChange={(e) => setListPrice(e.target.value)}
-                          />
-                          {listQty && listPrice && Number(listQty) > 0 && Number(listPrice) > 0 && (
-                            <span className="text-xs text-slate-500">
-                              = <span className="text-gold-400 font-mono">{(Number(listQty) * Number(listPrice)).toFixed(0)}g</span>
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          className="bg-gold-500/80 hover:bg-gold-500 disabled:opacity-40 text-slate-900 font-semibold px-5 py-1.5 rounded text-sm transition-colors"
-                          disabled={
-                            !listQty || !listPrice ||
-                            Number(listQty) <= 0 || Number(listQty) > warehouseQty ||
-                            Number(listPrice) <= 0 ||
-                            createListing.isPending
-                          }
-                          onClick={() => createListing.mutate()}
-                        >{createListing.isPending ? 'Listing…' : 'List for Sale'}</button>
-                        {createListing.isError && (
-                          <p className="text-red-400 text-xs">{(createListing.error as Error).message}</p>
-                        )}
-                      </>
+                      )}
+                    </div>
+                    <button
+                      className="w-full bg-gold-500/80 hover:bg-gold-500 disabled:opacity-40 text-slate-900 font-semibold py-2 rounded text-sm transition-colors"
+                      disabled={
+                        warehouseQty <= 0 ||
+                        !listQty || !listPrice ||
+                        Number(listQty) <= 0 || Number(listQty) > warehouseQty ||
+                        Number(listPrice) <= 0 ||
+                        createListing.isPending
+                      }
+                      onClick={() => createListing.mutate()}
+                    >{createListing.isPending ? 'Listing…' : 'List for Sale'}</button>
+                    {createListing.isError && (
+                      <p className="text-red-400 text-xs">{(createListing.error as Error).message}</p>
                     )}
                   </div>
                 )}
