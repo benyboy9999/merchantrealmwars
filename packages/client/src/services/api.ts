@@ -260,7 +260,7 @@ export interface Building {
 }
 export interface Storage { usedWeight: number; maxWeight: number }
 export interface ProductionOrder { id: number; keepId: number; buildingTypeId: number; recipeId: number; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity: number | null; producedQuantity: number; position: number }
-export interface ExchangeListing { id: number; empireId: number | null; regionId: number; resourceType: string; quantity: number; pricePerUnit: number; fulfilledQty: number; status: string; createdAt: string }
+export interface ExchangeListing { id: number; empireId: number | null; empireName: string | null; regionId: number; resourceType: string; quantity: number; pricePerUnit: number; fulfilledQty: number; status: string; createdAt: string }
 export interface AdminStatus { bypassEnabled: boolean; lastTick: { tickNumber: number; processedAt: string; durationMs: number } | null; goldBalance: number; tickIntervalSeconds: number }
 export interface TickResult { tickNumber: number; durationMs: number; produced: number; delivered: number }
 export interface AddOrderBody { recipeKey: string; orderType: 'INFINITE' | 'NUMERICAL'; targetQuantity?: number }

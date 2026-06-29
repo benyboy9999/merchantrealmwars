@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api.js';
 import type { ExchangeListing, WishlistWithItems } from '../services/api.js';
 import { RESOURCE_NAMES, REGION_IDS } from '@merchant-realms/shared';
 import WarehousePanel from '../components/WarehousePanel.js';
 import { IconSlot } from '../components/ui/index.js';
+import { useAuthStore } from '../stores/auth.js';
 
 const REGIONS = [
   { id: REGION_IDS.CENTRAL, name: 'Central'   },
@@ -21,12 +22,15 @@ export default function ExchangePage() {
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const initialRegion = REGIONS.find((r) => r.id === parseInt(searchParams.get('region') ?? ''))?.id ?? REGION_IDS.CENTRAL;
-  const [regionId, setRegionId]   = useState<number>(initialRegion);
-  const [selected, setSelected]   = useState<string | null>(null); // resourceType
+  const myEmpireId = useAuthStore((s) => s.empireId);
+  const [regionId, setRegionId]     = useState<number>(initialRegion);
+  const [selected, setSelected]     = useState<string | null>(null);
+  const [search, setSearch]         = useState('');
+  const [tradeMode, setTradeMode]   = useState<'buy' | 'sell'>('buy');
   const [buyListingId, setBuyListingId] = useState<number | null>(null);
-  const [buyQty, setBuyQty]       = useState('');
-  const [listQty, setListQty]     = useState('');
-  const [listPrice, setListPrice] = useState('');
+  const [buyQty, setBuyQty]         = useState('');
+  const [listQty, setListQty]       = useState('');
+  const [listPrice, setListPrice]   = useState('');
 
   // Wishlist panel state
   const [bottomTab, setBottomTab]         = useState<'listings' | 'wishlists'>('listings');
@@ -116,17 +120,45 @@ export default function ExchangePage() {
   const inventory   = (storageData?.warehouse?.items ?? []).filter((e) => e.quantity > 0);
   const allListings = listingsData?.listings ?? [];
 
+  // Per-resource quantity the player currently has listed for sale
+  const myListedMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const l of allListings) {
+      if (l.empireId === myEmpireId) {
+        m.set(l.resourceType, (m.get(l.resourceType) ?? 0) + (l.quantity - l.fulfilledQty));
+      }
+    }
+    return m;
+  }, [allListings, myEmpireId]);
+
   // Resources to show in left panel: anything in warehouse OR with active listings
-  const listedResources = new Set(allListings.map((l) => l.resourceType));
-  const warehouseResources = new Set(storageMap.keys());
-  const visibleResources = [...new Set([...warehouseResources, ...listedResources])].sort();
+  const allVisibleResources = useMemo(() => {
+    const listedResources    = new Set(allListings.map((l) => l.resourceType));
+    const warehouseResources = new Set(storageMap.keys());
+    return [...new Set([...warehouseResources, ...listedResources])].sort();
+  }, [allListings, storageMap]);
 
-  // Listings for the selected resource
-  const resourceListings = selected
-    ? allListings.filter((l) => l.resourceType === selected)
-    : [];
+  const visibleResources = useMemo(() => {
+    if (!search.trim()) return allVisibleResources;
+    const q = search.trim().toLowerCase();
+    return allVisibleResources.filter((rt) => rName(rt).toLowerCase().includes(q));
+  }, [allVisibleResources, search]);
 
-  const warehouseQty     = selected ? (storageMap.get(selected) ?? 0) : 0;
+  // Listings for the selected resource, sorted price asc
+  const resourceListings = useMemo(() =>
+    selected ? [...allListings.filter((l) => l.resourceType === selected)].sort((a, b) => a.pricePerUnit - b.pricePerUnit) : [],
+  [allListings, selected]);
+
+  const warehouseQty = selected ? (storageMap.get(selected) ?? 0) : 0;
+  const myListed     = selected ? (myListedMap.get(selected) ?? 0) : 0;
+
+  const avgPrice = useMemo(() => {
+    const totalQty = resourceListings.reduce((s, l) => s + (l.quantity - l.fulfilledQty), 0);
+    if (totalQty === 0) return null;
+    const weightedSum = resourceListings.reduce((s, l) => s + l.pricePerUnit * (l.quantity - l.fulfilledQty), 0);
+    return weightedSum / totalQty;
+  }, [resourceListings]);
+
   const activeBuyListing = buyListingId ? allListings.find((l) => l.id === buyListingId) ?? null : null;
 
   const allWishlists: WishlistWithItems[] = wishlistData?.wishlists ?? [];
@@ -141,6 +173,8 @@ export default function ExchangePage() {
     setBuyQty('');
     setListQty('');
     setListPrice('');
+    setSearch('');
+    setTradeMode('buy');
   };
 
   return (
@@ -220,23 +254,33 @@ export default function ExchangePage() {
 
           {bottomTab === 'listings' ? (
             <div>
+              {/* Search / filter */}
+              <div className="px-3 py-2 border-b border-slate-800">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search materials…"
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-slate-500"
+                />
+              </div>
+
               {visibleResources.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-slate-600 text-sm">
-                  No listings or warehouse items
+                <div className="px-4 py-8 text-center text-slate-600 text-sm">
+                  {search ? 'No materials match your search' : 'No listings or warehouse items'}
                 </div>
               ) : (
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-slate-900/95">
+                  <thead className="sticky top-0 bg-slate-900">
                     <tr className="text-xs text-slate-600 border-b border-slate-800">
                       <th className="text-left px-4 py-1.5 font-normal">Material</th>
-                      <th className="text-right px-4 py-1.5 font-normal">Warehouse</th>
-                      <th className="text-right px-4 py-1.5 font-normal">Listings</th>
+                      <th className="text-right px-4 py-1.5 font-normal">Listed</th>
                       <th className="text-right px-4 py-1.5 font-normal">Best price</th>
                     </tr>
                   </thead>
                   <tbody>
                     {visibleResources.map((rt) => {
-                      const inWh       = storageMap.get(rt) ?? 0;
+                      const myListed   = myListedMap.get(rt) ?? 0;
                       const rtListings = allListings.filter((l) => l.resourceType === rt);
                       const bestPrice  = rtListings.length > 0
                         ? Math.min(...rtListings.map((l) => l.pricePerUnit))
@@ -247,21 +291,18 @@ export default function ExchangePage() {
                           className={`border-b border-slate-800/40 cursor-pointer transition-colors ${
                             selected === rt ? 'bg-slate-700/40' : 'hover:bg-slate-800/40'
                           }`}
-                          onClick={() => { setSelected(rt); setBuyListingId(null); setBuyQty(''); }}
+                          onClick={() => { setSelected(rt); setBuyListingId(null); setBuyQty(''); setListQty(''); setListPrice(''); }}
                         >
-                          <td className="px-4 py-1.5">
+                          <td className="px-4 py-2">
                             <div className="flex items-center gap-2">
                               <IconSlot size="xs" label={rName(rt)} />
                               <span className="text-slate-300">{rName(rt)}</span>
                             </div>
                           </td>
-                          <td className={`px-4 py-1.5 text-right font-mono tabular-nums ${inWh > 0 ? 'text-slate-200' : 'text-slate-700'}`}>
-                            {inWh > 0 ? inWh.toFixed(0) : '—'}
+                          <td className={`px-4 py-2 text-right font-mono tabular-nums text-xs ${myListed > 0 ? 'text-azure-300' : 'text-slate-700'}`}>
+                            {myListed > 0 ? myListed.toFixed(0) : '—'}
                           </td>
-                          <td className="px-4 py-1.5 text-right text-slate-500">
-                            {rtListings.length > 0 ? rtListings.length : <span className="text-slate-700">—</span>}
-                          </td>
-                          <td className="px-4 py-1.5 text-right font-mono tabular-nums text-gold-400">
+                          <td className="px-4 py-2 text-right font-mono tabular-nums text-xs text-gold-400">
                             {bestPrice !== null ? `${bestPrice}g` : <span className="text-slate-700">—</span>}
                           </td>
                         </tr>
@@ -462,204 +503,226 @@ export default function ExchangePage() {
           )}
         </div>
 
-        {/* Right card: listing detail + actions */}
-        <div className="bg-slate-900 border border-slate-700/60 rounded-lg overflow-hidden">
+        {/* Right card: trade panel */}
+        <div className="bg-slate-900 border border-slate-700/60 rounded-lg overflow-hidden max-h-[700px] overflow-y-auto">
           {!selected ? (
             <div className="flex items-center justify-center py-16 text-slate-600 text-sm">
-              Select a material to view listings
+              Select a material to trade
             </div>
           ) : (
             <>
-              {/* Resource header */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/60">
-                <div className="flex items-center gap-2.5">
-                  <IconSlot size="sm" label={rName(selected)} />
-                  <span className="text-slate-100 font-medium">{rName(selected)}</span>
+              {/* ── Header ───────────────────────────────────────────── */}
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60">
+                <IconSlot size="md" label={rName(selected)} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-slate-100 font-semibold">{rName(selected)}</div>
+                  <div className="flex gap-4 text-xs mt-0.5">
+                    <span className="text-slate-500">
+                      In warehouse: <span className="text-slate-200 font-mono">{warehouseQty.toFixed(0)}</span>
+                    </span>
+                    {myListed > 0 && (
+                      <span className="text-slate-500">
+                        Listed: <span className="text-azure-300 font-mono">{myListed.toFixed(0)}</span>
+                      </span>
+                    )}
+                    {avgPrice !== null && (
+                      <span className="text-slate-500">
+                        Avg price: <span className="text-gold-400 font-mono">{avgPrice.toFixed(2)}g</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-xs text-slate-500">
-                  {warehouseQty > 0
-                    ? <span>Warehouse: <span className="text-slate-200">{warehouseQty.toFixed(0)}</span></span>
-                    : <span className="text-slate-600">Not in warehouse</span>}
-                </span>
               </div>
 
-              <div className="p-4 space-y-5">
+              {/* ── Buy / Sell toggle ────────────────────────────────── */}
+              <div className="flex border-b border-slate-700/60">
+                <button
+                  onClick={() => { setTradeMode('buy'); setBuyListingId(null); setBuyQty(''); }}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    tradeMode === 'buy'
+                      ? 'bg-azure-500/10 text-azure-300 border-b-2 border-azure-500'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >Buy</button>
+                <button
+                  onClick={() => { setTradeMode('sell'); setListQty(''); setListPrice(''); }}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    tradeMode === 'sell'
+                      ? 'bg-gold-500/10 text-gold-300 border-b-2 border-gold-500'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >Sell</button>
+              </div>
 
-                {/* Active listings for this resource */}
-                <div>
-                  <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">
-                    Active Listings {resourceListings.length > 0 && <span className="text-slate-600">({resourceListings.length})</span>}
+              {/* ── Trade form ───────────────────────────────────────── */}
+              <div className="p-4 border-b border-slate-700/60">
+                {tradeMode === 'buy' ? (
+                  /* Buy mode */
+                  <div className="space-y-3">
+                    {!activeBuyListing ? (
+                      <p className="text-slate-600 text-xs">Select a listing below to buy.</p>
+                    ) : (
+                      <>
+                        <div className="text-xs text-slate-500 bg-slate-800/60 rounded px-3 py-2">
+                          Buying at <span className="text-gold-400 font-mono">{activeBuyListing.pricePerUnit}g</span>/unit
+                          · Available: <span className="text-slate-200 font-mono">{(activeBuyListing.quantity - activeBuyListing.fulfilledQty).toFixed(0)}</span>
+                          · Balance: <span className="text-gold-400 font-mono">{goldBalance.toFixed(0)}g</span>
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="number" min={1} max={activeBuyListing.quantity - activeBuyListing.fulfilledQty}
+                            className="w-28 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
+                            placeholder="Quantity"
+                            value={buyQty}
+                            onChange={(e) => setBuyQty(e.target.value)}
+                          />
+                          {buyQty && Number(buyQty) > 0 && (
+                            <span className="text-xs text-slate-500">
+                              = <span className="text-gold-400 font-mono">{(Number(buyQty) * activeBuyListing.pricePerUnit).toFixed(0)}g</span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-5 py-1.5 rounded text-sm transition-colors"
+                            disabled={
+                              !buyQty || Number(buyQty) <= 0 ||
+                              Number(buyQty) > activeBuyListing.quantity - activeBuyListing.fulfilledQty ||
+                              Number(buyQty) * activeBuyListing.pricePerUnit > goldBalance ||
+                              buyListing.isPending
+                            }
+                            onClick={() => buyListing.mutate()}
+                          >{buyListing.isPending ? 'Buying…' : 'Confirm Buy'}</button>
+                          <button
+                            className="text-slate-500 hover:text-slate-300 px-3 py-1.5 rounded text-sm transition-colors"
+                            onClick={() => { setBuyListingId(null); setBuyQty(''); }}
+                          >Clear</button>
+                        </div>
+                        {buyListing.isError && (
+                          <p className="text-red-400 text-xs">
+                            {(buyListing.error as Error).message === 'LISTING_EXPIRED'
+                              ? 'Listing expired — someone else bought it first.'
+                              : (buyListing.error as Error).message}
+                          </p>
+                        )}
+                      </>
+                    )}
                   </div>
-                  {resourceListings.length === 0 ? (
-                    <p className="text-slate-600 text-xs">No listings for this material in this exchange.</p>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-xs text-slate-600 border-b border-slate-800">
-                          <th className="text-left py-1 font-normal">Available</th>
-                          <th className="text-right py-1 font-normal">Price</th>
-                          <th className="text-right py-1 font-normal">Total</th>
-                          <th className="py-1" />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {resourceListings
-                          .sort((a, b) => a.pricePerUnit - b.pricePerUnit)
-                          .map((listing: ExchangeListing) => {
-                            const remaining = listing.quantity - listing.fulfilledQty;
-                            const isSelected = buyListingId === listing.id;
-                            const isNpc = listing.empireId === null;
-                            return (
-                              <tr
-                                key={listing.id}
-                                className={`border-b border-slate-800/30 text-xs ${isSelected ? 'bg-slate-700/40' : ''}`}
-                              >
-                                <td className="py-1.5 text-slate-300 font-mono tabular-nums">
-                                  {remaining.toFixed(0)}
-                                  {isNpc && <span className="ml-1.5 text-slate-600">[NPC]</span>}
-                                </td>
-                                <td className="py-1.5 text-right font-mono tabular-nums text-gold-400">
-                                  {listing.pricePerUnit}g
-                                </td>
-                                <td className="py-1.5 text-right text-slate-500">
-                                  {(remaining * listing.pricePerUnit).toFixed(0)}g
-                                </td>
-                                <td className="py-1.5 pl-2 flex gap-1 justify-end">
-                                  <button
-                                    className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                                      isSelected
-                                        ? 'bg-azure-500 text-white font-semibold'
-                                        : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
-                                    }`}
-                                    onClick={() => {
-                                      setBuyListingId(isSelected ? null : listing.id);
-                                      setBuyQty('');
-                                    }}
-                                  >
-                                    Buy
-                                  </button>
-                                  {listing.empireId !== null && (
-                                    <button
-                                      className="px-2 py-0.5 rounded text-xs bg-slate-800 hover:bg-red-900/40 text-slate-500 hover:text-red-400 transition-colors"
-                                      onClick={() => cancelListing.mutate(listing.id)}
-                                    >
-                                      Cancel
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-
-                {/* Buy form — shown when a listing row is selected */}
-                {activeBuyListing && (
-                  <div className="bg-slate-800/40 rounded p-3 space-y-2">
-                    <div className="text-xs uppercase tracking-wider text-slate-500">Confirm Purchase</div>
-                    <div className="text-xs text-slate-500">
-                      Price: <span className="text-gold-400">{activeBuyListing.pricePerUnit}g/unit</span>
-                      {' · '}Available: <span className="text-slate-200">{(activeBuyListing.quantity - activeBuyListing.fulfilledQty).toFixed(0)}</span>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <input
-                        type="number" min={1} max={activeBuyListing.quantity - activeBuyListing.fulfilledQty}
-                        className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
-                        placeholder="Qty"
-                        value={buyQty}
-                        onChange={(e) => setBuyQty(e.target.value)}
-                      />
-                      {buyQty && (
-                        <span className="text-slate-500 text-xs">
-                          = <span className="text-gold-400">{(Number(buyQty) * activeBuyListing.pricePerUnit).toFixed(0)}g</span>
-                          <span className="text-slate-600 ml-1">(have {goldBalance.toFixed(0)}g)</span>
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-semibold px-4 py-1.5 rounded text-sm"
-                        disabled={
-                          !buyQty || Number(buyQty) <= 0 ||
-                          Number(buyQty) > activeBuyListing.quantity - activeBuyListing.fulfilledQty ||
-                          Number(buyQty) * activeBuyListing.pricePerUnit > goldBalance ||
-                          buyListing.isPending
-                        }
-                        onClick={() => buyListing.mutate()}
-                      >
-                        Confirm
-                      </button>
-                      <button
-                        className="text-slate-500 hover:text-slate-300 px-3 py-1.5 rounded text-sm"
-                        onClick={() => { setBuyListingId(null); setBuyQty(''); }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                    {buyListing.isError && (
-                      <p className="text-red-400 text-xs">
-                        {(buyListing.error as Error).message === 'LISTING_EXPIRED'
-                          ? 'Listing expired — someone else bought it first.'
-                          : (buyListing.error as Error).message}
+                ) : (
+                  /* Sell mode */
+                  <div className="space-y-3">
+                    {warehouseQty <= 0 ? (
+                      <p className="text-slate-600 text-xs">
+                        You have no {rName(selected)} in this exchange warehouse to list.
                       </p>
+                    ) : (
+                      <>
+                        <div className="text-xs text-slate-500 bg-slate-800/60 rounded px-3 py-2">
+                          In warehouse: <span className="text-slate-200 font-mono">{warehouseQty.toFixed(0)}</span>
+                        </div>
+                        <div className="flex gap-2 flex-wrap items-center">
+                          <input
+                            type="number" min={1} max={warehouseQty}
+                            className="w-28 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
+                            placeholder="Quantity"
+                            value={listQty}
+                            onChange={(e) => setListQty(e.target.value)}
+                          />
+                          <input
+                            type="number" min={0.01} step={0.01}
+                            className="w-28 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
+                            placeholder="Price / unit"
+                            value={listPrice}
+                            onChange={(e) => setListPrice(e.target.value)}
+                          />
+                          {listQty && listPrice && Number(listQty) > 0 && Number(listPrice) > 0 && (
+                            <span className="text-xs text-slate-500">
+                              = <span className="text-gold-400 font-mono">{(Number(listQty) * Number(listPrice)).toFixed(0)}g</span>
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          className="bg-gold-500/80 hover:bg-gold-500 disabled:opacity-40 text-slate-900 font-semibold px-5 py-1.5 rounded text-sm transition-colors"
+                          disabled={
+                            !listQty || !listPrice ||
+                            Number(listQty) <= 0 || Number(listQty) > warehouseQty ||
+                            Number(listPrice) <= 0 ||
+                            createListing.isPending
+                          }
+                          onClick={() => createListing.mutate()}
+                        >{createListing.isPending ? 'Listing…' : 'List for Sale'}</button>
+                        {createListing.isError && (
+                          <p className="text-red-400 text-xs">{(createListing.error as Error).message}</p>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
+              </div>
 
-                <div className="border-t border-slate-800" />
-
-                {/* Create listing form */}
-                <div>
-                  <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">List for Sale</div>
-                  {warehouseQty <= 0 ? (
-                    <p className="text-slate-600 text-xs">You need {rName(selected)} in this exchange's warehouse to create a listing.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="text-xs text-slate-600">
-                        In warehouse: <span className="text-slate-200">{warehouseQty.toFixed(0)}</span>
-                      </div>
-                      <div className="flex gap-2 items-center flex-wrap">
-                        <input
-                          type="number" min={1} max={warehouseQty}
-                          className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
-                          placeholder="Qty"
-                          value={listQty}
-                          onChange={(e) => setListQty(e.target.value)}
-                        />
-                        <input
-                          type="number" min={0.01} step={0.01}
-                          className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-sm focus:outline-none focus:border-slate-500"
-                          placeholder="Price/unit"
-                          value={listPrice}
-                          onChange={(e) => setListPrice(e.target.value)}
-                        />
-                        {listQty && listPrice && (
-                          <span className="text-slate-500 text-xs">
-                            = <span className="text-gold-400">{(Number(listQty) * Number(listPrice)).toFixed(0)}g</span> total
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        className="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-100 px-4 py-1.5 rounded text-sm"
-                        disabled={
-                          !listQty || !listPrice ||
-                          Number(listQty) <= 0 || Number(listQty) > warehouseQty ||
-                          Number(listPrice) <= 0 ||
-                          createListing.isPending
-                        }
-                        onClick={() => createListing.mutate()}
-                      >
-                        Create Listing
-                      </button>
-                      {createListing.isError && (
-                        <p className="text-red-400 text-xs">{(createListing.error as Error).message}</p>
-                      )}
-                    </div>
-                  )}
+              {/* ── Listings (sorted price asc) ──────────────────────── */}
+              <div>
+                <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wider text-slate-500">
+                    Listings {resourceListings.length > 0 && <span className="text-slate-700 normal-case tracking-normal">({resourceListings.length})</span>}
+                  </span>
                 </div>
-
+                {resourceListings.length === 0 ? (
+                  <p className="px-4 py-4 text-slate-600 text-xs">No active listings for this material.</p>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-slate-600 border-b border-slate-800">
+                        <th className="text-left px-4 py-1.5 font-normal">Seller</th>
+                        <th className="text-right px-4 py-1.5 font-normal">Qty</th>
+                        <th className="text-right px-4 py-1.5 font-normal">Price</th>
+                        <th className="py-1.5 w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resourceListings.map((listing: ExchangeListing) => {
+                        const remaining  = listing.quantity - listing.fulfilledQty;
+                        const isSelected = buyListingId === listing.id;
+                        const isMine     = listing.empireId === myEmpireId;
+                        const isNpc      = listing.empireId === null;
+                        return (
+                          <tr
+                            key={listing.id}
+                            className={`border-b border-slate-800/30 transition-colors ${
+                              isSelected ? 'bg-azure-500/10' : 'hover:bg-slate-800/40'
+                            } ${tradeMode === 'buy' && !isMine ? 'cursor-pointer' : ''}`}
+                            onClick={() => {
+                              if (tradeMode !== 'buy' || isMine) return;
+                              setBuyListingId(isSelected ? null : listing.id);
+                              setBuyQty('');
+                            }}
+                          >
+                            <td className="px-4 py-2 text-slate-400">
+                              {isNpc ? <span className="text-slate-600">NPC</span>
+                                : isMine ? <span className="text-azure-400">You</span>
+                                : (listing.empireName ?? '—')}
+                            </td>
+                            <td className="px-4 py-2 text-right font-mono tabular-nums text-slate-200">
+                              {remaining.toFixed(0)}
+                            </td>
+                            <td className="px-4 py-2 text-right font-mono tabular-nums text-gold-400">
+                              {listing.pricePerUnit}g
+                            </td>
+                            <td className="px-2 py-2 text-right">
+                              {isMine && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); cancelListing.mutate(listing.id); }}
+                                  className="text-slate-700 hover:text-red-400 transition-colors leading-none"
+                                  title="Cancel listing"
+                                >✕</button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </>
           )}

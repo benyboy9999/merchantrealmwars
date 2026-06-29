@@ -44,16 +44,18 @@ exchangeRouter.get('/:regionId/listings', async (req, res, next) => {
   try {
     const regionId     = parseInt(req.params['regionId']!);
     const { resourceType } = z.object({ resourceType: z.string().optional() }).parse(req.query);
-    const listings = await db.marketOrder.findMany({
+    const rows = await db.marketOrder.findMany({
       where: {
         regionId,
         orderType: 'SELL',
         status:    { in: ['OPEN', 'PARTIALLY_FILLED'] },
         ...(resourceType ? { resourceType } : {}),
       },
+      include: { empire: { select: { name: true } } },
       orderBy: [{ resourceType: 'asc' }, { pricePerUnit: 'asc' }],
       take: 500,
     });
+    const listings = rows.map((r) => ({ ...r, empireName: r.empire?.name ?? null, empire: undefined }));
     res.json({ listings });
   } catch (err) { next(err); }
 });
