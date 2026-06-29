@@ -3,6 +3,8 @@ import { RECIPE_BY_KEY } from './recipes.js';
 
 export { ALL_RECIPES, RECIPES_BY_BUILDING, RECIPE_BY_KEY } from './recipes.js';
 export type { Recipe, RecipeInput } from './recipes.js';
+export { calculateUpgradeCost } from './upgrade-cost.js';
+export type { UpgradeCostItem } from './upgrade-cost.js';
 
 export interface ResourceAvailable {
   resource: ResourceType;

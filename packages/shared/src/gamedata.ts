@@ -65,6 +65,7 @@ const GameDataSchema = z.object({
     overheadWeightT1:         z.number().int().positive(),
     overheadWeightT2:         z.number().int().positive(),
     overheadWeightT3:         z.number().int().positive(),
+    maxBuildingLevel:         z.number().int().positive(),
   }),
 });
 
@@ -148,6 +149,7 @@ export const KEEP_FOUNDING_COST = gamedata.constants.keepFoundingCost;
 export const KEEP_MAX_BUILDING_SLOTS:    number = gamedata.constants.maxBuildingSlots;
 export const KEEP_DEFAULT_BUILDING_SLOTS: number = gamedata.constants.defaultBuildingSlots;
 export const KEEP_SLOT_UNLOCK_RESOURCE: ResourceType = gamedata.constants.slotUnlockResource as ResourceType;
+export const BUILDING_MAX_LEVEL: number = gamedata.constants.maxBuildingLevel;
 
 export const REGION_NAMES = Object.fromEntries(
   Object.entries(gamedata.regions).map(([k, v]) => [k, v.name])

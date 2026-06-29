@@ -7,10 +7,10 @@ import {
   BUILDING_CONSTRUCTION_COSTS, KEEP_MAX_BUILDING_SLOTS,
   KEEP_DEFAULT_BUILDING_SLOTS, KEEP_SLOT_UNLOCK_RESOURCE,
   BUILDING_TYPE_IDS, BUILDING_TYPE_BY_ID, RECIPE_IDS,
-  RECIPE_BY_KEY, RECIPE_BY_ID,
+  RECIPE_BY_KEY, RECIPE_BY_ID, BUILDING_MAX_LEVEL,
 } from '@merchant-realms/shared';
 import type { BuildingType } from '@merchant-realms/shared';
-import { calculateRepairCost } from '@merchant-realms/engine';
+import { calculateRepairCost, calculateUpgradeCost } from '@merchant-realms/engine';
 import { startTask, cancelCompletion } from '../../services/production-timers.js';
 
 export const keepRouter = Router();
@@ -291,6 +291,66 @@ keepRouter.post('/:keepId/buildings/:buildingId/repair', async (req, res, next) 
     ]);
 
     res.json({ ok: true, repairCost });
+  } catch (err) { next(err); }
+});
+
+// ── Upgrade building ──────────────────────────────────────────────────────────
+keepRouter.post('/:keepId/buildings/:buildingId/upgrade', async (req, res, next) => {
+  try {
+    const keepId     = parseInt(req.params['keepId']!);
+    const buildingId = parseInt(req.params['buildingId']!);
+    const empireId   = req.auth!.empireId;
+    if (!empireGuard(empireId, res)) return;
+
+    const building = await db.building.findFirst({
+      where: { id: buildingId, keep: { id: keepId, empireId } },
+    });
+    if (!building) { res.status(404).json({ error: 'Building not found' }); return; }
+    if (building.level >= BUILDING_MAX_LEVEL) {
+      res.status(400).json({ error: `Building is already at max level (${BUILDING_MAX_LEVEL})` }); return;
+    }
+
+    const buildingTypeCode = BUILDING_TYPE_BY_ID[building.buildingTypeId] as BuildingType | undefined;
+    const constructionCost = buildingTypeCode ? BUILDING_CONSTRUCTION_COSTS[buildingTypeCode] : undefined;
+    if (!constructionCost) { res.status(400).json({ error: 'No construction cost defined for this building type' }); return; }
+
+    const upgradeCost = calculateUpgradeCost(constructionCost, building.level);
+    const keep        = await db.keep.findUnique({ where: { id: keepId } });
+    const warehouseId = keep?.warehouseId!;
+
+    if (upgradeCost.length > 0) {
+      const items    = await db.warehouseItem.findMany({ where: { warehouseId } });
+      const itemsMap = new Map(items.map((e) => [e.resourceType, e.quantity]));
+      for (const { resource, quantity } of upgradeCost) {
+        if ((itemsMap.get(resource) ?? 0) < quantity) {
+          res.status(400).json({ error: `Not enough ${resource} — need ${quantity}, have ${Math.floor(itemsMap.get(resource) ?? 0)}` });
+          return;
+        }
+      }
+    }
+
+    const updated = await db.$transaction(async (tx) => {
+      for (const { resource, quantity } of upgradeCost) {
+        await tx.warehouseItem.update({
+          where: { warehouseId_resourceType: { warehouseId, resourceType: resource } },
+          data:  { quantity: { decrement: quantity } },
+        });
+      }
+      const b = await tx.building.update({
+        where: { id: building.id },
+        data:  { level: { increment: 1 }, health: 100 },
+      });
+      // Warehouse buildings increase storage cap by one tier per level
+      if (building.buildingTypeId === BUILDING_TYPE_IDS.WAREHOUSE) {
+        await tx.warehouse.update({
+          where: { id: warehouseId },
+          data:  { cap: { increment: WAREHOUSE_BASE_CAPACITY } },
+        });
+      }
+      return b;
+    });
+
+    res.json({ building: updated, upgradeCost });
   } catch (err) { next(err); }
 });
 
