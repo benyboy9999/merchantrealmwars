@@ -1,10 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { api } from '../services/api.js';
 import type { CaravanWithCargo, Warehouse, WarehouseItem, Keep, EmpireBootstrap } from '../services/api.js';
 import { RESOURCE_NAMES, RESOURCE_WEIGHT, REGION_IDS } from '@merchant-realms/shared';
-import { useLivePercent } from '../hooks/useLivePercent.js';
-import ProgressBar from './ProgressBar.js';
 import { IconSlot, Modal, ModalSection, Button, TransferPopover } from './ui/index.js';
 
 const rName  = (rt: string) => RESOURCE_NAMES[rt as keyof typeof RESOURCE_NAMES] ?? rt;
@@ -282,9 +280,6 @@ export default function WarehousePanel({
     onInventoryChange?.();
   };
 
-  const useCaravanArrived = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['empire'] });
-  }, [qc]);
 
   function patchInventory(rt: string, delta: number) {
     const patchItems = (items: WarehouseItem[], wid: number): WarehouseItem[] => {
@@ -372,12 +367,16 @@ export default function WarehousePanel({
 
   const allCaravans           = empireData?.empire.caravans ?? [];
   const hereCaravans          = allCaravans.filter((c) => c.status === 'IDLE' && c.locationType === locationType && c.locationId === locationId);
-  const idleElsewhereCaravans = allCaravans.filter((c) => c.status === 'IDLE' && !(c.locationType === locationType && c.locationId === locationId));
-  const inTransitCaravans     = allCaravans.filter((c) => c.status === 'IN_TRANSIT');
   const allKeeps              = empireData?.empire.keeps ?? [];
   const totalWeight           = inventory.reduce((s, e) => s + e.quantity * rKgPer(e.resourceType), 0);
 
-  const activeCaravan   = activeCaId != null ? allCaravans.find((c) => c.id === activeCaId) ?? null : null;
+  // Always keep a caravan selected — default to first here, then first overall
+  const effectiveActiveCaId: number | null =
+    (activeCaId != null && allCaravans.some((c) => c.id === activeCaId))
+      ? activeCaId
+      : hereCaravans[0]?.id ?? allCaravans[0]?.id ?? null;
+
+  const activeCaravan   = effectiveActiveCaId != null ? allCaravans.find((c) => c.id === effectiveActiveCaId) ?? null : null;
   const actionCaravan   = actionCaId != null ? allCaravans.find((c) => c.id === actionCaId) ?? null : null;
   const activeIsHere    = activeCaravan != null && hereCaravans.some((c) => c.id === activeCaravan.id);
 
@@ -416,7 +415,7 @@ export default function WarehousePanel({
           <span className="text-xs uppercase tracking-wider text-slate-500 flex-1">{locationLabel}</span>
           <span className="text-xs text-slate-600">{totalWeight.toFixed(1)} kg</span>
           {hereCaravans.length > 0 && (() => {
-            const targetId = (activeCaId && activeIsHere ? activeCaId : null) ?? hereCaravans[0]?.id;
+            const targetId = (effectiveActiveCaId && activeIsHere ? effectiveActiveCaId : null) ?? hereCaravans[0]?.id;
             const targetCaravan = hereCaravans.find((c) => c.id === targetId);
             const transfers = inventory
               .filter((e) => e.quantity > 0)
@@ -444,7 +443,7 @@ export default function WarehousePanel({
               {inventory.filter((e) => e.quantity > 0).sort((a, b) => b.quantity - a.quantity).map((e) => {
                 const isLoadOpen = loadPopup?.rt === e.resourceType;
                 const isSellOpen = sellPopup === e.resourceType;
-                const loadCaId   = loadPopup?.caravanId ?? (activeCaId && activeIsHere ? activeCaId : null) ?? hereCaravans[0]?.id ?? 0;
+                const loadCaId   = loadPopup?.caravanId ?? (effectiveActiveCaId && activeIsHere ? effectiveActiveCaId : null) ?? hereCaravans[0]?.id ?? 0;
                 const canLoad    = hereCaravans.length > 0 && maxLoadable(e.resourceType, loadCaId) > 0;
 
                 return (
@@ -507,98 +506,134 @@ export default function WarehousePanel({
       {/* ── Right: caravans ──────────────────────────────────────────────── */}
       <div className="flex flex-col overflow-hidden">
 
-        {activeCaravan ? (
-          /* ── Cargo view ─────────────────────────────────────────────────── */
-          <>
-            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-700/60 flex-shrink-0">
+        {/* ── Compact tab strip (replaces header) ──────────────────────── */}
+        <div className="flex overflow-x-auto flex-shrink-0 border-b border-slate-700/60 scrollbar-none">
+          {caravansError && (
+            <span className="px-3 py-2 text-xs text-red-400">Failed to load</span>
+          )}
+          {!caravansError && allCaravans.length === 0 && (
+            <span className="px-3 py-2 text-xs text-slate-600">No caravans</span>
+          )}
+          {allCaravans.map((c) => {
+            const isHere     = hereCaravans.some((hc) => hc.id === c.id);
+            const isSelected = effectiveActiveCaId === c.id;
+            const isTransit  = c.status === 'IN_TRANSIT';
+            return (
               <button
-                className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors flex-shrink-0"
-                onClick={() => { setActiveCaId(null); setUnloadPopup(null); }}
-                title="Back to caravan list"
-              >←</button>
-              <button
-                className="flex-1 text-left text-sm font-medium text-slate-100 hover:text-azure-300 transition-colors truncate"
-                onClick={() => setActionCaId(activeCaravan.id)}
-                title="Open caravan actions"
+                key={c.id}
+                onClick={() => setActiveCaId(c.id)}
+                className={[
+                  'flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors whitespace-nowrap',
+                  isSelected
+                    ? `border-azure-400 bg-slate-800/40 ${isHere ? 'text-slate-100 font-medium' : 'text-slate-400 font-medium'}`
+                    : 'border-transparent',
+                  !isSelected && isHere  ? 'text-slate-300 hover:text-slate-100 hover:bg-slate-800/30' : '',
+                  !isSelected && !isHere ? 'text-slate-600 hover:text-slate-400 hover:bg-slate-800/20' : '',
+                ].filter(Boolean).join(' ')}
               >
-                {activeCaravan.name}
-                <span className="ml-1.5 text-xs text-slate-500 font-normal">▸</span>
+                {isHere && !isTransit && (
+                  <span className="w-1 h-1 rounded-full bg-emerald-400 flex-shrink-0" />
+                )}
+                {isTransit && (
+                  <span className="w-1 h-1 rounded-full bg-azure-400 flex-shrink-0 animate-pulse" />
+                )}
+                {c.name}
               </button>
-              {activeIsHere && (
-                <>
-                  <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500" title="Here" />
-                  {(activeCaravan.warehouse?.items ?? []).length > 0 && (
+            );
+          })}
+        </div>
+
+        {activeCaravan ? (
+          <>
+            {/* ── Status bar ─────────────────────────────────────────────── */}
+            {(() => {
+              const items   = activeCaravan.warehouse?.items ?? [];
+              const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
+              const maxKg   = activeCaravan.warehouse?.cap ?? activeCaravan.animalCount * MULE_KG;
+              const pct     = maxKg > 0 ? Math.min(100, cargoKg / maxKg * 100) : 0;
+              return (
+                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-800/60 flex-shrink-0">
+                  {/* Capacity bar + location label */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {activeIsHere   && <span className="w-1 h-1 rounded-full bg-emerald-400 flex-shrink-0" />}
+                      {!activeIsHere && activeCaravan.status === 'IN_TRANSIT'
+                        && <span className="w-1 h-1 rounded-full bg-azure-400 animate-pulse flex-shrink-0" />}
+                      {!activeIsHere && activeCaravan.status !== 'IN_TRANSIT'
+                        && <span className="w-1 h-1 rounded-full bg-slate-600 flex-shrink-0" />}
+                      <span className="text-xs text-slate-500 truncate">
+                        {activeIsHere
+                          ? `${cargoKg.toFixed(0)} / ${maxKg} kg`
+                          : activeCaravan.status === 'IN_TRANSIT'
+                            ? `In transit · ${cargoKg.toFixed(0)} kg`
+                            : `${caravanLocationName(activeCaravan)} · ${cargoKg.toFixed(0)} kg`
+                        }
+                      </span>
+                    </div>
+                    <div className="h-0.5 bg-slate-800 rounded overflow-hidden">
+                      <div
+                        className={`h-full rounded transition-all ${activeIsHere ? 'bg-emerald-700' : activeCaravan.status === 'IN_TRANSIT' ? 'bg-azure-700' : 'bg-slate-700'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Unload all — only when here and has cargo */}
+                  {activeIsHere && items.length > 0 && (
                     <button
                       title="Unload all to warehouse"
                       disabled={bulkTransfer.isPending}
                       onClick={() => {
                         if (!activeCaravan.warehouseId) return;
-                        const transfers = (activeCaravan.warehouse?.items ?? []).map((it) => ({
+                        bulkTransfer.mutate(items.map((it) => ({
                           fromWarehouseId: activeCaravan.warehouseId!,
                           toWarehouseId: warehouseId,
                           resourceType: it.resourceType,
                           quantity: it.quantity,
-                        }));
-                        bulkTransfer.mutate(transfers);
+                        })));
                       }}
-                      className="w-6 h-6 flex items-center justify-center border border-slate-600 rounded text-slate-400 hover:text-slate-100 hover:border-slate-400 hover:bg-slate-700/40 disabled:opacity-30 disabled:pointer-events-none transition-colors text-xs flex-shrink-0"
+                      className="w-5 h-5 flex items-center justify-center border border-slate-700 rounded text-slate-500 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:pointer-events-none transition-colors text-xs flex-shrink-0"
                     >‹‹</button>
                   )}
-                </>
-              )}
-            </div>
 
-            {/* Cargo fill bar */}
-            {(() => {
-              const items   = activeCaravan.warehouse?.items ?? [];
-              const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
-              const maxKg   = activeCaravan.warehouse?.cap ?? activeCaravan.animalCount * MULE_KG;
-              return (
-                <div className="px-4 py-2 border-b border-slate-800/60 flex-shrink-0">
-                  <div className="flex justify-between text-xs text-slate-600 mb-1">
-                    <span>{items.length === 0 ? 'Empty' : `${items.length} resource${items.length !== 1 ? 's' : ''}`}</span>
-                    <span>{cargoKg.toFixed(0)} / {maxKg} kg</span>
-                  </div>
-                  <div className="h-1 bg-slate-800 rounded overflow-hidden">
-                    <div
-                      className="h-full rounded bg-slate-500 transition-all"
-                      style={{ width: `${Math.min(100, maxKg > 0 ? cargoKg / maxKg * 100 : 0)}%` }}
-                    />
-                  </div>
+                  {/* Action modal trigger */}
+                  <button
+                    onClick={() => setActionCaId(activeCaravan.id)}
+                    title="Caravan actions"
+                    className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors text-xs flex-shrink-0"
+                  >▸</button>
                 </div>
               );
             })()}
 
-            {/* Cargo items */}
+            {/* ── Cargo items ──────────────────────────────────────────────── */}
             <div className="flex-1 overflow-y-auto">
               {(activeCaravan.warehouse?.items ?? []).length === 0 ? (
-                <div className="p-4 text-slate-600 text-sm">Caravan is empty.</div>
+                <div className="px-4 py-3 text-slate-600 text-sm">Empty</div>
               ) : (
                 <div>
                   {(activeCaravan.warehouse?.items ?? []).map((cargo) => {
                     const isUnloadOpen = unloadPopup?.caravanId === activeCaravan.id && unloadPopup.rt === cargo.resourceType;
                     return (
-                      <div key={cargo.resourceType} className="border-b border-slate-800/40">
-                        <div className="flex items-center px-4 py-2 hover:bg-slate-800/30 gap-2">
-                          {activeIsHere && (
-                            <button
-                              className={`w-5 h-5 flex items-center justify-center border rounded text-xs transition-colors flex-shrink-0 ${isUnloadOpen ? 'border-slate-200 text-slate-200' : 'border-slate-600 text-slate-500 hover:border-slate-400 hover:text-slate-200'}`}
-                              title="Left-click: choose amount · Right-click: unload all"
-                              onClick={(ev) => {
-                                if (isUnloadOpen) { setUnloadPopup(null); return; }
-                                setUnloadPopup({ caravanId: activeCaravan.id, rt: cargo.resourceType, anchor: { x: ev.clientX, y: ev.clientY } });
-                              }}
-                              onContextMenu={(ev) => {
-                                ev.preventDefault();
-                                if (!activeCaravan.warehouseId) return;
-                                transfer.mutate({ fromWarehouseId: activeCaravan.warehouseId, toWarehouseId: warehouseId, resourceType: cargo.resourceType, quantity: cargo.quantity });
-                              }}
-                            >‹</button>
-                          )}
-                          <IconSlot size="xs" label={rName(cargo.resourceType)} />
-                          <span className="flex-1 text-sm text-slate-300">{rName(cargo.resourceType)}</span>
-                          <span className="text-slate-200 font-mono text-sm tabular-nums w-12 text-right">{cargo.quantity.toFixed(0)}</span>
-                        </div>
+                      <div key={cargo.resourceType} className="flex items-center px-4 py-2 hover:bg-slate-800/30 gap-2 border-b border-slate-800/40">
+                        {activeIsHere && (
+                          <button
+                            className={`w-5 h-5 flex items-center justify-center border rounded text-xs transition-colors flex-shrink-0 ${isUnloadOpen ? 'border-slate-200 text-slate-200' : 'border-slate-600 text-slate-500 hover:border-slate-400 hover:text-slate-200'}`}
+                            title="Left-click: choose amount · Right-click: unload all"
+                            onClick={(ev) => {
+                              if (isUnloadOpen) { setUnloadPopup(null); return; }
+                              setUnloadPopup({ caravanId: activeCaravan.id, rt: cargo.resourceType, anchor: { x: ev.clientX, y: ev.clientY } });
+                            }}
+                            onContextMenu={(ev) => {
+                              ev.preventDefault();
+                              if (!activeCaravan.warehouseId) return;
+                              transfer.mutate({ fromWarehouseId: activeCaravan.warehouseId, toWarehouseId: warehouseId, resourceType: cargo.resourceType, quantity: cargo.quantity });
+                            }}
+                          >‹</button>
+                        )}
+                        <IconSlot size="xs" label={rName(cargo.resourceType)} />
+                        <span className="flex-1 text-sm text-slate-300">{rName(cargo.resourceType)}</span>
+                        <span className="text-slate-200 font-mono text-sm tabular-nums w-12 text-right">{cargo.quantity.toFixed(0)}</span>
                       </div>
                     );
                   })}
@@ -607,95 +642,7 @@ export default function WarehousePanel({
             </div>
           </>
         ) : (
-          /* ── Caravan list ────────────────────────────────────────────────── */
-          <>
-            <div className="px-4 py-2.5 border-b border-slate-700/60 flex-shrink-0">
-              <span className="text-xs uppercase tracking-wider text-slate-500">Caravans</span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-              {caravansError && (
-                <div className="p-4 text-red-400 text-xs">
-                  Failed to load caravans: {caravansErr instanceof Error ? caravansErr.message : 'Unknown error'}
-                </div>
-              )}
-              {!caravansError && allCaravans.length === 0 && (
-                <div className="p-4 text-slate-600 text-sm">No caravans.</div>
-              )}
-
-              {/* Here — idle at this location */}
-              {hereCaravans.length > 0 && (
-                <div>
-                  <div className="px-4 py-1.5">
-                    <span className="text-xs text-slate-600 uppercase tracking-wider">Here</span>
-                  </div>
-                  {hereCaravans.map((c) => {
-                    const items   = c.warehouse?.items ?? [];
-                    const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
-                    const maxKg   = c.warehouse?.cap ?? c.animalCount * MULE_KG;
-                    return (
-                      <button
-                        key={c.id}
-                        className="w-full px-4 py-2.5 text-left hover:bg-slate-800/40 transition-colors border-b border-slate-800/60"
-                        onClick={() => setActiveCaId(c.id)}
-                      >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                          <span className="flex-1 text-sm text-slate-100">{c.name}</span>
-                          <span className="text-xs text-slate-500">{cargoKg.toFixed(0)}/{maxKg} kg</span>
-                        </div>
-                        <div className="h-0.5 bg-slate-800 rounded overflow-hidden ml-3.5">
-                          <div className="h-full rounded bg-emerald-800/60 transition-all" style={{ width: `${Math.min(100, maxKg > 0 ? cargoKg / maxKg * 100 : 0)}%` }} />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Idle elsewhere */}
-              {idleElsewhereCaravans.length > 0 && (
-                <div className={hereCaravans.length > 0 ? 'border-t border-slate-800/60' : ''}>
-                  <div className="px-4 py-1.5">
-                    <span className="text-xs text-slate-600 uppercase tracking-wider">Idle</span>
-                  </div>
-                  {idleElsewhereCaravans.map((c) => {
-                    const items   = c.warehouse?.items ?? [];
-                    const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
-                    const maxKg   = c.warehouse?.cap ?? c.animalCount * MULE_KG;
-                    return (
-                      <button
-                        key={c.id}
-                        className="w-full px-4 py-2.5 text-left hover:bg-slate-800/40 transition-colors border-b border-slate-800/60"
-                        onClick={() => setActiveCaId(c.id)}
-                      >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-600 flex-shrink-0" />
-                          <span className="flex-1 text-sm text-slate-400">{c.name}</span>
-                          <span className="text-xs text-slate-600">{caravanLocationName(c)}</span>
-                        </div>
-                        <div className="h-0.5 bg-slate-800 rounded overflow-hidden ml-3.5">
-                          <div className="h-full rounded bg-slate-700 transition-all" style={{ width: `${Math.min(100, maxKg > 0 ? cargoKg / maxKg * 100 : 0)}%` }} />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* In transit */}
-              {inTransitCaravans.length > 0 && (
-                <div className={(hereCaravans.length > 0 || idleElsewhereCaravans.length > 0) ? 'border-t border-slate-800/60' : ''}>
-                  <div className="px-4 py-1.5">
-                    <span className="text-xs text-slate-600 uppercase tracking-wider">In Transit</span>
-                  </div>
-                  {inTransitCaravans.map((c) => (
-                    <AwayCaravan key={c.id} caravan={c} onArrived={useCaravanArrived} onSelect={() => setActiveCaId(c.id)} />
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
+          <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">No caravans</div>
         )}
       </div>
 
@@ -761,49 +708,3 @@ export default function WarehousePanel({
   );
 }
 
-// ── Away caravan (in transit progress row) ────────────────────────────────────
-
-function AwayCaravan({ caravan: c, onArrived, onSelect }: {
-  caravan: {
-    id: number; name: string; status: string;
-    locationType: string; locationId: number;
-    destType: string | null; destId: number | null;
-    arrivesAt: string | null; departedAt: string | null;
-  };
-  onArrived: () => void;
-  onSelect: () => void;
-}) {
-  const pct = useLivePercent(c.departedAt, c.arrivesAt);
-
-  useEffect(() => {
-    if (!c.arrivesAt) return;
-    const delay = new Date(c.arrivesAt).getTime() - Date.now();
-    if (delay <= 0) { onArrived(); return; }
-    const id = setTimeout(onArrived, delay);
-    return () => clearTimeout(id);
-  }, [c.arrivesAt, onArrived]);
-
-  const remaining = c.arrivesAt
-    ? Math.max(0, Math.ceil((new Date(c.arrivesAt).getTime() - Date.now()) / 1000))
-    : null;
-
-  const remainingLabel = remaining != null
-    ? remaining >= 60 ? `${Math.floor(remaining / 60)}m ${remaining % 60}s` : `${remaining}s`
-    : null;
-
-  return (
-    <button
-      className="w-full px-4 py-2.5 text-left hover:bg-slate-800/40 transition-colors border-b border-slate-800/60"
-      onClick={onSelect}
-    >
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-azure-500 flex-shrink-0 animate-pulse" />
-        <span className="flex-1 text-sm text-slate-400">{c.name}</span>
-        {remainingLabel && <span className="text-xs text-slate-600">{remainingLabel}</span>}
-      </div>
-      <div className="ml-3.5">
-        <ProgressBar pct={pct} color="bg-azure-700/50" height="h-0.5" />
-      </div>
-    </button>
-  );
-}
