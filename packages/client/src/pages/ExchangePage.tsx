@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api.js';
-import type { ExchangeListing } from '../services/api.js';
+import type { ExchangeListing, WishlistWithItems } from '../services/api.js';
 import { RESOURCE_NAMES, REGION_IDS } from '@merchant-realms/shared';
 import WarehousePanel from '../components/WarehousePanel.js';
 import { IconSlot } from '../components/ui/index.js';
@@ -27,6 +27,16 @@ export default function ExchangePage() {
   const [buyQty, setBuyQty]       = useState('');
   const [listQty, setListQty]     = useState('');
   const [listPrice, setListPrice] = useState('');
+
+  // Wishlist panel state
+  const [bottomTab, setBottomTab]         = useState<'listings' | 'wishlists'>('listings');
+  const [activeWishlistId, setActiveWishlistId] = useState<number | null>(null);
+  const [renamingId, setRenamingId]        = useState<number | null>(null);
+  const [renameValue, setRenameValue]      = useState('');
+  const [newWishlistName, setNewWishlistName] = useState('');
+  const [addItemRt, setAddItemRt]          = useState('');
+  const [addItemQty, setAddItemQty]        = useState('');
+  const renameInputRef                     = useRef<HTMLInputElement>(null);
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['exchange-storage', regionId] });
@@ -63,6 +73,44 @@ export default function ExchangePage() {
     onSuccess: invalidate,
   });
 
+  const invalidateWishlists = () => void qc.invalidateQueries({ queryKey: ['wishlists'] });
+
+  const { data: wishlistData } = useQuery({
+    queryKey: ['wishlists'],
+    queryFn:  () => api.wishlists(),
+  });
+
+  const createWishlist = useMutation({
+    mutationFn: (name: string) => api.createWishlist(name),
+    onSuccess: (data) => {
+      invalidateWishlists();
+      setActiveWishlistId(data.wishlist.id);
+      setNewWishlistName('');
+    },
+  });
+
+  const renameWishlist = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => api.renameWishlist(id, name),
+    onSuccess: () => { invalidateWishlists(); setRenamingId(null); },
+  });
+
+  const deleteWishlist = useMutation({
+    mutationFn: (id: number) => api.deleteWishlist(id),
+    onSuccess: () => { invalidateWishlists(); setActiveWishlistId(null); },
+  });
+
+  const upsertItem = useMutation({
+    mutationFn: ({ wishlistId, rt, qty }: { wishlistId: number; rt: string; qty: number }) =>
+      api.upsertWishlistItem(wishlistId, rt, qty),
+    onSuccess: invalidateWishlists,
+  });
+
+  const deleteItem = useMutation({
+    mutationFn: ({ wishlistId, rt }: { wishlistId: number; rt: string }) =>
+      api.deleteWishlistItem(wishlistId, rt),
+    onSuccess: invalidateWishlists,
+  });
+
   const storageMap  = new Map((storageData?.warehouse?.items ?? []).map((e) => [e.resourceType, e.quantity]));
   const goldBalance = storageData?.goldBalance ?? 0;
   const inventory   = (storageData?.warehouse?.items ?? []).filter((e) => e.quantity > 0);
@@ -80,6 +128,11 @@ export default function ExchangePage() {
 
   const warehouseQty     = selected ? (storageMap.get(selected) ?? 0) : 0;
   const activeBuyListing = buyListingId ? allListings.find((l) => l.id === buyListingId) ?? null : null;
+
+  const allWishlists: WishlistWithItems[] = wishlistData?.wishlists ?? [];
+  const activeWishlist = allWishlists.find((w) => w.id === activeWishlistId)
+    ?? allWishlists[0]
+    ?? null;
 
   const switchRegion = (id: number) => {
     setRegionId(id);
@@ -138,65 +191,275 @@ export default function ExchangePage() {
       {/* ── Bottom half: listings browser ───────────────────────────────── */}
       <div className="flex-1 grid grid-cols-2 divide-x divide-slate-700/60 overflow-hidden min-h-0">
 
-        {/* Left: resource list with listing counts */}
+        {/* Left: listings or wishlists */}
         <div className="flex flex-col overflow-hidden">
-          <div className="px-4 py-2 border-b border-slate-700/60 flex-shrink-0">
-            <span className="text-xs uppercase tracking-wider text-slate-500">
-              Listings · {allListings.length} active
-            </span>
+
+          {/* Tab strip */}
+          <div className="flex border-b border-slate-700/60 flex-shrink-0">
+            <button
+              onClick={() => setBottomTab('listings')}
+              className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                bottomTab === 'listings'
+                  ? 'border-azure-500 text-azure-300'
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              Listings <span className="ml-1 text-slate-600">{allListings.length}</span>
+            </button>
+            <button
+              onClick={() => setBottomTab('wishlists')}
+              className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                bottomTab === 'wishlists'
+                  ? 'border-azure-500 text-azure-300'
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              Wishlists {allWishlists.length > 0 && <span className="ml-1 text-slate-600">{allWishlists.length}</span>}
+            </button>
           </div>
-          <div className="flex-1 overflow-y-auto">
-            {visibleResources.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-slate-600 text-sm">
-                No listings or warehouse items
-              </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-slate-900/95">
-                  <tr className="text-xs text-slate-600 border-b border-slate-800">
-                    <th className="text-left px-4 py-1.5 font-normal">Material</th>
-                    <th className="text-right px-4 py-1.5 font-normal">Warehouse</th>
-                    <th className="text-right px-4 py-1.5 font-normal">Listings</th>
-                    <th className="text-right px-4 py-1.5 font-normal">Best price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleResources.map((rt) => {
-                    const inWh    = storageMap.get(rt) ?? 0;
-                    const rtListings = allListings.filter((l) => l.resourceType === rt);
-                    const bestPrice  = rtListings.length > 0
-                      ? Math.min(...rtListings.map((l) => l.pricePerUnit))
-                      : null;
-                    return (
-                      <tr
-                        key={rt}
-                        className={`border-b border-slate-800/40 cursor-pointer transition-colors ${
-                          selected === rt ? 'bg-slate-700/40' : 'hover:bg-slate-800/40'
-                        }`}
-                        onClick={() => { setSelected(rt); setBuyListingId(null); setBuyQty(''); }}
+
+          {bottomTab === 'listings' ? (
+            <div className="flex-1 overflow-y-auto">
+              {visibleResources.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-slate-600 text-sm">
+                  No listings or warehouse items
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-900/95">
+                    <tr className="text-xs text-slate-600 border-b border-slate-800">
+                      <th className="text-left px-4 py-1.5 font-normal">Material</th>
+                      <th className="text-right px-4 py-1.5 font-normal">Warehouse</th>
+                      <th className="text-right px-4 py-1.5 font-normal">Listings</th>
+                      <th className="text-right px-4 py-1.5 font-normal">Best price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleResources.map((rt) => {
+                      const inWh       = storageMap.get(rt) ?? 0;
+                      const rtListings = allListings.filter((l) => l.resourceType === rt);
+                      const bestPrice  = rtListings.length > 0
+                        ? Math.min(...rtListings.map((l) => l.pricePerUnit))
+                        : null;
+                      return (
+                        <tr
+                          key={rt}
+                          className={`border-b border-slate-800/40 cursor-pointer transition-colors ${
+                            selected === rt ? 'bg-slate-700/40' : 'hover:bg-slate-800/40'
+                          }`}
+                          onClick={() => { setSelected(rt); setBuyListingId(null); setBuyQty(''); }}
+                        >
+                          <td className="px-4 py-1.5">
+                            <div className="flex items-center gap-2">
+                              <IconSlot size="xs" label={rName(rt)} />
+                              <span className="text-slate-300">{rName(rt)}</span>
+                            </div>
+                          </td>
+                          <td className={`px-4 py-1.5 text-right font-mono tabular-nums ${inWh > 0 ? 'text-slate-200' : 'text-slate-700'}`}>
+                            {inWh > 0 ? inWh.toFixed(0) : '—'}
+                          </td>
+                          <td className="px-4 py-1.5 text-right text-slate-500">
+                            {rtListings.length > 0 ? rtListings.length : <span className="text-slate-700">—</span>}
+                          </td>
+                          <td className="px-4 py-1.5 text-right font-mono tabular-nums text-gold-400">
+                            {bestPrice !== null ? `${bestPrice}g` : <span className="text-slate-700">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ) : (
+            /* ── Wishlists panel ─────────────────────────────────────── */
+            <div className="flex flex-col flex-1 overflow-hidden">
+
+              {/* Wishlist selector + actions */}
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/60 flex-shrink-0">
+                {allWishlists.length > 0 ? (
+                  <>
+                    <select
+                      value={activeWishlist?.id ?? ''}
+                      onChange={(e) => setActiveWishlistId(Number(e.target.value))}
+                      className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-slate-500"
+                    >
+                      {allWishlists.map((w) => (
+                        <option key={w.id} value={w.id}>{w.name}</option>
+                      ))}
+                    </select>
+                    {renamingId === activeWishlist?.id ? (
+                      <form
+                        className="flex gap-1"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (renameValue.trim() && activeWishlist) {
+                            renameWishlist.mutate({ id: activeWishlist.id, name: renameValue.trim() });
+                          }
+                        }}
                       >
-                        <td className="px-4 py-1.5">
-                          <div className="flex items-center gap-2">
-                            <IconSlot size="xs" label={rName(rt)} />
-                            <span className="text-slate-300">{rName(rt)}</span>
-                          </div>
-                        </td>
-                        <td className={`px-4 py-1.5 text-right font-mono tabular-nums ${inWh > 0 ? 'text-slate-200' : 'text-slate-700'}`}>
-                          {inWh > 0 ? inWh.toFixed(0) : '—'}
-                        </td>
-                        <td className="px-4 py-1.5 text-right text-slate-500">
-                          {rtListings.length > 0 ? rtListings.length : <span className="text-slate-700">—</span>}
-                        </td>
-                        <td className="px-4 py-1.5 text-right font-mono tabular-nums text-gold-400">
-                          {bestPrice !== null ? `${bestPrice}g` : <span className="text-slate-700">—</span>}
-                        </td>
+                        <input
+                          ref={renameInputRef}
+                          className="w-28 bg-slate-900 border border-slate-600 rounded px-2 py-0.5 text-xs text-slate-100 focus:outline-none focus:border-azure-500"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Escape') setRenamingId(null); }}
+                          autoFocus
+                        />
+                        <button type="submit" className="text-azure-400 hover:text-azure-300 text-xs px-1">✓</button>
+                        <button type="button" onClick={() => setRenamingId(null)} className="text-slate-600 hover:text-slate-400 text-xs px-1">✕</button>
+                      </form>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          if (!activeWishlist) return;
+                          setRenamingId(activeWishlist.id);
+                          setRenameValue(activeWishlist.name);
+                        }}
+                        title="Rename"
+                        className="text-slate-600 hover:text-slate-300 text-xs px-1 transition-colors"
+                      >✎</button>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (!activeWishlist) return;
+                        if (confirm(`Delete "${activeWishlist.name}"?`)) {
+                          deleteWishlist.mutate(activeWishlist.id);
+                        }
+                      }}
+                      title="Delete wishlist"
+                      className="text-slate-700 hover:text-red-400 text-xs px-1 transition-colors"
+                    >✕</button>
+                  </>
+                ) : (
+                  <span className="text-xs text-slate-600 flex-1">No wishlists yet</span>
+                )}
+              </div>
+
+              {/* Wishlist items */}
+              <div className="flex-1 overflow-y-auto">
+                {activeWishlist && activeWishlist.items.length > 0 ? (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-slate-900/95">
+                      <tr className="text-xs text-slate-600 border-b border-slate-800">
+                        <th className="text-left px-3 py-1.5 font-normal">Resource</th>
+                        <th className="text-right px-3 py-1.5 font-normal">Need</th>
+                        <th className="text-right px-3 py-1.5 font-normal">Have</th>
+                        <th className="py-1.5 w-6" />
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+                    </thead>
+                    <tbody>
+                      {activeWishlist.items.map((item) => {
+                        const have = storageMap.get(item.resourceType) ?? 0;
+                        const met  = have >= item.quantity;
+                        return (
+                          <tr
+                            key={item.resourceType}
+                            className="border-b border-slate-800/40 hover:bg-slate-800/40 cursor-pointer transition-colors group"
+                            onClick={() => {
+                              setSelected(item.resourceType);
+                              setBuyListingId(null);
+                              setBuyQty(String(item.quantity));
+                              setBottomTab('listings');
+                            }}
+                            title="Click to open in buy menu"
+                          >
+                            <td className="px-3 py-1.5">
+                              <div className="flex items-center gap-2">
+                                <IconSlot size="xs" label={rName(item.resourceType)} />
+                                <span className="text-slate-300 text-xs">{rName(item.resourceType)}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-1.5 text-right font-mono tabular-nums text-xs text-slate-200">
+                              {item.quantity}
+                            </td>
+                            <td className={`px-3 py-1.5 text-right font-mono tabular-nums text-xs ${met ? 'text-emerald-400' : 'text-slate-500'}`}>
+                              {Math.floor(have)}
+                            </td>
+                            <td className="px-1 py-1.5 text-right">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteItem.mutate({ wishlistId: activeWishlist.id, rt: item.resourceType });
+                                }}
+                                className="text-slate-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all text-xs leading-none"
+                              >✕</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : activeWishlist ? (
+                  <div className="flex items-center justify-center h-16 text-slate-600 text-xs">
+                    No items — add below
+                  </div>
+                ) : null}
+
+                {/* Add item row */}
+                {activeWishlist && (
+                  <form
+                    className="flex gap-1.5 items-center px-3 py-2 border-t border-slate-800"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const qty = parseInt(addItemQty, 10);
+                      if (!addItemRt || !qty || qty < 1) return;
+                      upsertItem.mutate({ wishlistId: activeWishlist.id, rt: addItemRt, qty });
+                      setAddItemRt('');
+                      setAddItemQty('');
+                    }}
+                  >
+                    <select
+                      value={addItemRt}
+                      onChange={(e) => setAddItemRt(e.target.value)}
+                      className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-slate-500"
+                    >
+                      <option value="">Add resource…</option>
+                      {Object.entries(RESOURCE_NAMES).map(([rt, name]) => (
+                        <option key={rt} value={rt}>{name as string}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number" min={1}
+                      placeholder="Qty"
+                      value={addItemQty}
+                      onChange={(e) => setAddItemQty(e.target.value)}
+                      className="w-16 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-slate-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!addItemRt || !addItemQty}
+                      className="px-2 py-1 rounded text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 disabled:opacity-30 transition-colors"
+                    >+</button>
+                  </form>
+                )}
+              </div>
+
+              {/* New wishlist form */}
+              <form
+                className="flex gap-1.5 items-center px-3 py-2 border-t border-slate-700/60 flex-shrink-0"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newWishlistName.trim()) createWishlist.mutate(newWishlistName.trim());
+                }}
+              >
+                <input
+                  placeholder="New wishlist name…"
+                  value={newWishlistName}
+                  onChange={(e) => setNewWishlistName(e.target.value)}
+                  className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-slate-500 placeholder:text-slate-600"
+                />
+                <button
+                  type="submit"
+                  disabled={!newWishlistName.trim() || createWishlist.isPending}
+                  className="px-2.5 py-1 rounded text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 disabled:opacity-30 transition-colors flex-shrink-0"
+                >
+                  Create
+                </button>
+              </form>
+
+            </div>
+          )}
         </div>
 
         {/* Right: listing detail + actions */}

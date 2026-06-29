@@ -203,6 +203,33 @@ model Empire {
   marketOrders    MarketOrder[]
   soldTrades      MarketTrade[] @relation("TradesSeller")
   purchasedTrades MarketTrade[] @relation("TradesBuyer")
+  wishlists       Wishlist[]
+}
+
+// ── Wishlists ──────────────────────────────────────────────────────────────
+
+model Wishlist {
+  id        Int            @id @default(autoincrement())
+  empireId  Int
+  name      String
+  createdAt DateTime       @default(now())
+
+  empire Empire         @relation(fields: [empireId], references: [id], onDelete: Cascade)
+  items  WishlistItem[]
+
+  @@index([empireId])
+}
+
+model WishlistItem {
+  id           Int      @id @default(autoincrement())
+  wishlistId   Int
+  resourceType String
+  quantity     Int
+
+  wishlist Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+
+  @@unique([wishlistId, resourceType])
+  @@index([wishlistId])
 }
 
 model Keep {

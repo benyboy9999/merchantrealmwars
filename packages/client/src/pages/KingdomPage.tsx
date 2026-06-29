@@ -277,6 +277,11 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
     mutationFn: (buildingId: number) => api.repairBuilding(keepId, buildingId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['keep', keepId] }),
   });
+  const addToWishlist = useMutation({
+    mutationFn: ({ name, items }: { name: string; items: { resourceType: string; quantity: number }[] }) =>
+      api.createWishlist(name, items),
+  });
+  const [wishlistedBuilding, setWishlistedBuilding] = useState<string | null>(null);
 
   function closeModal() {
     setSelectedSlot(null);
@@ -472,13 +477,34 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
 
                 {/* Build button — always visible */}
                 {buildError && buildingType === bt && <p className="text-red-400 text-xs">{buildError}</p>}
-                <Button
-                  variant="primary" size="sm" className="w-full mt-auto"
-                  disabled={!allMet || construct.isPending}
-                  onClick={() => { setBuildingType(bt); construct.mutate({ bType: bt, slot: selectedSlot! }); }}
-                >
-                  {construct.isPending && buildingType === bt ? 'Building…' : `Build ${bName}`}
-                </Button>
+                <div className="flex flex-col gap-1.5 mt-auto">
+                  <Button
+                    variant="primary" size="sm" className="w-full"
+                    disabled={!allMet || construct.isPending}
+                    onClick={() => { setBuildingType(bt); construct.mutate({ bType: bt, slot: selectedSlot! }); }}
+                  >
+                    {construct.isPending && buildingType === bt ? 'Building…' : `Build ${bName}`}
+                  </Button>
+                  {!allMet && (
+                    <button
+                      onClick={() => {
+                        const shortfall = costs
+                          .filter((c) => (ledgerMap.get(c.resource) ?? 0) < c.quantity)
+                          .map((c) => ({
+                            resourceType: c.resource,
+                            quantity: c.quantity - Math.floor(ledgerMap.get(c.resource) ?? 0),
+                          }));
+                        addToWishlist.mutate({ name: `Build ${bName}`, items: shortfall });
+                        setWishlistedBuilding(bt);
+                        setTimeout(() => setWishlistedBuilding(null), 2000);
+                      }}
+                      disabled={addToWishlist.isPending && wishlistedBuilding === bt}
+                      className="w-full text-xs text-slate-500 hover:text-azure-300 transition-colors py-0.5 text-center"
+                    >
+                      {wishlistedBuilding === bt ? '✓ Added to wishlists' : '☆ Add to Wishlist'}
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}

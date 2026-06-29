@@ -175,6 +175,20 @@ export const api = {
   foundKeep:       (plotId: number, keepName: string) =>
     post<{ keep: Keep }>('/api/caravans/found', { plotId, keepName }),
 
+  // Wishlists
+  wishlists:        () => get<{ wishlists: WishlistWithItems[] }>('/api/wishlists'),
+  createWishlist:   (name: string, items?: { resourceType: string; quantity: number }[]) =>
+    post<{ wishlist: WishlistWithItems }>('/api/wishlists', { name, items }),
+  renameWishlist:   (id: number, name: string) =>
+    patch<{ ok: boolean }>(`/api/wishlists/${id}`, { name }),
+  deleteWishlist:   (id: number) =>
+    del<{ ok: boolean }>(`/api/wishlists/${id}`),
+  upsertWishlistItem: (wishlistId: number, resourceType: string, quantity: number) =>
+    req<{ item: WishlistItemData }>(`/api/wishlists/${wishlistId}/items`,
+      { method: 'PUT', body: JSON.stringify({ resourceType, quantity }) }),
+  deleteWishlistItem: (wishlistId: number, resourceType: string) =>
+    del<{ ok: boolean }>(`/api/wishlists/${wishlistId}/items/${encodeURIComponent(resourceType)}`),
+
   // Admin — server controls
   adminStatus:          () => get<AdminStatus>('/admin/status'),
   adminTick:            () => post<TickResult>('/admin/tick'),
@@ -262,6 +276,13 @@ export interface EmpireBootstrap {
   }>;
   caravans: CaravanWithCargo[];
   warehouses: Array<{ id: number; regionId: number | null; cap: number }>;
+}
+
+export interface WishlistItemData {
+  id: number; wishlistId: number; resourceType: string; quantity: number;
+}
+export interface WishlistWithItems {
+  id: number; empireId: number; name: string; createdAt: string; items: WishlistItemData[];
 }
 
 export interface AdminPlayer {
