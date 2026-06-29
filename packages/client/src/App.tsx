@@ -97,7 +97,7 @@ export default function App() {
                     <Route path="/kingdom/:keepId/:tab"                          element={<Page><KingdomPage /></Page>} />
                     <Route path="/kingdom/:keepId/buildings/:buildingId"          element={<Page><BuildingPage /></Page>} />
                     <Route path="/realm"                                          element={<RealmPage />} />
-                    <Route path="/chat"                                           element={<ChatPage />} />
+                    <Route path="/chat"                                           element={<Page><ChatPage /></Page>} />
                     <Route path="/exchange"                                       element={<Page><ExchangePage /></Page>} />
                     <Route path="/admin"                                          element={<Page><AdminPage /></Page>} />
                     <Route path="/encyclopedia"                                   element={<Page><EncyclopediaPage /></Page>} />

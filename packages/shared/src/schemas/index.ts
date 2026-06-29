@@ -1,15 +1,25 @@
 import { z } from 'zod';
 import { RegionId, ResourceType, VehicleType, CaravanLocationType } from '../gamedata.js';
 
+// ── Sanitization helper ────────────────────────────────────────────────────
+// Strips null bytes (which PostgreSQL rejects) and trims whitespace, then
+// re-validates length against the cleaned string.
+
+export function cleanStr(min: number, max: number) {
+  return z.string()
+    .transform((v) => v.replace(/\0/g, '').trim())
+    .pipe(z.string().min(min).max(max));
+}
+
 // ── Auth ───────────────────────────────────────────────────────────────────
 
 export const RegisterSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().transform((v) => v.trim().toLowerCase()),
   password: z.string().min(8).max(72),
 });
 
 export const LoginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().transform((v) => v.trim().toLowerCase()),
   password: z.string().min(1),
 });
 
@@ -20,14 +30,14 @@ export const RefreshTokenSchema = z.object({
 // ── Empire ─────────────────────────────────────────────────────────────────
 
 export const CreateEmpireSchema = z.object({
-  name: z.string().min(2).max(40),
+  name: cleanStr(2, 40),
 });
 
 // ── Keep ───────────────────────────────────────────────────────────────────
 
 export const CreateKeepSchema = z.object({
   plotId: z.string().uuid(),
-  name: z.string().min(2).max(40),
+  name: cleanStr(2, 40),
 });
 
 // ── Exchange ───────────────────────────────────────────────────────────────
@@ -69,14 +79,14 @@ export const CancelCaravanSchema = z.object({
 
 export const SendChatMessageSchema = z.object({
   roomId:  z.number().int().positive(),
-  content: z.string().min(1).max(500),
+  content: cleanStr(1, 500),
 });
 
 // ── Guild ──────────────────────────────────────────────────────────────────
 
 export const CreateGuildSchema = z.object({
-  name: z.string().min(2).max(40),
-  description: z.string().max(200).optional(),
+  name:        cleanStr(2, 40),
+  description: z.string().transform((v) => v.replace(/\0/g, '').trim()).pipe(z.string().max(200)).optional(),
 });
 
 export const DonateToGuildSchema = z.object({

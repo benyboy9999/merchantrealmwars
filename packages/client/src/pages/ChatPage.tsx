@@ -1,18 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api.js';
-import type { ChatRoom, ChatMessageItem } from '../services/api.js';
+import type { ChatMessageItem } from '../services/api.js';
 import { WsEvent } from '@merchant-realms/shared';
 import { getSocket } from '../services/socket.js';
 import { useAuthStore } from '../stores/auth.js';
+import { Button, Input, Modal, ModalBody } from '../components/ui/index.js';
+
+const MAX_CHARS = 500;
 
 export default function ChatPage() {
-  const qc = useQueryClient();
-  const myEmpireId  = useAuthStore((s) => s.empireId);
+  const qc            = useQueryClient();
+  const myEmpireId    = useAuthStore((s) => s.empireId);
+  const myEmpireName  = useAuthStore((s) => s.empireName);
+
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
-  const [messageInput, setMessageInput]     = useState('');
-  const [dmSearchOpen, setDmSearchOpen]     = useState(false);
-  const [dmQuery, setDmQuery]               = useState('');
+  const [messageInput,   setMessageInput]   = useState('');
+  const [dmSearchOpen,   setDmSearchOpen]   = useState(false);
+  const [dmQuery,        setDmQuery]        = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ── Rooms ─────────────────────────────────────────────────────────────────
@@ -24,7 +29,7 @@ export default function ChatPage() {
   const generalRooms = rooms.filter((r) => r.type === 'GENERAL');
   const dmRooms      = rooms.filter((r) => r.type === 'DM');
 
-  // Auto-select first room on load
+  // Auto-select first room
   useEffect(() => {
     if (!selectedRoomId && generalRooms.length > 0) {
       setSelectedRoomId(generalRooms[0]!.id);
@@ -40,7 +45,7 @@ export default function ChatPage() {
   // Server returns newest-first; reverse to show oldest at top
   const messages = [...(messagesData?.messages ?? [])].reverse();
 
-  // ── Player search for DMs ─────────────────────────────────────────────────
+  // ── Player search ─────────────────────────────────────────────────────────
   const { data: searchData } = useQuery({
     queryKey: ['chat-search', dmQuery],
     queryFn:  () => api.chatSearch(dmQuery),
@@ -66,12 +71,11 @@ export default function ChatPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['chat-rooms'] }),
   });
 
-  // ── Real-time via socket ──────────────────────────────────────────────────
+  // ── Socket ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const socket = getSocket();
 
     const handleMessage = (msg: ChatMessageItem) => {
-      // Cache shape is { messages: ChatMessageItem[] } — prepend to inner array
       qc.setQueryData(
         ['chat-messages', msg.roomId],
         (old: { messages: ChatMessageItem[] } | undefined) => ({
@@ -79,20 +83,17 @@ export default function ChatPage() {
         }),
       );
     };
-
-    const handleNewDm = () => {
-      void qc.invalidateQueries({ queryKey: ['chat-rooms'] });
-    };
+    const handleNewDm = () => void qc.invalidateQueries({ queryKey: ['chat-rooms'] });
 
     socket.on(WsEvent.CHAT_MESSAGE, handleMessage);
-    socket.on(WsEvent.CHAT_NEW_DM, handleNewDm);
+    socket.on(WsEvent.CHAT_NEW_DM,  handleNewDm);
     return () => {
       socket.off(WsEvent.CHAT_MESSAGE, handleMessage);
-      socket.off(WsEvent.CHAT_NEW_DM, handleNewDm);
+      socket.off(WsEvent.CHAT_NEW_DM,  handleNewDm);
     };
   }, [qc]);
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
@@ -106,7 +107,7 @@ export default function ChatPage() {
     setMessageInput('');
   }
 
-  // ── Derived display ───────────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
   const selectedRoom    = rooms.find((r) => r.id === selectedRoomId) ?? null;
   const roomDisplayName = selectedRoom
     ? (selectedRoom.type === 'DM'
@@ -114,59 +115,62 @@ export default function ChatPage() {
         : (selectedRoom.name ?? 'Room'))
     : null;
 
-  return (
-    <div className="flex" style={{ height: 'calc(100vh - 48px)' }}>
+  const charCount   = messageInput.length;
+  const charWarning = charCount > 480 ? 'text-red-400' : charCount > 380 ? 'text-amber-400' : 'text-slate-600';
 
-      {/* ── Left sidebar ───────────────────────────────────────────────── */}
-      <div className="w-60 flex-shrink-0 border-r border-slate-700/60 bg-slate-900 flex flex-col">
+  // The Page wrapper contributes py-6 (24px top + 24px bottom = 48px) + navbar 48px = 96px total
+  return (
+    <div className="flex h-[calc(100vh-96px)] border border-slate-700/60 rounded-lg overflow-hidden">
+
+      {/* ── Left sidebar ───────────────────────────────────────── */}
+      <div className="w-56 flex-shrink-0 bg-slate-900 border-r border-slate-700/60 flex flex-col">
         <div className="px-4 py-3 border-b border-slate-700/60">
-          <h2 className="text-slate-100 font-semibold text-sm tracking-wide">Chat</h2>
+          <span className="text-slate-100 font-semibold text-sm">Chat</span>
         </div>
 
         <div className="flex-1 overflow-y-auto py-2">
-
           {/* Rooms */}
-          <div className="px-3 mb-1 mt-1">
+          <div className="px-4 mt-1 mb-1">
             <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold">Rooms</span>
           </div>
           {generalRooms.map((room) => (
-            <RoomRow
+            <SidebarRow
               key={room.id}
-              room={room}
               active={selectedRoomId === room.id}
-              prefix="#"
               label={room.name ?? 'Room'}
+              prefix="#"
+              isMuted={room.isMuted}
               onClick={() => setSelectedRoomId(room.id)}
             />
           ))}
 
           {/* DMs */}
-          <div className="px-3 mt-4 mb-1 flex items-center justify-between">
+          <div className="px-4 mt-4 mb-1 flex items-center justify-between">
             <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold">Direct Messages</span>
             <button
               onClick={() => setDmSearchOpen(true)}
-              className="w-4 h-4 flex items-center justify-center rounded text-slate-600 hover:text-slate-300 hover:bg-slate-700 text-sm leading-none font-bold"
+              className="w-4 h-4 flex items-center justify-center text-slate-600 hover:text-slate-300 hover:bg-slate-700 rounded text-sm font-bold leading-none transition-colors"
               title="New direct message"
             >+</button>
           </div>
           {dmRooms.map((room) => (
-            <RoomRow
+            <SidebarRow
               key={room.id}
-              room={room}
               active={selectedRoomId === room.id}
-              prefix="@"
               label={room.partner?.name ?? '?'}
+              prefix="@"
+              isMuted={room.isMuted}
+              avatar={<EmpireAvatar name={room.partner?.name ?? null} />}
               onClick={() => setSelectedRoomId(room.id)}
             />
           ))}
           {dmRooms.length === 0 && (
-            <p className="px-4 py-1 text-xs text-slate-700">No direct messages yet</p>
+            <p className="px-4 py-1 text-xs text-slate-700 italic">None yet</p>
           )}
-
         </div>
       </div>
 
-      {/* ── Right: chat window ─────────────────────────────────────────── */}
+      {/* ── Right: chat window ─────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 bg-slate-950">
         {!selectedRoom ? (
           <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">
@@ -175,144 +179,192 @@ export default function ChatPage() {
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-3 border-b border-slate-700/60 bg-slate-900 flex-shrink-0">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700/60 bg-slate-900 flex-shrink-0">
               <span className="font-semibold text-slate-100 text-sm">
                 {selectedRoom.type === 'DM' ? `@ ${roomDisplayName}` : `# ${roomDisplayName}`}
               </span>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => muteRoom.mutate({ roomId: selectedRoom.id, muted: !selectedRoom.isMuted })}
-                className="text-xs text-slate-600 hover:text-slate-300 transition-colors px-2 py-1 rounded hover:bg-slate-800"
-                title={selectedRoom.isMuted ? 'Unmute this room' : 'Mute this room'}
               >
                 {selectedRoom.isMuted ? 'Unmute' : 'Mute'}
-              </button>
+              </Button>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">
+            {/* Message list */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
               {messages.length === 0 && (
-                <p className="text-slate-700 text-sm text-center py-8">No messages yet. Say hello!</p>
+                <p className="text-slate-700 text-sm text-center py-12">No messages yet. Say hello!</p>
               )}
               {messages.map((msg, i) => {
-                const prev       = messages[i - 1];
-                const showHeader = !prev || prev.empireId !== msg.empireId;
-                const isMe       = msg.empireId === myEmpireId;
-                return (
-                  <div key={msg.id} className={showHeader && i > 0 ? 'mt-4' : 'mt-0.5'}>
-                    {showHeader && (
-                      <div className="flex items-baseline gap-2 mb-0.5">
-                        <span className={`text-sm font-semibold ${isMe ? 'text-azure-400' : 'text-slate-200'}`}>
-                          {msg.empireName ?? 'System'}
-                        </span>
-                        <span className="text-[11px] text-slate-600">
-                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                const prev      = messages[i - 1];
+                const isMe      = msg.empireId === myEmpireId;
+                const isGrouped = !!prev && prev.empireId === msg.empireId;
+                const time      = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                return isMe ? (
+                  /* ── My message (right) ───────────────────── */
+                  <div key={msg.id} className={`flex justify-end items-end gap-2 ${isGrouped ? 'mt-0.5' : 'mt-4'}`}>
+                    <div className="max-w-[68%] flex flex-col items-end">
+                      {!isGrouped && (
+                        <div className="flex items-baseline gap-2 mb-1 flex-row-reverse">
+                          <span className="text-xs font-semibold text-azure-400">
+                            {myEmpireName ?? 'You'}
+                          </span>
+                          <span className="text-[10px] text-slate-600">{time}</span>
+                        </div>
+                      )}
+                      <div className="bg-azure-600 text-white text-sm px-4 py-2.5 rounded-2xl rounded-tr-sm leading-relaxed break-words">
+                        {msg.content}
                       </div>
-                    )}
-                    <p className="text-sm text-slate-300 leading-relaxed break-words">{msg.content}</p>
+                    </div>
+                    <div className="w-8 flex-shrink-0 flex items-end pb-0.5">
+                      {!isGrouped && <EmpireAvatar name={myEmpireName} />}
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Other's message (left) ───────────────── */
+                  <div key={msg.id} className={`flex items-end gap-2 ${isGrouped ? 'mt-0.5' : 'mt-4'}`}>
+                    <div className="w-8 flex-shrink-0 flex items-end pb-0.5">
+                      {!isGrouped && <EmpireAvatar name={msg.empireName} />}
+                    </div>
+                    <div className="max-w-[68%] flex flex-col items-start">
+                      {!isGrouped && (
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className="text-xs font-semibold text-slate-300">
+                            {msg.empireName ?? 'Unknown'}
+                          </span>
+                          <span className="text-[10px] text-slate-600">{time}</span>
+                        </div>
+                      )}
+                      <div className="bg-slate-800 text-slate-200 text-sm px-4 py-2.5 rounded-2xl rounded-tl-sm leading-relaxed break-words border border-slate-700/40">
+                        {msg.content}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <div className="px-6 py-4 border-t border-slate-700/60 bg-slate-900 flex-shrink-0">
-              <form onSubmit={handleSend} className="flex gap-3">
-                <input
-                  value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  placeholder={
-                    selectedRoom.type === 'DM'
-                      ? `Message @${roomDisplayName}`
-                      : `Message #${roomDisplayName}`
-                  }
-                  className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-slate-600 transition-colors"
-                  maxLength={500}
-                />
-                <button
+            {/* Input bar */}
+            <div className="px-5 py-4 border-t border-slate-700/60 bg-slate-900 flex-shrink-0">
+              <form onSubmit={handleSend} className="flex gap-2 items-center">
+                <div className="relative flex-1">
+                  <Input
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      // Submit on Enter (without Shift)
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); }
+                    }}
+                    placeholder={
+                      selectedRoom.type === 'DM'
+                        ? `Message @${roomDisplayName}`
+                        : `Message #${roomDisplayName}`
+                    }
+                    maxLength={MAX_CHARS}
+                    className="pr-16 py-2.5"
+                  />
+                  {charCount > 350 && (
+                    <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[11px] tabular-nums pointer-events-none ${charWarning}`}>
+                      {charCount}/{MAX_CHARS}
+                    </span>
+                  )}
+                </div>
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="md"
                   disabled={!messageInput.trim()}
-                  className="bg-azure-500 hover:bg-azure-400 disabled:opacity-40 text-white font-medium px-5 py-2.5 rounded-lg text-sm transition-colors flex-shrink-0"
+                  className="flex-shrink-0"
                 >
                   Send
-                </button>
+                </Button>
               </form>
             </div>
           </>
         )}
       </div>
 
-      {/* ── DM search overlay ──────────────────────────────────────────── */}
-      {dmSearchOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-950/70 flex items-start justify-center pt-24"
-          onClick={(e) => { if (e.target === e.currentTarget) { setDmSearchOpen(false); setDmQuery(''); } }}
-        >
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-96">
-            <div className="px-4 py-3 border-b border-slate-700/60 flex items-center justify-between">
-              <span className="text-slate-100 font-semibold text-sm">New Direct Message</span>
+      {/* ── DM Search Modal ────────────────────────────────────── */}
+      <Modal
+        open={dmSearchOpen}
+        onClose={() => { setDmSearchOpen(false); setDmQuery(''); }}
+        title="New Direct Message"
+        size="sm"
+      >
+        <ModalBody>
+          <Input
+            autoFocus
+            value={dmQuery}
+            onChange={(e) => setDmQuery(e.target.value)}
+            placeholder="Search by empire name…"
+          />
+          <div className="mt-3 space-y-0.5 min-h-[60px]">
+            {dmQuery.trim().length < 2 && (
+              <p className="text-slate-600 text-xs py-2">Type at least 2 characters to search…</p>
+            )}
+            {dmQuery.trim().length >= 2 && searchResults.length === 0 && (
+              <p className="text-slate-600 text-xs py-2">No empires found</p>
+            )}
+            {searchResults.map((empire) => (
               <button
-                onClick={() => { setDmSearchOpen(false); setDmQuery(''); }}
-                className="text-slate-500 hover:text-slate-300 transition-colors"
-              >✕</button>
-            </div>
-            <div className="p-4">
-              <input
-                autoFocus
-                value={dmQuery}
-                onChange={(e) => setDmQuery(e.target.value)}
-                placeholder="Search by empire name…"
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-slate-600 transition-colors"
-              />
-              <div className="mt-2 min-h-[40px]">
-                {dmQuery.trim().length < 2 && (
-                  <p className="text-slate-600 text-xs px-1 py-2">Type at least 2 characters to search…</p>
-                )}
-                {dmQuery.trim().length >= 2 && searchResults.length === 0 && (
-                  <p className="text-slate-600 text-xs px-1 py-2">No empires found</p>
-                )}
-                {searchResults.map((empire) => (
-                  <button
-                    key={empire.id}
-                    onClick={() => createDm.mutate(empire.id)}
-                    disabled={createDm.isPending}
-                    className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors disabled:opacity-50"
-                  >
-                    {empire.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+                key={empire.id}
+                onClick={() => createDm.mutate(empire.id)}
+                disabled={createDm.isPending}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors disabled:opacity-50"
+              >
+                <EmpireAvatar name={empire.name} />
+                <span>{empire.name}</span>
+              </button>
+            ))}
           </div>
-        </div>
-      )}
+        </ModalBody>
+      </Modal>
 
     </div>
   );
 }
 
-// ── Room row ──────────────────────────────────────────────────────────────
+// ── EmpireAvatar ──────────────────────────────────────────────────────────
 
-function RoomRow({ room, active, prefix, label, onClick }: {
-  room: ChatRoom;
+function EmpireAvatar({ name }: { name: string | null }) {
+  return (
+    <div className="w-8 h-8 rounded-full bg-slate-700 border border-slate-600/60 flex items-center justify-center text-xs font-bold text-slate-300 select-none flex-shrink-0">
+      {name?.[0]?.toUpperCase() ?? '?'}
+    </div>
+  );
+}
+
+// ── SidebarRow ────────────────────────────────────────────────────────────
+
+function SidebarRow({
+  active, label, prefix, isMuted, avatar, onClick,
+}: {
   active: boolean;
-  prefix: string;
   label: string;
+  prefix: string;
+  isMuted: boolean;
+  avatar?: React.ReactNode;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left flex items-center gap-2 px-4 py-1.5 text-sm transition-colors ${
+      className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors ${
         active
           ? 'bg-slate-700/60 text-slate-100'
           : 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-300'
       }`}
     >
-      <span className="text-slate-600 text-xs">{prefix}</span>
-      <span className="flex-1 truncate">{label}</span>
-      {room.isMuted && <span className="text-[10px] text-slate-700">muted</span>}
+      {avatar
+        ? avatar
+        : <span className="text-slate-600 text-xs w-8 text-center flex-shrink-0">{prefix}</span>
+      }
+      <span className="flex-1 truncate text-left">{label}</span>
+      {isMuted && <span className="text-[10px] text-slate-700 flex-shrink-0">muted</span>}
     </button>
   );
 }
