@@ -42,41 +42,52 @@ const EXCHANGE_REGIONS = [
 
 // ── CaravanStatusBar ──────────────────────────────────────────────────────────
 
-function CaravanStatusBar({ caravan, isHere, onUnloadAll, unloadPending, onSend }: {
+function CaravanStatusBar({ caravan, isHere, resolveName, onUnloadAll, unloadPending, onSend }: {
   caravan:       CaravanWithCargo;
   isHere:        boolean;
+  resolveName:   (type: string, id: number) => string;
   onUnloadAll:   () => void;
   unloadPending: boolean;
   onSend:        () => void;
 }) {
-  const eta     = useEta(caravan.status === 'IN_TRANSIT' ? caravan.arrivesAt : null);
-  const items   = caravan.warehouse?.items ?? [];
-  const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
-  const maxKg   = caravan.warehouse?.cap ?? caravan.animalCount * MULE_KG;
-  const pct     = maxKg > 0 ? Math.min(100, (cargoKg / maxKg) * 100) : 0;
+  const eta       = useEta(caravan.status === 'IN_TRANSIT' ? caravan.arrivesAt : null);
+  const items     = caravan.warehouse?.items ?? [];
+  const cargoKg   = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
+  const maxKg     = caravan.warehouse?.cap ?? caravan.animalCount * MULE_KG;
+  const pct       = maxKg > 0 ? Math.min(100, (cargoKg / maxKg) * 100) : 0;
   const isTransit = caravan.status === 'IN_TRANSIT';
+
+  const fromName = resolveName(caravan.locationType, caravan.locationId);
+  const toName   = caravan.destType && caravan.destId != null
+    ? resolveName(caravan.destType, caravan.destId)
+    : null;
+
+  const locationLine = isHere
+    ? fromName
+    : isTransit && toName
+      ? `${fromName} → ${toName}`
+      : fromName;
 
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-800/60 flex-shrink-0">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 mb-0.5">
           {isHere && !isTransit && <span className="w-1 h-1 rounded-full bg-emerald-400 flex-shrink-0" />}
-          {isTransit           && <span className="w-1 h-1 rounded-full bg-azure-400 animate-pulse flex-shrink-0" />}
+          {isTransit             && <span className="w-1 h-1 rounded-full bg-azure-400 animate-pulse flex-shrink-0" />}
           {!isHere && !isTransit && <span className="w-1 h-1 rounded-full bg-slate-600 flex-shrink-0" />}
-          <span className="text-xs text-slate-500 truncate">
-            {isHere
-              ? `${cargoKg.toFixed(0)} / ${maxKg} kg`
-              : isTransit
-                ? `${eta} · ${cargoKg.toFixed(0)} kg`
-                : `${cargoKg.toFixed(0)} kg`
-            }
-          </span>
+          <span className="text-xs text-slate-400 truncate font-medium">{locationLine}</span>
+          {isTransit && (
+            <span className="text-xs text-azure-400 flex-shrink-0 tabular-nums">{eta}</span>
+          )}
         </div>
-        <div className="h-0.5 bg-slate-800 rounded overflow-hidden">
-          <div
-            className={`h-full rounded transition-all ${isHere ? 'bg-emerald-700' : isTransit ? 'bg-azure-700' : 'bg-slate-700'}`}
-            style={{ width: `${pct}%` }}
-          />
+        <div className="flex items-center gap-1.5">
+          <div className="flex-1 h-0.5 bg-slate-800 rounded overflow-hidden">
+            <div
+              className={`h-full rounded transition-all ${isHere ? 'bg-emerald-700' : isTransit ? 'bg-azure-700' : 'bg-slate-700'}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-slate-600 tabular-nums flex-shrink-0">{cargoKg.toFixed(0)} / {maxKg} kg</span>
         </div>
       </div>
 
@@ -631,6 +642,7 @@ export default function WarehousePanel({
             <CaravanStatusBar
               caravan={activeCaravan}
               isHere={activeIsHere}
+              resolveName={(type, id) => caravanLocationName({ locationType: type, locationId: id })}
               onUnloadAll={() => {
                 const items = activeCaravan.warehouse?.items ?? [];
                 if (!activeCaravan.warehouseId || items.length === 0) return;
