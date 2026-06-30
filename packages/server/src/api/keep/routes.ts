@@ -10,7 +10,7 @@ import {
   RECIPE_BY_KEY, RECIPE_BY_ID, BUILDING_MAX_LEVEL,
 } from '@merchant-realms/shared';
 import type { BuildingType } from '@merchant-realms/shared';
-import { calculateRepairCost, calculateUpgradeCost, calculateUpgradeHealth } from '@merchant-realms/engine';
+import { calculateRepairCost, calculateUpgradeCost, calculateUpgradeHealth, calculateDemolishReturn } from '@merchant-realms/engine';
 import { startTask, cancelCompletion } from '../../services/production-timers.js';
 
 export const keepRouter = Router();
@@ -215,20 +215,35 @@ keepRouter.delete('/:keepId/buildings/:buildingId', async (req, res, next) => {
     });
     if (!building) { res.status(404).json({ error: 'Building not found' }); return; }
 
+    const btCode = BUILDING_TYPE_BY_ID[building.buildingTypeId] as BuildingType | undefined;
+    const constructionCost = btCode ? BUILDING_CONSTRUCTION_COSTS[btCode] ?? [] : [];
+    const returnedMaterials = calculateDemolishReturn(constructionCost, building.level, building.health);
+
+    const keep = await db.keep.findUnique({ where: { id: keepId } });
+    const warehouseId = keep?.warehouseId;
+
     await db.$transaction(async (tx) => {
       await tx.building.delete({ where: { id: building.id } });
-      // Decrease warehouse cap when a Warehouse building is demolished
-      if (building.buildingTypeId === BUILDING_TYPE_IDS.WAREHOUSE) {
-        const keep = await tx.keep.findUnique({ where: { id: keepId } });
-        if (keep?.warehouseId) {
+
+      if (warehouseId) {
+        // Decrease warehouse cap when a Warehouse building is demolished
+        if (building.buildingTypeId === BUILDING_TYPE_IDS.WAREHOUSE) {
           await tx.warehouse.update({
-            where: { id: keep.warehouseId },
+            where: { id: warehouseId },
             data:  { cap: { decrement: building.level * WAREHOUSE_BASE_CAPACITY } },
+          });
+        }
+        // Return materials proportional to durability
+        for (const { resource, quantity } of returnedMaterials) {
+          await tx.warehouseItem.upsert({
+            where:  { warehouseId_resourceType: { warehouseId, resourceType: resource } },
+            create: { warehouseId, resourceType: resource, quantity },
+            update: { quantity: { increment: quantity } },
           });
         }
       }
     });
-    res.json({ ok: true });
+    res.json({ ok: true, returnedMaterials });
   } catch (err) { next(err); }
 });
 

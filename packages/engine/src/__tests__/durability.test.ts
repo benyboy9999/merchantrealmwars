@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateDurabilityFactor, calculateRepairCost } from '../production/durability.js';
+import { calculateDurabilityFactor, calculateRepairCost, calculateDemolishReturn } from '../production/durability.js';
 
 const THRESHOLD = 80;
 
@@ -60,5 +60,39 @@ describe('calculateRepairCost', () => {
     // level 1 at 90% → 7×1×0.10 = 0.7 → ceiled to 1
     const cost = calculateRepairCost(oddCost, 1, 90);
     expect(cost[0]?.quantity).toBe(1);
+  });
+});
+
+const BASE_COST = [
+  { resource: 'CONSTRUCTION_KIT', quantity: 8 },
+  { resource: 'COBBLESTONE',      quantity: 12 },
+];
+
+describe('calculateDemolishReturn', () => {
+  it('returns full cost × level at 100% health', () => {
+    const result = calculateDemolishReturn(BASE_COST, 3, 100);
+    expect(result).toEqual([
+      { resource: 'CONSTRUCTION_KIT', quantity: 24 },
+      { resource: 'COBBLESTONE',      quantity: 36 },
+    ]);
+  });
+
+  it('returns materials scaled by health fraction', () => {
+    // level 1, 80% health → floor(8 × 1 × 0.8) = 6, floor(12 × 1 × 0.8) = 9
+    const result = calculateDemolishReturn(BASE_COST, 1, 80);
+    expect(result).toEqual([
+      { resource: 'CONSTRUCTION_KIT', quantity: 6 },
+      { resource: 'COBBLESTONE',      quantity: 9 },
+    ]);
+  });
+
+  it('returns nothing at 0% health', () => {
+    expect(calculateDemolishReturn(BASE_COST, 2, 0)).toEqual([]);
+  });
+
+  it('omits items that floor to 0', () => {
+    const tinyCost = [{ resource: 'NAILS', quantity: 1 }];
+    // level 1, 50% → floor(1 × 1 × 0.5) = 0 → omitted
+    expect(calculateDemolishReturn(tinyCost, 1, 50)).toEqual([]);
   });
 });

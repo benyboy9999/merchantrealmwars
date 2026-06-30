@@ -413,7 +413,7 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
           <ModalSection label="Demolish">
             {demolishConfirm ? (
               <div className="space-y-2">
-                <p className="text-xs text-red-400">This will permanently destroy the building. Resources are not returned.</p>
+                <p className="text-xs text-red-400">This will permanently destroy the building. Materials will be returned based on current durability ({building.health.toFixed(0)}%).</p>
                 <div className="flex gap-2 items-center">
                   <Button
                     variant="danger" size="sm"
