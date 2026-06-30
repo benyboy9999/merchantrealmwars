@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api.js';
 import type { ExchangeListing, WishlistWithItems } from '../services/api.js';
@@ -182,6 +182,25 @@ export default function ExchangePage() {
   const activeWishlist = allWishlists.find((w) => w.id === activeWishlistId)
     ?? allWishlists[0]
     ?? null;
+
+  // Enter key submits buy when focus is not on an input (e.g. after clicking a wishlist row)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter') return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+      if (
+        tradeMode !== 'buy' ||
+        !buyQty || buyQtyNum <= 0 ||
+        !costPreview || costPreview.shortfall > 0 ||
+        costPreview.cost > goldBalance ||
+        marketBuy.isPending
+      ) return;
+      marketBuy.mutate();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [tradeMode, buyQty, buyQtyNum, costPreview, goldBalance, marketBuy]);
 
   const switchRegion = (id: number) => {
     setRegionId(id);
