@@ -623,6 +623,16 @@ export default function ExchangePage() {
                           placeholder="Quantity"
                           value={buyQty}
                           onChange={(e) => setBuyQty(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return;
+                            if (
+                              !buyQty || buyQtyNum <= 0 ||
+                              !costPreview || costPreview.shortfall > 0 ||
+                              costPreview.cost > goldBalance ||
+                              marketBuy.isPending
+                            ) return;
+                            marketBuy.mutate();
+                          }}
                         />
                         {costPreview ? (
                           <div className="space-y-1.5 text-xs">
