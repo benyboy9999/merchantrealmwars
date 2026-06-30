@@ -359,13 +359,33 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
                     );
                   })}
                   {repair.isError && <p className="text-red-400 text-xs">{(repair.error as Error).message}</p>}
-                  <Button
-                    variant="primary" size="sm" className="w-full mt-1"
-                    disabled={!canAffordRepair || repair.isPending}
-                    onClick={() => repair.mutate(building.id)}
-                  >
-                    {repair.isPending ? 'Repairing…' : 'Repair to 100%'}
-                  </Button>
+                  <div className="flex gap-2 mt-1">
+                    <Button
+                      variant="primary" size="sm" className="flex-1"
+                      disabled={!canAffordRepair || repair.isPending}
+                      onClick={() => repair.mutate(building.id)}
+                    >
+                      {repair.isPending ? 'Repairing…' : 'Repair to 100%'}
+                    </Button>
+                    {!canAffordRepair && (
+                      <WishlistBtn
+                        wKey={`repair-${building.id}`}
+                        wishlistedKey={wishlistedBuilding}
+                        pending={addToWishlist.isPending}
+                        onWishlist={() => {
+                          const shortfall = repairCost
+                            .filter((c) => (ledgerMap.get(c.resource) ?? 0) < c.quantity)
+                            .map((c) => ({
+                              resourceType: c.resource,
+                              quantity: c.quantity - Math.floor(ledgerMap.get(c.resource) ?? 0),
+                            }));
+                          addToWishlist.mutate({ name: `Repair ${bName}`, items: shortfall });
+                          setWishlistedBuilding(`repair-${building.id}`);
+                          setTimeout(() => setWishlistedBuilding(null), 2000);
+                        }}
+                      />
+                    )}
+                  </div>
                 </div>
               )}
             </ModalSection>
@@ -398,13 +418,33 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
                     })
                   )}
                   {upgrade.isError && <p className="text-red-400 text-xs">{(upgrade.error as Error).message}</p>}
-                  <Button
-                    variant="primary" size="sm" className="w-full mt-1"
-                    disabled={!canAffordUpgrade || upgrade.isPending}
-                    onClick={() => upgrade.mutate(building.id)}
-                  >
-                    {upgrade.isPending ? 'Upgrading…' : `Upgrade to Level ${building.level + 1}`}
-                  </Button>
+                  <div className="flex gap-2 mt-1">
+                    <Button
+                      variant="primary" size="sm" className="flex-1"
+                      disabled={!canAffordUpgrade || upgrade.isPending}
+                      onClick={() => upgrade.mutate(building.id)}
+                    >
+                      {upgrade.isPending ? 'Upgrading…' : `Upgrade to Level ${building.level + 1}`}
+                    </Button>
+                    {!canAffordUpgrade && (
+                      <WishlistBtn
+                        wKey={`upgrade-${building.id}`}
+                        wishlistedKey={wishlistedBuilding}
+                        pending={addToWishlist.isPending}
+                        onWishlist={() => {
+                          const shortfall = upgradeCost
+                            .filter((c) => (ledgerMap.get(c.resource) ?? 0) < c.quantity)
+                            .map((c) => ({
+                              resourceType: c.resource,
+                              quantity: c.quantity - Math.floor(ledgerMap.get(c.resource) ?? 0),
+                            }));
+                          addToWishlist.mutate({ name: `Upgrade ${bName} to Level ${building.level + 1}`, items: shortfall });
+                          setWishlistedBuilding(`upgrade-${building.id}`);
+                          setTimeout(() => setWishlistedBuilding(null), 2000);
+                        }}
+                      />
+                    )}
+                  </div>
                 </div>
               );
             })()}
@@ -514,17 +554,20 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
 
                 {/* Build button — always visible */}
                 {buildError && buildingType === bt && <p className="text-red-400 text-xs">{buildError}</p>}
-                <div className="flex flex-col gap-1.5 mt-auto">
+                <div className="flex gap-1.5 mt-auto">
                   <Button
-                    variant="primary" size="sm" className="w-full"
+                    variant="primary" size="sm" className="flex-1"
                     disabled={!allMet || construct.isPending}
                     onClick={() => { setBuildingType(bt); construct.mutate({ bType: bt, slot: selectedSlot! }); }}
                   >
                     {construct.isPending && buildingType === bt ? 'Building…' : `Build ${bName}`}
                   </Button>
                   {!allMet && (
-                    <button
-                      onClick={() => {
+                    <WishlistBtn
+                      wKey={`build-${bt}`}
+                      wishlistedKey={wishlistedBuilding}
+                      pending={addToWishlist.isPending}
+                      onWishlist={() => {
                         const shortfall = costs
                           .filter((c) => (ledgerMap.get(c.resource) ?? 0) < c.quantity)
                           .map((c) => ({
@@ -532,14 +575,10 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
                             quantity: c.quantity - Math.floor(ledgerMap.get(c.resource) ?? 0),
                           }));
                         addToWishlist.mutate({ name: `Build ${bName}`, items: shortfall });
-                        setWishlistedBuilding(bt);
+                        setWishlistedBuilding(`build-${bt}`);
                         setTimeout(() => setWishlistedBuilding(null), 2000);
                       }}
-                      disabled={addToWishlist.isPending && wishlistedBuilding === bt}
-                      className="w-full text-xs text-slate-500 hover:text-azure-300 transition-colors py-0.5 text-center"
-                    >
-                      {wishlistedBuilding === bt ? '✓ Added to wishlists' : '☆ Add to Wishlist'}
-                    </button>
+                    />
                   )}
                 </div>
               </div>
@@ -963,6 +1002,39 @@ function WorkersTab({ keep, ledgerMap, empireCreatedAt }: {
         )}
       </div>
     </div>
+  );
+}
+
+function WishlistBtn({ wKey, wishlistedKey, pending, onWishlist }: {
+  wKey: string;
+  wishlistedKey: string | null;
+  pending: boolean;
+  onWishlist: () => void;
+}) {
+  const confirmed = wishlistedKey === wKey;
+  return (
+    <button
+      title={confirmed ? 'Added to wishlist' : 'Add shortfall to wishlist'}
+      onClick={onWishlist}
+      disabled={pending && !confirmed}
+      className={`flex-shrink-0 px-2 py-1 rounded border transition-colors disabled:opacity-40 ${
+        confirmed
+          ? 'border-azure-600 text-azure-400 bg-azure-950/30'
+          : 'border-slate-700 text-slate-500 hover:border-slate-600 hover:text-azure-300 bg-slate-800'
+      }`}
+    >
+      {confirmed ? (
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+          <polyline points="2 8 6 12 14 4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+          <path d="M1.5 1.5h2l2 8h7l1.5-5H5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="7" cy="14" r="1.25" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="14" r="1.25" fill="currentColor" stroke="none" />
+        </svg>
+      )}
+    </button>
   );
 }
 
