@@ -8,7 +8,7 @@ import { api } from '../services/api.js';
 import {
   BUILDING_NAMES, RESOURCE_NAMES, RECIPES_BY_BUILDING, RECIPE_BY_KEY, RECIPE_BY_ID,
   BUILDING_CONSTRUCTION_COSTS, BUILDING_TYPE_IDS, BUILDING_TYPE_BY_ID,
-  HOUSING_BASE_CAPACITY, WORKERS_PER_LEVEL,
+  HOUSING_BASE_CAPACITY, WORKERS_PER_LEVEL, BUILDING_MAX_LEVEL,
   T1_WORKER_NEEDS, BASE_CYCLE_SECONDS, getStarterSpeedMultiplier,
   KEEP_MAX_BUILDING_SLOTS, KEEP_DEFAULT_BUILDING_SLOTS, KEEP_SLOT_UNLOCK_RESOURCE,
 } from '@merchant-realms/shared';
@@ -275,6 +275,10 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
     mutationFn: (buildingId: number) => api.repairBuilding(keepId, buildingId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['keep', keepId] }),
   });
+  const upgrade = useMutation({
+    mutationFn: (buildingId: number) => api.upgradeBuilding(keepId, buildingId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['keep', keepId] }),
+  });
   const addToWishlist = useMutation({
     mutationFn: ({ name, items }: { name: string; items: { resourceType: string; quantity: number }[] }) =>
       api.createWishlist(name, items),
@@ -366,9 +370,43 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
             </ModalSection>
           )}
 
-          {/* Upgrade placeholder */}
-          <ModalSection label="Upgrade">
-            <p className="text-xs text-slate-600 italic">Upgrade system coming soon.</p>
+          {/* Upgrade */}
+          <ModalSection label={building.level >= BUILDING_MAX_LEVEL ? 'Upgrade (Max Level)' : `Upgrade to Level ${building.level + 1}`}>
+            {building.level >= BUILDING_MAX_LEVEL ? (
+              <p className="text-xs text-slate-600">This building is at max level ({BUILDING_MAX_LEVEL}).</p>
+            ) : (() => {
+              const upgradeCost: Array<{ resource: string; quantity: number }> =
+                BUILDING_CONSTRUCTION_COSTS[btCode as keyof typeof BUILDING_CONSTRUCTION_COSTS] ?? [];
+              const canAffordUpgrade = upgradeCost.every((c) => (ledgerMap.get(c.resource) ?? 0) >= c.quantity);
+              return (
+                <div className="space-y-2">
+                  {upgradeCost.length === 0 ? (
+                    <p className="text-xs text-slate-500">No materials required.</p>
+                  ) : (
+                    upgradeCost.map((c) => {
+                      const rLabel = RESOURCE_NAMES[c.resource as keyof typeof RESOURCE_NAMES] ?? c.resource;
+                      const have   = ledgerMap.get(c.resource) ?? 0;
+                      const met    = have >= c.quantity;
+                      return (
+                        <div key={c.resource} className="flex items-center gap-2 text-xs">
+                          <IconSlot size="xs" label={rLabel} />
+                          <span className={met ? 'text-slate-200' : 'text-red-400'}>{c.quantity} {rLabel}</span>
+                          <span className="text-slate-600 ml-auto">{Math.floor(have)} held</span>
+                        </div>
+                      );
+                    })
+                  )}
+                  {upgrade.isError && <p className="text-red-400 text-xs">{(upgrade.error as Error).message}</p>}
+                  <Button
+                    variant="primary" size="sm" className="w-full mt-1"
+                    disabled={!canAffordUpgrade || upgrade.isPending}
+                    onClick={() => upgrade.mutate(building.id)}
+                  >
+                    {upgrade.isPending ? 'Upgrading…' : `Upgrade to Level ${building.level + 1}`}
+                  </Button>
+                </div>
+              );
+            })()}
           </ModalSection>
 
           {/* Demolish */}
