@@ -282,6 +282,7 @@ function BuildingsTab({ keep, keepId, ledgerMap, qc }: {
   const addToWishlist = useMutation({
     mutationFn: ({ name, items }: { name: string; items: { resourceType: string; quantity: number }[] }) =>
       api.createWishlist(name, items),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['wishlists'] }),
   });
   const [wishlistedBuilding, setWishlistedBuilding] = useState<string | null>(null);
 

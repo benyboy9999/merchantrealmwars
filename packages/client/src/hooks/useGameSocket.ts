@@ -39,11 +39,13 @@ export function useGameSocket(): void {
       void qc.invalidateQueries({ queryKey: ['empire'] });
       void qc.invalidateQueries({ queryKey: ['keep'] });
       void qc.invalidateQueries({ queryKey: ['exchange-storage'] });
+      void qc.invalidateQueries({ queryKey: ['admin-status'] });
     };
 
     const onOrderMatched = () => {
       void qc.invalidateQueries({ queryKey: ['exchange-storage'] });
       void qc.invalidateQueries({ queryKey: ['exchange-listings'] });
+      void qc.invalidateQueries({ queryKey: ['admin-status'] });
     };
 
     const onProductionCompleted = (payload: { keepId: string }) => {

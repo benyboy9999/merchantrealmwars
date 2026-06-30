@@ -32,18 +32,22 @@ export default function ExchangePage() {
   const [listPrice, setListPrice] = useState('');
 
   // Wishlist panel state
-  const [bottomTab, setBottomTab]         = useState<'listings' | 'wishlists'>('listings');
+  const [bottomTab, setBottomTab]               = useState<'listings' | 'wishlists'>('listings');
   const [activeWishlistId, setActiveWishlistId] = useState<number | null>(null);
-  const [renamingId, setRenamingId]        = useState<number | null>(null);
-  const [renameValue, setRenameValue]      = useState('');
-  const [newWishlistName, setNewWishlistName] = useState('');
-  const [addItemRt, setAddItemRt]          = useState('');
-  const [addItemQty, setAddItemQty]        = useState('');
-  const renameInputRef                     = useRef<HTMLInputElement>(null);
+  const [renamingId, setRenamingId]             = useState<number | null>(null);
+  const [renameValue, setRenameValue]           = useState('');
+  const [confirmDeleteId, setConfirmDeleteId]   = useState<number | null>(null);
+  const [newWishlistName, setNewWishlistName]   = useState('');
+  const [addItemRt, setAddItemRt]               = useState('');
+  const [addItemQty, setAddItemQty]             = useState('');
+  const [editingItemRt, setEditingItemRt]       = useState<string | null>(null);
+  const [editingItemQty, setEditingItemQty]     = useState('');
+  const renameInputRef                          = useRef<HTMLInputElement>(null);
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['exchange-storage', regionId] });
     void qc.invalidateQueries({ queryKey: ['exchange-listings', regionId] });
+    void qc.invalidateQueries({ queryKey: ['admin-status'] });
   };
 
   const { data: storageData, isError: storageError, error: storageErr } = useQuery({
@@ -226,7 +230,6 @@ export default function ExchangePage() {
           warehouseId={storageData?.warehouse?.id ?? 0}
           locationLabel={`${REGIONS.find((r) => r.id === regionId)?.name ?? regionId} Warehouse`}
           inventory={inventory}
-          goldBalance={goldBalance}
           showSell
           onSell={(rt, qty) => sellNpc.mutate({ rt, qty })}
           onInventoryChange={invalidate}
@@ -373,16 +376,25 @@ export default function ExchangePage() {
                         className="text-slate-600 hover:text-slate-300 text-xs px-1 transition-colors"
                       >✎</button>
                     )}
-                    <button
-                      onClick={() => {
-                        if (!activeWishlist) return;
-                        if (confirm(`Delete "${activeWishlist.name}"?`)) {
-                          deleteWishlist.mutate(activeWishlist.id);
-                        }
-                      }}
-                      title="Delete wishlist"
-                      className="text-slate-700 hover:text-red-400 text-xs px-1 transition-colors"
-                    >✕</button>
+                    {confirmDeleteId === activeWishlist?.id ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-red-400">Delete?</span>
+                        <button
+                          onClick={() => { deleteWishlist.mutate(activeWishlist!.id); setConfirmDeleteId(null); }}
+                          className="text-xs text-red-400 hover:text-red-300 px-1 transition-colors"
+                        >Yes</button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="text-xs text-slate-500 hover:text-slate-300 px-1 transition-colors"
+                        >No</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => activeWishlist && setConfirmDeleteId(activeWishlist.id)}
+                        title="Delete wishlist"
+                        className="text-slate-700 hover:text-red-400 text-xs px-1 transition-colors"
+                      >✕</button>
+                    )}
                   </>
                 ) : (
                   <span className="text-xs text-slate-600 flex-1">No wishlists yet</span>
@@ -422,8 +434,39 @@ export default function ExchangePage() {
                                 <span className="text-slate-300 text-xs">{rName(item.resourceType)}</span>
                               </div>
                             </td>
-                            <td className="px-3 py-1.5 text-right font-mono tabular-nums text-xs text-slate-200">
-                              {item.quantity}
+                            <td className="px-3 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
+                              {editingItemRt === item.resourceType ? (
+                                <form
+                                  className="flex justify-end"
+                                  onSubmit={(e) => {
+                                    e.preventDefault();
+                                    const qty = parseInt(editingItemQty, 10);
+                                    if (qty > 0 && activeWishlist) {
+                                      upsertItem.mutate({ wishlistId: activeWishlist.id, rt: item.resourceType, qty });
+                                    }
+                                    setEditingItemRt(null);
+                                  }}
+                                >
+                                  <input
+                                    autoFocus
+                                    type="number"
+                                    min="1"
+                                    value={editingItemQty}
+                                    onChange={(e) => setEditingItemQty(e.target.value)}
+                                    onBlur={() => setEditingItemRt(null)}
+                                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingItemRt(null); }}
+                                    className="w-16 bg-slate-900 border border-azure-500 rounded px-1.5 py-0.5 text-xs text-slate-100 font-mono text-right focus:outline-none"
+                                  />
+                                </form>
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingItemRt(item.resourceType); setEditingItemQty(String(item.quantity)); }}
+                                  className="font-mono tabular-nums text-xs text-slate-200 hover:text-azure-300 transition-colors"
+                                  title="Click to edit quantity"
+                                >
+                                  {item.quantity}
+                                </button>
+                              )}
                             </td>
                             <td className={`px-3 py-1.5 text-right font-mono tabular-nums text-xs ${met ? 'text-emerald-400' : 'text-slate-500'}`}>
                               {Math.floor(have)}

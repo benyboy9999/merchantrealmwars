@@ -118,7 +118,6 @@ interface WarehousePanelProps {
   warehouseId:   number;
   locationLabel: string;
   inventory:     InventoryItem[];
-  goldBalance?:  number;
   showSell?:     boolean;
   onSell?:       (rt: string, qty: number) => void;
   onInventoryChange?: () => void;
@@ -338,7 +337,7 @@ function CaravanActionModal({
 
 export default function WarehousePanel({
   locationType, locationId, warehouseId, locationLabel,
-  inventory, goldBalance, showSell, onSell,
+  inventory, showSell, onSell,
   onInventoryChange, className = '',
 }: WarehousePanelProps) {
   const qc = useQueryClient();
@@ -588,12 +587,6 @@ export default function WarehousePanel({
           )}
         </div>
 
-        {goldBalance !== undefined && (
-          <div className="flex justify-between items-center px-4 py-2 border-t border-slate-700/60 flex-shrink-0">
-            <span className="text-xs text-slate-600">Gold</span>
-            <span className="text-gold-400 font-mono text-sm">{goldBalance.toFixed(0)}g</span>
-          </div>
-        )}
       </div>
 
       {/* ── Right: caravans ──────────────────────────────────────────────── */}
