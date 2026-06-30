@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { api } from '../services/api.js';
 import type { CaravanWithCargo, Warehouse, WarehouseItem, Keep, EmpireBootstrap } from '../services/api.js';
 import { RESOURCE_NAMES, RESOURCE_WEIGHT, REGION_IDS } from '@merchant-realms/shared';
@@ -7,6 +7,29 @@ import { IconSlot, Modal, ModalSection, Button, TransferPopover } from './ui/ind
 
 const rName  = (rt: string) => RESOURCE_NAMES[rt as keyof typeof RESOURCE_NAMES] ?? rt;
 const rKgPer = (rt: string) => RESOURCE_WEIGHT[rt as keyof typeof RESOURCE_WEIGHT] ?? 0.5;
+
+function formatEta(arrivesAt: string | null): string {
+  if (!arrivesAt) return 'In transit';
+  const secsLeft = Math.max(0, Math.floor((new Date(arrivesAt).getTime() - Date.now()) / 1000));
+  if (secsLeft === 0) return 'Arriving…';
+  const h = Math.floor(secsLeft / 3600);
+  const m = Math.floor((secsLeft % 3600) / 60);
+  const s = secsLeft % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function useEta(arrivesAt: string | null): string {
+  const [label, setLabel] = useState(() => formatEta(arrivesAt));
+  useEffect(() => {
+    setLabel(formatEta(arrivesAt));
+    if (!arrivesAt) return;
+    const id = setInterval(() => setLabel(formatEta(arrivesAt)), 1000);
+    return () => clearInterval(id);
+  }, [arrivesAt]);
+  return label;
+}
 const MULE_KG = 100;
 
 const EXCHANGE_REGIONS = [
@@ -16,6 +39,65 @@ const EXCHANGE_REGIONS = [
   { id: REGION_IDS.SW,      name: 'Southwest' },
   { id: REGION_IDS.SE,      name: 'Southeast' },
 ] as const;
+
+// ── CaravanStatusBar ──────────────────────────────────────────────────────────
+
+function CaravanStatusBar({ caravan, isHere, onUnloadAll, unloadPending, onSend }: {
+  caravan:       CaravanWithCargo;
+  isHere:        boolean;
+  onUnloadAll:   () => void;
+  unloadPending: boolean;
+  onSend:        () => void;
+}) {
+  const eta     = useEta(caravan.status === 'IN_TRANSIT' ? caravan.arrivesAt : null);
+  const items   = caravan.warehouse?.items ?? [];
+  const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
+  const maxKg   = caravan.warehouse?.cap ?? caravan.animalCount * MULE_KG;
+  const pct     = maxKg > 0 ? Math.min(100, (cargoKg / maxKg) * 100) : 0;
+  const isTransit = caravan.status === 'IN_TRANSIT';
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-800/60 flex-shrink-0">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          {isHere && !isTransit && <span className="w-1 h-1 rounded-full bg-emerald-400 flex-shrink-0" />}
+          {isTransit           && <span className="w-1 h-1 rounded-full bg-azure-400 animate-pulse flex-shrink-0" />}
+          {!isHere && !isTransit && <span className="w-1 h-1 rounded-full bg-slate-600 flex-shrink-0" />}
+          <span className="text-xs text-slate-500 truncate">
+            {isHere
+              ? `${cargoKg.toFixed(0)} / ${maxKg} kg`
+              : isTransit
+                ? `${eta} · ${cargoKg.toFixed(0)} kg`
+                : `${cargoKg.toFixed(0)} kg`
+            }
+          </span>
+        </div>
+        <div className="h-0.5 bg-slate-800 rounded overflow-hidden">
+          <div
+            className={`h-full rounded transition-all ${isHere ? 'bg-emerald-700' : isTransit ? 'bg-azure-700' : 'bg-slate-700'}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      {isHere && items.length > 0 && (
+        <button
+          title="Unload all to warehouse"
+          disabled={unloadPending}
+          onClick={onUnloadAll}
+          className="w-5 h-5 flex items-center justify-center border border-slate-700 rounded text-slate-500 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:pointer-events-none transition-colors text-xs flex-shrink-0"
+        >‹‹</button>
+      )}
+
+      <button
+        onClick={onSend}
+        className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium border border-slate-600 bg-slate-800 text-slate-200 hover:border-azure-500 hover:text-azure-300 hover:bg-slate-700 transition-colors"
+      >
+        Send <span className="text-[10px] opacity-60">›</span>
+      </button>
+    </div>
+  );
+}
 
 interface InventoryItem { resourceType: string; quantity: number }
 
@@ -546,66 +628,22 @@ export default function WarehousePanel({
         {activeCaravan ? (
           <>
             {/* ── Status bar ─────────────────────────────────────────────── */}
-            {(() => {
-              const items   = activeCaravan.warehouse?.items ?? [];
-              const cargoKg = items.reduce((s, x) => s + x.quantity * rKgPer(x.resourceType), 0);
-              const maxKg   = activeCaravan.warehouse?.cap ?? activeCaravan.animalCount * MULE_KG;
-              const pct     = maxKg > 0 ? Math.min(100, cargoKg / maxKg * 100) : 0;
-              return (
-                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-800/60 flex-shrink-0">
-                  {/* Capacity bar + location label */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      {activeIsHere   && <span className="w-1 h-1 rounded-full bg-emerald-400 flex-shrink-0" />}
-                      {!activeIsHere && activeCaravan.status === 'IN_TRANSIT'
-                        && <span className="w-1 h-1 rounded-full bg-azure-400 animate-pulse flex-shrink-0" />}
-                      {!activeIsHere && activeCaravan.status !== 'IN_TRANSIT'
-                        && <span className="w-1 h-1 rounded-full bg-slate-600 flex-shrink-0" />}
-                      <span className="text-xs text-slate-500 truncate">
-                        {activeIsHere
-                          ? `${cargoKg.toFixed(0)} / ${maxKg} kg`
-                          : activeCaravan.status === 'IN_TRANSIT'
-                            ? `In transit · ${cargoKg.toFixed(0)} kg`
-                            : `${caravanLocationName(activeCaravan)} · ${cargoKg.toFixed(0)} kg`
-                        }
-                      </span>
-                    </div>
-                    <div className="h-0.5 bg-slate-800 rounded overflow-hidden">
-                      <div
-                        className={`h-full rounded transition-all ${activeIsHere ? 'bg-emerald-700' : activeCaravan.status === 'IN_TRANSIT' ? 'bg-azure-700' : 'bg-slate-700'}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Unload all — only when here and has cargo */}
-                  {activeIsHere && items.length > 0 && (
-                    <button
-                      title="Unload all to warehouse"
-                      disabled={bulkTransfer.isPending}
-                      onClick={() => {
-                        if (!activeCaravan.warehouseId) return;
-                        bulkTransfer.mutate(items.map((it) => ({
-                          fromWarehouseId: activeCaravan.warehouseId!,
-                          toWarehouseId: warehouseId,
-                          resourceType: it.resourceType,
-                          quantity: it.quantity,
-                        })));
-                      }}
-                      className="w-5 h-5 flex items-center justify-center border border-slate-700 rounded text-slate-500 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:pointer-events-none transition-colors text-xs flex-shrink-0"
-                    >‹‹</button>
-                  )}
-
-                  {/* Send caravan — primary action trigger */}
-                  <button
-                    onClick={() => setActionCaId(activeCaravan.id)}
-                    className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium border border-slate-600 bg-slate-800 text-slate-200 hover:border-azure-500 hover:text-azure-300 hover:bg-slate-700 transition-colors"
-                  >
-                    Send <span className="text-[10px] opacity-60">›</span>
-                  </button>
-                </div>
-              );
-            })()}
+            <CaravanStatusBar
+              caravan={activeCaravan}
+              isHere={activeIsHere}
+              onUnloadAll={() => {
+                const items = activeCaravan.warehouse?.items ?? [];
+                if (!activeCaravan.warehouseId || items.length === 0) return;
+                bulkTransfer.mutate(items.map((it) => ({
+                  fromWarehouseId: activeCaravan.warehouseId!,
+                  toWarehouseId: warehouseId,
+                  resourceType: it.resourceType,
+                  quantity: it.quantity,
+                })));
+              }}
+              unloadPending={bulkTransfer.isPending}
+              onSend={() => setActionCaId(activeCaravan.id)}
+            />
 
             {/* ── Cargo items ──────────────────────────────────────────────── */}
             <div className="flex-1 overflow-y-auto">
